@@ -1,0 +1,47 @@
+name: hotel_pos
+description: "A gorgeous, high-fidelity Hybrid Restaurant POS System for Web, Desktop, and Mobile."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Navigation and State
+  provider: ^6.1.2
+
+  # HTTP & Sockets
+  http: ^1.2.1
+  web_socket_channel: ^2.4.5
+
+  # Storage & Caching
+  shared_preferences: ^2.2.3
+  sqflite: ^2.3.2
+
+  # Icons, Fonts & Styling
+  google_fonts: ^6.2.1
+  cupertino_icons: ^1.0.6
+  font_awesome_flutter: ^10.7.0
+  flutter_spinkit: ^5.2.1
+
+  # Utilities
+  intl: ^0.19.0
+  barcode_widget: ^2.0.4
+  qr_flutter: ^4.1.0
+  flutter_tts: ^4.0.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.1
+
+flutter:
+  uses-material-design: true
+
+  # Ensure Sinhala fonts or custom styling fonts can load.
+  # We will use google_fonts to fetch them at runtime, 
+  # but standard system fonts will also display Sinhala correctly.

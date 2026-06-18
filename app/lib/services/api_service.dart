@@ -1,0 +1,472 @@
+import 'dart:async';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:hotel_pos/models/models.dart';
+import 'package:hotel_pos/services/local_db.dart';
+
+class APIService {
+  static final APIService instance = APIService._init();
+  APIService._init();
+
+  // For localhost testing, default to standard express port 3000
+  String _baseUrl = 'http://localhost:3000';
+  String _wsUrl = 'ws://localhost:3000';
+  String? _token;
+  UserModel? currentUser;
+
+  // Real-time Event Controller
+  final _eventStreamController = StreamController<Map<String, dynamic>>.broadcast();
+  Stream<Map<String, dynamic>> get eventStream => _eventStreamController.stream;
+  WebSocketChannel? _wsChannel;
+  bool _isConnectingWs = false;
+
+  String get baseUrl => _baseUrl;
+  bool get isAuthenticated => _token != null;
+
+  Future<void> setBaseUrl(String url) async {
+    _baseUrl = url;
+    // Replace http(s) with ws(s)
+    _wsUrl = url.replaceFirst('http', 'ws');
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('api_base_url', url);
+  }
+
+  Future<void> init() async {
+    final prefs = await SharedPreferences.getInstance();
+    _baseUrl = prefs.getString('api_base_url') ?? 'http://localhost:3000';
+    _wsUrl = _baseUrl.replaceFirst('http', 'ws');
+    _token = prefs.getString('auth_token');
+    
+    final userJson = prefs.getString('auth_user');
+    if (userJson != null) {
+      currentUser = UserModel.fromJson(jsonDecode(userJson));
+      // Try connecting websocket
+      connectWebSocket();
+    }
+  }
+
+  // Check network connectivity
+  Future<bool> checkOnline() async {
+    try {
+      final response = await http.get(Uri.parse('$_baseUrl/api/categories')).timeout(const Duration(seconds: 2));
+      return response.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // ----------------------------------------------------
+  // AUTHENTICATION APIs
+  // ----------------------------------------------------
+  Future<bool> login(String username, String password) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$_baseUrl/api/auth/login'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'username': username, 'password': password}),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        _token = data['token'];
+        currentUser = UserModel.fromJson(data['user']);
+        
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('auth_token', _token!);
+        await prefs.setString('auth_user', jsonEncode(data['user']));
+        
+        connectWebSocket();
+        return true;
+      }
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> logout() async {
+    _token = null;
+    currentUser = null;
+    _wsChannel?.sink.close();
+    
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('auth_token');
+    await prefs.remove('auth_user');
+  }
+
+  Map<String, String> _getHeaders() {
+    return {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer $_token',
+    };
+  }
+
+  // ----------------------------------------------------
+  // REST CLIENT METHODS
+  // ----------------------------------------------------
+  Future<List<CategoryModel>> getCategories() async {
+    final response = await http.get(Uri.parse('$_baseUrl/api/categories'), headers: _getHeaders());
+    if (response.statusCode == 200) {
+      final List data = jsonDecode(response.body);
+      return data.map((c) => CategoryModel.fromJson(c)).toList();
+    }
+    throw Exception('Failed to load categories');
+  }
+
+  Future<List<ProductModel>> getProducts() async {
+    final response = await http.get(Uri.parse('$_baseUrl/api/products'), headers: _getHeaders());
+    if (response.statusCode == 200) {
+      final List data = jsonDecode(response.body);
+      return data.map((p) => ProductModel.fromJson(p)).toList();
+    }
+    throw Exception('Failed to load products');
+  }
+
+  Future<List<DiningTableModel>> getTables() async {
+    final response = await http.get(Uri.parse('$_baseUrl/api/tables'), headers: _getHeaders());
+    if (response.statusCode == 200) {
+      final List data = jsonDecode(response.body);
+      return data.map((t) => DiningTableModel.fromJson(t)).toList();
+    }
+    throw Exception('Failed to load tables');
+  }
+
+  Future<void> updateTableStatus(int tableId, String status, {String? stewardName, int? currentOrderId}) async {
+    await http.put(
+      Uri.parse('$_baseUrl/api/tables/$tableId/status'),
+      headers: _getHeaders(),
+      body: jsonEncode({
+        'status': status,
+        'steward_name': stewardName,
+        'current_order_id': currentOrderId,
+      }),
+    );
+  }
+
+  Future<List<CustomerModel>> getCustomers() async {
+    final response = await http.get(Uri.parse('$_baseUrl/api/customers'), headers: _getHeaders());
+    if (response.statusCode == 200) {
+      final List data = jsonDecode(response.body);
+      return data.map((c) => CustomerModel.fromJson(c)).toList();
+    }
+    throw Exception('Failed to load customers');
+  }
+
+  Future<CustomerModel> createCustomer(Map<String, dynamic> customerData) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/api/customers'),
+      headers: _getHeaders(),
+      body: jsonEncode(customerData),
+    );
+    if (response.statusCode == 200) {
+      return CustomerModel.fromJson(jsonDecode(response.body));
+    }
+    throw Exception('Failed to create customer');
+  }
+
+  // Credit Settlement (weekly settlement)
+  Future<void> settleCredit(int customerId, double amount, String paymentMethod) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/api/credit/settle'),
+      headers: _getHeaders(),
+      body: jsonEncode({
+        'customer_id': customerId,
+        'amount': amount,
+        'payment_method': paymentMethod,
+      }),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to settle credit');
+    }
+  }
+
+  // Shifts
+  Future<ShiftModel?> getCurrentShift() async {
+    final response = await http.get(Uri.parse('$_baseUrl/api/shifts/current'), headers: _getHeaders());
+    if (response.statusCode == 200 && response.body.isNotEmpty && response.body != 'null') {
+      return ShiftModel.fromJson(jsonDecode(response.body));
+    }
+    return null;
+  }
+
+  Future<ShiftModel> openShift(double openingBalance) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/api/shifts/open'),
+      headers: _getHeaders(),
+      body: jsonEncode({'opening_balance': openingBalance}),
+    );
+    if (response.statusCode == 200) {
+      return ShiftModel.fromJson(jsonDecode(response.body));
+    }
+    throw Exception('Failed to open shift');
+  }
+
+  Future<ShiftModel> closeShift(int shiftId, double closingBalance, double actualClosingBalance) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/api/shifts/close'),
+      headers: _getHeaders(),
+      body: jsonEncode({
+        'shift_id': shiftId,
+        'closing_balance': closingBalance,
+        'actual_closing_balance': actualClosingBalance,
+      }),
+    );
+    if (response.statusCode == 200) {
+      return ShiftModel.fromJson(jsonDecode(response.body));
+    }
+    throw Exception('Failed to close shift');
+  }
+
+  Future<void> logDrawerCash(int shiftId, String type, double amount, String reason) async {
+    await http.post(
+      Uri.parse('$_baseUrl/api/shifts/drawer-log'),
+      headers: _getHeaders(),
+      body: jsonEncode({
+        'shift_id': shiftId,
+        'type': type,
+        'amount': amount,
+        'reason': reason,
+      }),
+    );
+  }
+
+  // Stock Adjustment
+  Future<void> adjustStock(int productId, int changeQty, String type, String reason) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/api/products/$productId/stock'),
+      headers: _getHeaders(),
+      body: jsonEncode({
+        'change_qty': changeQty,
+        'type': type,
+        'reason': reason,
+      }),
+    );
+    if (response.statusCode != 200) {
+      final errData = jsonDecode(response.body);
+      throw Exception(errData['error'] ?? 'Failed to adjust stock');
+    }
+  }
+
+  // Happy Hour Promo Pricing
+  Future<void> configureHappyHour(int productId, double promoPrice, String startTime, String endTime, String days) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/api/happyhour'),
+      headers: _getHeaders(),
+      body: jsonEncode({
+        'product_id': productId,
+        'promo_price': promoPrice,
+        'start_time': startTime,
+        'end_time': endTime,
+        'days_of_week': days,
+      }),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to configure happy hour');
+    }
+  }
+
+  // Expenses
+  Future<List<ExpenseModel>> getExpenses() async {
+    final response = await http.get(Uri.parse('$_baseUrl/api/expenses'), headers: _getHeaders());
+    if (response.statusCode == 200) {
+      final List data = jsonDecode(response.body);
+      return data.map((e) => ExpenseModel.fromJson(e)).toList();
+    }
+    throw Exception('Failed to load expenses');
+  }
+
+  Future<void> createExpense(Map<String, dynamic> expenseData) async {
+    await http.post(
+      Uri.parse('$_baseUrl/api/expenses'),
+      headers: _getHeaders(),
+      body: jsonEncode(expenseData),
+    );
+  }
+
+  Future<List<OrderModel>> getOrders() async {
+    final response = await http.get(Uri.parse('$_baseUrl/api/orders'), headers: _getHeaders());
+    if (response.statusCode == 200) {
+      final List data = jsonDecode(response.body);
+      return data.map((o) => OrderModel.fromJson(o)).toList();
+    }
+    throw Exception('Failed to load orders');
+  }
+
+  // Orders creation
+  Future<Map<String, dynamic>> placeOrderOnline(OrderModel order) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/api/orders'),
+      headers: _getHeaders(),
+      body: jsonEncode(order.toJson()),
+    );
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    }
+    final errData = jsonDecode(response.body);
+    throw Exception(errData['error'] ?? 'Failed to place order online');
+  }
+
+  Future<void> updateOrderOnline(int orderId, Map<String, dynamic> updateFields) async {
+    await http.put(
+      Uri.parse('$_baseUrl/api/orders/$orderId'),
+      headers: _getHeaders(),
+      body: jsonEncode(updateFields),
+    );
+  }
+
+  Future<OrderModel> getOrderByBarcode(String barcode) async {
+    final response = await http.get(Uri.parse('$_baseUrl/api/orders/barcode/$barcode'), headers: _getHeaders());
+    if (response.statusCode == 200) {
+      return OrderModel.fromJson(jsonDecode(response.body));
+    }
+    throw Exception('Order not found with barcode: $barcode');
+  }
+
+  // 2-Way Card Terminal communication
+  Future<void> initiateCardPayment(double amount, String orderNumber) async {
+    await http.post(
+      Uri.parse('$_baseUrl/api/card-terminal/charge'),
+      headers: _getHeaders(),
+      body: jsonEncode({'amount': amount, 'order_number': orderNumber}),
+    );
+  }
+
+  // LankaQR compliant generator helper
+  Future<Map<String, dynamic>> getLankaQR(double amount, String orderNumber) async {
+    final response = await http.get(
+      Uri.parse('$_baseUrl/api/lankaqr/generate?amount=$amount&order_number=$orderNumber'),
+      headers: _getHeaders(),
+    );
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    }
+    throw Exception('Failed to generate LankaQR');
+  }
+
+  // Dashboard & Reports Data
+  Future<Map<String, dynamic>> getDashboardReport() async {
+    final response = await http.get(Uri.parse('$_baseUrl/api/reports/dashboard'), headers: _getHeaders());
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    }
+    throw Exception('Failed to load dashboard report');
+  }
+
+  Future<Map<String, dynamic>> getEODSummary() async {
+    final response = await http.get(Uri.parse('$_baseUrl/api/reports/eod'), headers: _getHeaders());
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    }
+    throw Exception('Failed to load EOD Summary');
+  }
+
+  Future<List> getHistoricalReport(String period) async {
+    final response = await http.get(Uri.parse('$_baseUrl/api/reports/historical?period=$period'), headers: _getHeaders());
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    }
+    throw Exception('Failed to load historical report');
+  }
+
+  Future<List<AuditLogModel>> getActivityLogs() async {
+    final response = await http.get(Uri.parse('$_baseUrl/api/reports/logs'), headers: _getHeaders());
+    if (response.statusCode == 200) {
+      final List data = jsonDecode(response.body);
+      return data.map((l) => AuditLogModel.fromJson(l)).toList();
+    }
+    throw Exception('Failed to load logs');
+  }
+
+  // ----------------------------------------------------
+  // SYSTEM SYNCHRONIZATION (LAN-first -> Server upload/download)
+  // ----------------------------------------------------
+  Future<Map<String, dynamic>?> syncOfflineData() async {
+    try {
+      final online = await checkOnline();
+      if (!online) return null;
+
+      final offlineOrders = await LocalDB.instance.getUnsyncedOrders();
+      final offlineShifts = await LocalDB.instance.getUnsyncedShifts();
+      final offlineExpenses = await LocalDB.instance.getUnsyncedExpenses();
+      final offlineStockLogs = await LocalDB.instance.getUnsyncedStockLogs();
+      final offlineAuditLogs = await LocalDB.instance.getUnsyncedAudits();
+
+      if (offlineOrders.isEmpty && offlineShifts.isEmpty && offlineExpenses.isEmpty &&
+          offlineStockLogs.isEmpty && offlineAuditLogs.isEmpty) {
+        // Nothing to sync, just fetch latest server database
+        return null;
+      }
+
+      final payload = {
+        'offline_orders': offlineOrders.map((o) => o.toJson()).toList(),
+        'offline_shifts': offlineShifts.map((s) => s.toJson()).toList(),
+        'offline_expenses': offlineExpenses.map((e) => e.toJson()).toList(),
+        'offline_stock_logs': offlineStockLogs,
+        'offline_audit_logs': offlineAuditLogs
+      };
+
+      final response = await http.post(
+        Uri.parse('$_baseUrl/api/sync'),
+        headers: _getHeaders(),
+        body: jsonEncode(payload),
+      );
+
+      if (response.statusCode == 200) {
+        // Synchronization successful. Clear local cached edits.
+        await LocalDB.instance.clearSyncedData();
+        return jsonDecode(response.body);
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // ----------------------------------------------------
+  // WEBSOCKET REALTIME EVENTS CLIENT
+  // ----------------------------------------------------
+  void connectWebSocket() {
+    if (_isConnectingWs || _wsChannel != null) return;
+    _isConnectingWs = true;
+
+    try {
+      print('Connecting WebSocket to $_wsUrl');
+      _wsChannel = WebSocketChannel.connect(Uri.parse(_wsUrl));
+      
+      _wsChannel!.stream.listen(
+        (message) {
+          try {
+            final data = jsonDecode(message);
+            _eventStreamController.add(data);
+          } catch (e) {
+            print('Error decoding websocket message: $e');
+          }
+        },
+        onError: (err) {
+          print('WebSocket error: $err');
+          _reconnectWebSocket();
+        },
+        onDone: () {
+          print('WebSocket connection closed.');
+          _reconnectWebSocket();
+        },
+      );
+      _isConnectingWs = false;
+    } catch (e) {
+      print('WebSocket connection failed: $e');
+      _isConnectingWs = false;
+      _reconnectWebSocket();
+    }
+  }
+
+  void _reconnectWebSocket() {
+    _wsChannel = null;
+    if (currentUser != null) {
+      Timer(const Duration(seconds: 5), () {
+        connectWebSocket();
+      });
+    }
+  }
+}
