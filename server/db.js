@@ -93,8 +93,28 @@ async function initializeDatabase() {
                 console.log("Migration: Added image_base64 to products table.");
             } catch (_) {}
             try {
+                await dbPool.query("ALTER TABLE products ADD COLUMN item_type VARCHAR(50) DEFAULT 'Veg'");
+                console.log("Migration: Added item_type to products table.");
+            } catch (_) {}
+            try {
+                await dbPool.query("ALTER TABLE products ADD COLUMN tax DECIMAL(10,2) DEFAULT 0.00");
+                console.log("Migration: Added tax to products table.");
+            } catch (_) {}
+            try {
+                await dbPool.query("ALTER TABLE products ADD COLUMN is_featured BOOLEAN DEFAULT FALSE");
+                console.log("Migration: Added is_featured to products table.");
+            } catch (_) {}
+            try {
+                await dbPool.query("ALTER TABLE products ADD COLUMN caution TEXT NULL");
+                console.log("Migration: Added caution to products table.");
+            } catch (_) {}
+            try {
                 await dbPool.query("ALTER TABLE customers ADD COLUMN image_base64 LONGTEXT NULL");
                 console.log("Migration: Added image_base64 to customers table.");
+            } catch (_) {}
+            try {
+                await dbPool.query("ALTER TABLE dining_tables ADD COLUMN active_status VARCHAR(50) DEFAULT 'active'");
+                console.log("Migration: Added active_status to dining_tables table.");
             } catch (_) {}
 
             // Seed base64 image placeholders for default products & users

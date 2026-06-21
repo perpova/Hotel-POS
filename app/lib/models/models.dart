@@ -65,6 +65,11 @@ class ProductModel {
   final int minStockLevel;
   final bool isShortEat;
   final String? imageBase64;
+  final String status;
+  final String itemType;
+  final double tax;
+  final bool isFeatured;
+  final String? caution;
 
   ProductModel({
     required this.id,
@@ -81,6 +86,11 @@ class ProductModel {
     required this.minStockLevel,
     required this.isShortEat,
     this.imageBase64,
+    this.status = 'active',
+    this.itemType = 'Veg',
+    this.tax = 0.00,
+    this.isFeatured = false,
+    this.caution,
   });
 
   factory ProductModel.fromJson(Map<String, dynamic> json) => ProductModel(
@@ -98,6 +108,11 @@ class ProductModel {
     minStockLevel: json['min_stock_level'] ?? 10,
     isShortEat: json['is_short_eat'] == true || json['is_short_eat'] == 1,
     imageBase64: json['image_base64'],
+    status: json['status'] ?? 'active',
+    itemType: json['item_type'] ?? 'Veg',
+    tax: _toDouble(json['tax']),
+    isFeatured: json['is_featured'] == true || json['is_featured'] == 1,
+    caution: json['caution'],
   );
 
   Map<String, dynamic> toJson() => {
@@ -115,6 +130,11 @@ class ProductModel {
     'min_stock_level': minStockLevel,
     'is_short_eat': isShortEat,
     'image_base64': imageBase64,
+    'status': status,
+    'item_type': itemType,
+    'tax': tax,
+    'is_featured': isFeatured,
+    'caution': caution,
   };
 }
 
@@ -126,6 +146,7 @@ class DiningTableModel {
   final String status; // 'empty' [Green], 'seated' [Red], 'billing' [Yellow]
   final int? currentOrderId;
   final String? stewardName;
+  final String activeStatus;
 
   DiningTableModel({
     required this.id,
@@ -134,6 +155,7 @@ class DiningTableModel {
     required this.status,
     this.currentOrderId,
     this.stewardName,
+    this.activeStatus = 'active',
   });
 
   factory DiningTableModel.fromJson(Map<String, dynamic> json) => DiningTableModel(
@@ -143,6 +165,7 @@ class DiningTableModel {
     status: json['status'] ?? 'empty',
     currentOrderId: json['current_order_id'],
     stewardName: json['steward_name'],
+    activeStatus: json['active_status'] ?? 'active',
   );
 
   Map<String, dynamic> toJson() => {
@@ -152,6 +175,7 @@ class DiningTableModel {
     'status': status,
     'current_order_id': currentOrderId,
     'steward_name': stewardName,
+    'active_status': activeStatus,
   };
 }
 

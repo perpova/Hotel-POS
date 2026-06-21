@@ -4,9 +4,13 @@ const WebSocket = require('ws');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const multer = require('multer');
+const xlsx = require('xlsx');
 require('dotenv').config();
 
 const db = require('./db');
+
+const upload = multer({ storage: multer.memoryStorage() });
 
 const app = express();
 const server = http.createServer(app);
@@ -16,7 +20,8 @@ const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'hotel_pos_super_secret_key_123';
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // WebSocket Clients Map
 const clients = new Set();
@@ -153,13 +158,14 @@ app.get('/api/categories', async (req, res) => {
 });
 
 app.get('/api/products', async (req, res) => {
+    const showAll = req.query.all === 'true';
     try {
         // Fetch products along with active happy hour pricing
         const products = await db.query(`
             SELECT p.*, h.promo_price, h.start_time, h.end_time, h.days_of_week
             FROM products p
             LEFT JOIN happy_hour_pricing h ON p.id = h.product_id AND h.status = 'active'
-            WHERE p.status = 'active'
+            ${showAll ? '' : "WHERE p.status = 'active'"}
         `);
         
         // Map products and calculate if happy hour is currently active
@@ -196,7 +202,12 @@ app.get('/api/products', async (req, res) => {
                 stock_qty: p.stock_qty,
                 min_stock_level: p.min_stock_level,
                 is_short_eat: !!p.is_short_eat,
-                image_base64: p.image_base64
+                image_base64: p.image_base64,
+                status: p.status,
+                item_type: p.item_type || 'Veg',
+                tax: p.tax !== null ? Number(p.tax) : 0.00,
+                is_featured: !!p.is_featured,
+                caution: p.caution
             };
         });
         
@@ -238,6 +249,268 @@ app.post('/api/products/:id/stock', authenticateToken, async (req, res) => {
         broadcast({ type: 'stock_updated', data: { productId: id, stock_qty: product.stock_qty } });
         
         res.json(product);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Manual Product CRUD - Create Product
+app.post('/api/products', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin' && req.user.role !== 'owner') {
+        return res.status(403).json({ error: 'Unauthorized' });
+    }
+    const {
+        name, sinhala_name, description, category_id, price, cost, barcode,
+        stock_qty, min_stock_level, is_short_eat, status, image_base64,
+        item_type, tax, is_featured, caution
+    } = req.body;
+    
+    try {
+        const result = await db.query(`
+            INSERT INTO products (
+                name, sinhala_name, description, category_id, price, cost, barcode,
+                stock_qty, min_stock_level, is_short_eat, status, image_base64,
+                item_type, tax, is_featured, caution
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+            name, sinhala_name || null, description || null, category_id, price, cost || 0.00, barcode || null,
+            stock_qty || 0, min_stock_level || 10, is_short_eat ? 1 : 0, status || 'active', image_base64 || null,
+            item_type || 'Veg', tax || 0.00, is_featured ? 1 : 0, caution || null
+        ]);
+        
+        const newId = result.insertId;
+        const [product] = await db.query('SELECT * FROM products WHERE id = ?', [newId]);
+        
+        await logAudit('edit_stock', 'products', newId, `Product ${name} created manually.`, req.user.id);
+        broadcast({ type: 'database_synchronized' });
+        
+        res.json(product);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Manual Product CRUD - Update Product
+app.put('/api/products/:id', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin' && req.user.role !== 'owner') {
+        return res.status(403).json({ error: 'Unauthorized' });
+    }
+    const { id } = req.params;
+    const {
+        name, sinhala_name, description, category_id, price, cost, barcode,
+        stock_qty, min_stock_level, is_short_eat, status, image_base64,
+        item_type, tax, is_featured, caution
+    } = req.body;
+    
+    try {
+        await db.query(`
+            UPDATE products SET
+                name = ?, sinhala_name = ?, description = ?, category_id = ?, price = ?, cost = ?, barcode = ?,
+                stock_qty = ?, min_stock_level = ?, is_short_eat = ?, status = ?, image_base64 = ?,
+                item_type = ?, tax = ?, is_featured = ?, caution = ?
+            WHERE id = ?
+        `, [
+            name, sinhala_name || null, description || null, category_id, price, cost || 0.00, barcode || null,
+            stock_qty || 0, min_stock_level || 10, is_short_eat ? 1 : 0, status || 'active', image_base64 || null,
+            item_type || 'Veg', tax || 0.00, is_featured ? 1 : 0, caution || null,
+            id
+        ]);
+        
+        const [product] = await db.query('SELECT * FROM products WHERE id = ?', [id]);
+        
+        await logAudit('edit_stock', 'products', id, `Product ${name} updated manually.`, req.user.id);
+        broadcast({ type: 'database_synchronized' });
+        
+        res.json(product);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Manual Product CRUD - Delete Product (Hard delete if unused, soft delete to 'inactive' if has order/stock references)
+app.delete('/api/products/:id', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin' && req.user.role !== 'owner') {
+        return res.status(403).json({ error: 'Unauthorized' });
+    }
+    const { id } = req.params;
+    try {
+        const products = await db.query('SELECT name FROM products WHERE id = ?', [id]);
+        if (products.length === 0) return res.status(404).json({ error: 'Product not found' });
+        const product = products[0];
+        
+        const refs = await db.query('SELECT COUNT(*) as count FROM order_items WHERE product_id = ?', [id]);
+        const stockLogsRefs = await db.query('SELECT COUNT(*) as count FROM stock_logs WHERE product_id = ?', [id]);
+        
+        if (refs[0].count > 0 || stockLogsRefs[0].count > 0) {
+            await db.query('UPDATE products SET status = "inactive" WHERE id = ?', [id]);
+            await logAudit('edit_stock', 'products', id, `Product ${product.name} marked as inactive due to existing history.`, req.user.id);
+            broadcast({ type: 'database_synchronized' });
+            res.json({ success: true, message: 'Product has order/stock history. Marked as inactive.', softDeleted: true });
+        } else {
+            await db.query('DELETE FROM products WHERE id = ?', [id]);
+            await logAudit('edit_stock', 'products', id, `Product ${product.name} permanently deleted.`, req.user.id);
+            broadcast({ type: 'database_synchronized' });
+            res.json({ success: true, message: 'Product deleted permanently.', softDeleted: false });
+        }
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Excel Product Import - Synchronizes DB with Excel data
+app.post('/api/products/import', authenticateToken, upload.single('file'), async (req, res) => {
+    if (req.user.role !== 'admin' && req.user.role !== 'owner') {
+        return res.status(403).json({ error: 'Unauthorized' });
+    }
+    if (!req.file) {
+        return res.status(400).json({ error: 'No file uploaded' });
+    }
+    
+    const dbPool = await db.getPool();
+    const conn = await dbPool.getConnection();
+    
+    try {
+        await conn.beginTransaction();
+        
+        // Parse Excel file
+        const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const rows = xlsx.utils.sheet_to_json(worksheet);
+        
+        // Match items by Name. Fetch all categories first.
+        const [categories] = await conn.query('SELECT * FROM categories');
+        const categoryMap = {}; // name.toLowerCase() -> id
+        categories.forEach(c => {
+            categoryMap[c.name.toLowerCase()] = c.id;
+        });
+        
+        // Fetch existing products
+        const [existingProducts] = await conn.query('SELECT * FROM products');
+        const existingProductsMap = {}; // name.toLowerCase() -> product
+        existingProducts.forEach(p => {
+            existingProductsMap[p.name.toLowerCase()] = p;
+        });
+        
+        const importedNames = new Set();
+        
+        for (const row of rows) {
+            const name = row['Name'] || row['name'];
+            if (!name) continue;
+            
+            const categoryName = row['Category'] || row['category'];
+            const price = Number(row['Price'] || row['price'] || 0);
+            const itemType = row['Item Type'] || row['item_type'] || 'Veg';
+            const tax = Number(row['Tax'] || row['tax'] || 0);
+            const statusStr = row['Status'] || row['status'] || 'Active';
+            const featuredStr = row['Featured'] || row['featured'] || 'No';
+            const caution = row['Caution'] || row['caution'] || null;
+            const description = row['Description'] || row['description'] || null;
+            
+            const status = statusStr.toLowerCase() === 'inactive' ? 'inactive' : 'active';
+            const isFeatured = (featuredStr.toLowerCase() === 'yes' || featuredStr.toLowerCase() === 'true') ? 1 : 0;
+            
+            importedNames.add(name.toLowerCase());
+            
+            // Resolve category ID (Create new category automatically if not found)
+            let categoryId = null;
+            if (categoryName) {
+                const catKey = categoryName.trim().toLowerCase();
+                if (categoryMap[catKey]) {
+                    categoryId = categoryMap[catKey];
+                } else {
+                    const [catResult] = await conn.query('INSERT INTO categories (name) VALUES (?)', [categoryName.trim()]);
+                    categoryId = catResult.insertId;
+                    categoryMap[catKey] = categoryId;
+                }
+            } else {
+                if (categories.length > 0) {
+                    categoryId = categories[0].id;
+                } else {
+                    const [catResult] = await conn.query('INSERT INTO categories (name) VALUES ("General")');
+                    categoryId = catResult.insertId;
+                    categoryMap['general'] = categoryId;
+                }
+            }
+            
+            if (existingProductsMap[name.toLowerCase()]) {
+                const existing = existingProductsMap[name.toLowerCase()];
+                await conn.query(`
+                    UPDATE products SET
+                        category_id = ?, price = ?, item_type = ?, tax = ?,
+                        status = ?, is_featured = ?, caution = ?, description = ?
+                    WHERE id = ?
+                `, [categoryId, price, itemType, tax, status, isFeatured, caution, description, existing.id]);
+            } else {
+                await conn.query(`
+                    INSERT INTO products (
+                        name, category_id, price, cost, stock_qty, min_stock_level,
+                        is_short_eat, status, item_type, tax, is_featured, caution, description
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                `, [
+                    name, categoryId, price, price * 0.6, 0, 10,
+                    0, status, itemType, tax, isFeatured, caution, description
+                ]);
+            }
+        }
+        
+        // Deletion stage: Products in DB but NOT in the excel import
+        for (const existing of existingProducts) {
+            if (!importedNames.has(existing.name.toLowerCase())) {
+                const [refs] = await conn.query('SELECT COUNT(*) as count FROM order_items WHERE product_id = ?', [existing.id]);
+                const [stockLogsRefs] = await conn.query('SELECT COUNT(*) as count FROM stock_logs WHERE product_id = ?', [existing.id]);
+                
+                if (refs[0].count > 0 || stockLogsRefs[0].count > 0) {
+                    await conn.query('UPDATE products SET status = "inactive" WHERE id = ?', [existing.id]);
+                } else {
+                    await conn.query('DELETE FROM products WHERE id = ?', [existing.id]);
+                }
+            }
+        }
+        
+        await conn.commit();
+        await logAudit('edit_stock', 'products', null, `Imported products Excel sheet containing ${rows.length} rows.`, req.user.id);
+        broadcast({ type: 'database_synchronized' });
+        
+        res.json({ success: true, message: `Successfully synchronized ${rows.length} products.` });
+    } catch (err) {
+        await conn.rollback();
+        res.status(500).json({ error: err.message });
+    } finally {
+        conn.release();
+    }
+});
+
+// Excel Product Export - Downloads all products in Excel
+app.get('/api/products/export', authenticateToken, async (req, res) => {
+    try {
+        const products = await db.query(`
+            SELECT p.*, c.name as category_name
+            FROM products p
+            LEFT JOIN categories c ON p.category_id = c.id
+        `);
+        
+        const data = products.map(p => ({
+            'Name': p.name,
+            'Category': p.category_name || '',
+            'Price': Number(p.price),
+            'Item Type': p.item_type || 'Veg',
+            'Tax': Number(p.tax || 0),
+            'Status': p.status === 'active' ? 'Active' : 'Inactive',
+            'Featured': p.is_featured ? 'Yes' : 'No',
+            'Caution': p.caution || '',
+            'Description': p.description || ''
+        }));
+        
+        const worksheet = xlsx.utils.json_to_sheet(data);
+        const workbook = xlsx.utils.book_new();
+        xlsx.utils.book_append_sheet(workbook, worksheet, 'Products');
+        
+        const buffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+        
+        res.setHeader('Content-Disposition', 'attachment; filename=products_export.xlsx');
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.send(buffer);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -295,6 +568,83 @@ app.put('/api/tables/:id/status', authenticateToken, async (req, res) => {
         broadcast({ type: 'table_status_changed', data: updatedTable });
         
         res.json(updatedTable);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Create Dining Table
+app.post('/api/tables', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin' && req.user.role !== 'owner') {
+        return res.status(403).json({ error: 'Unauthorized' });
+    }
+    const { table_number, capacity, active_status } = req.body;
+    try {
+        const result = await db.query(
+            'INSERT INTO dining_tables (table_number, capacity, active_status) VALUES (?, ?, ?)',
+            [table_number, capacity, active_status || 'active']
+        );
+        const newId = result.insertId;
+        const [table] = await db.query('SELECT * FROM dining_tables WHERE id = ?', [newId]);
+        
+        await logAudit('modify_bill', 'dining_tables', newId, `Table ${table_number} created manually.`, req.user.id);
+        broadcast({ type: 'table_status_changed', data: table });
+        
+        res.json(table);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Update Dining Table
+app.put('/api/tables/:id', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin' && req.user.role !== 'owner') {
+        return res.status(403).json({ error: 'Unauthorized' });
+    }
+    const { id } = req.params;
+    const { table_number, capacity, active_status } = req.body;
+    try {
+        await db.query(
+            'UPDATE dining_tables SET table_number = ?, capacity = ?, active_status = ? WHERE id = ?',
+            [table_number, capacity, active_status || 'active', id]
+        );
+        const [table] = await db.query('SELECT * FROM dining_tables WHERE id = ?', [id]);
+        
+        await logAudit('modify_bill', 'dining_tables', id, `Table ${table_number} updated manually.`, req.user.id);
+        broadcast({ type: 'table_status_changed', data: table });
+        
+        res.json(table);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Delete Dining Table (hard delete if unused, soft delete to inactive if referenced in orders)
+app.delete('/api/tables/:id', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin' && req.user.role !== 'owner') {
+        return res.status(403).json({ error: 'Unauthorized' });
+    }
+    const { id } = req.params;
+    try {
+        const tables = await db.query('SELECT table_number FROM dining_tables WHERE id = ?', [id]);
+        if (tables.length === 0) return res.status(404).json({ error: 'Table not found' });
+        const table = tables[0];
+        
+        const refs = await db.query('SELECT COUNT(*) as count FROM orders WHERE table_id = ?', [id]);
+        
+        if (refs[0].count > 0) {
+            await db.query('UPDATE dining_tables SET active_status = "inactive" WHERE id = ?', [id]);
+            await logAudit('modify_bill', 'dining_tables', id, `Table ${table.table_number} marked as inactive due to order history.`, req.user.id);
+            // Broadcast so all terminals reload
+            broadcast({ type: 'table_status_changed', data: { id, active_status: 'inactive' } });
+            res.json({ success: true, message: 'Table has order history. Marked as inactive.', softDeleted: true });
+        } else {
+            await db.query('DELETE FROM dining_tables WHERE id = ?', [id]);
+            await logAudit('modify_bill', 'dining_tables', id, `Table ${table.table_number} permanently deleted.`, req.user.id);
+            // Broadcast so all terminals reload
+            broadcast({ type: 'table_status_changed', data: { id, deleted: true } });
+            res.json({ success: true, message: 'Table deleted permanently.', softDeleted: false });
+        }
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

@@ -40,6 +40,10 @@ CREATE TABLE IF NOT EXISTS products (
     is_short_eat BOOLEAN DEFAULT FALSE,
     image_base64 LONGTEXT NULL,
     status ENUM('active', 'inactive') DEFAULT 'active',
+    item_type VARCHAR(50) DEFAULT 'Veg',
+    tax DECIMAL(10,2) DEFAULT 0.00,
+    is_featured BOOLEAN DEFAULT FALSE,
+    caution TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (category_id) REFERENCES categories(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -63,7 +67,8 @@ CREATE TABLE IF NOT EXISTS dining_tables (
     capacity INT DEFAULT 4,
     status ENUM('empty', 'seated', 'billing') DEFAULT 'empty',
     current_order_id INT NULL,
-    steward_name VARCHAR(100) DEFAULT NULL
+    steward_name VARCHAR(100) DEFAULT NULL,
+    active_status VARCHAR(50) DEFAULT 'active'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 6. Customer Database (Birthdays, Credit limits)

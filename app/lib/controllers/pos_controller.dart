@@ -104,15 +104,7 @@ class POSController extends ChangeNotifier {
       print('POS Event Received: ${event['type']}');
       switch (event['type']) {
         case 'table_status_changed':
-          final updatedTable = DiningTableModel.fromJson(event['data']);
-          final index = diningTables.indexWhere((t) => t.id == updatedTable.id);
-          if (index != -1) {
-            diningTables[index] = updatedTable;
-            if (selectedTable?.id == updatedTable.id) {
-              selectedTable = updatedTable;
-            }
-            notifyListeners();
-          }
+          reloadEnvironment();
           break;
         case 'stock_updated':
           final data = event['data'];
@@ -133,6 +125,12 @@ class POSController extends ChangeNotifier {
               stockQty: data['stock_qty'],
               minStockLevel: old.minStockLevel,
               isShortEat: old.isShortEat,
+              imageBase64: old.imageBase64,
+              status: old.status,
+              itemType: old.itemType,
+              tax: old.tax,
+              isFeatured: old.isFeatured,
+              caution: old.caution,
             );
             notifyListeners();
           }

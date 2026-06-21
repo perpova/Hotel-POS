@@ -15,6 +15,7 @@ import 'order_queue_screen.dart';
 import 'shift_screen.dart';
 import 'reports_screen.dart';
 import 'settings_screen.dart';
+import 'items_screen.dart';
 
 class MainLayout extends StatefulWidget {
   const MainLayout({Key? key}) : super(key: key);
@@ -36,6 +37,7 @@ class _MainLayoutState extends State<MainLayout> {
     'Shifts & Drawer',
     'Reports & Logs',
     'Settings & Stock',
+    'Items',
   ];
 
   Widget _getScreen(int index) {
@@ -56,6 +58,8 @@ class _MainLayoutState extends State<MainLayout> {
         return const ReportsScreen();
       case 7:
         return const SettingsScreen();
+      case 8:
+        return const ItemsScreen();
       default:
         return const DashboardScreen();
     }
@@ -84,6 +88,7 @@ class _MainLayoutState extends State<MainLayout> {
         null,
         [
           _SidebarItem(Icons.dashboard_outlined, 'Dashboard', 0),
+          _SidebarItem(Icons.restaurant_outlined, 'Items', 8),
           _SidebarItem(Icons.table_restaurant_outlined, 'Dining Tables', 2),
         ],
       ),

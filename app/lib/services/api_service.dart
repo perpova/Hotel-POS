@@ -124,6 +124,89 @@ class APIService {
     throw Exception('Failed to load products');
   }
 
+  Future<List<ProductModel>> getAllProducts() async {
+    final response = await http.get(Uri.parse('$_baseUrl/api/products?all=true'), headers: _getHeaders());
+    if (response.statusCode == 200) {
+      final List data = jsonDecode(response.body);
+      return data.map((p) => ProductModel.fromJson(p)).toList();
+    }
+    throw Exception('Failed to load all products');
+  }
+
+  Future<ProductModel> createProduct(Map<String, dynamic> data) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/api/products'),
+      headers: _getHeaders(),
+      body: jsonEncode(data),
+    );
+    if (response.statusCode == 200) {
+      return ProductModel.fromJson(jsonDecode(response.body));
+    }
+    try {
+      final errData = jsonDecode(response.body);
+      throw Exception(errData['error'] ?? 'Failed to create product');
+    } catch (_) {
+      throw Exception('Server error (${response.statusCode}): ${response.reasonPhrase}');
+    }
+  }
+
+  Future<ProductModel> updateProduct(int id, Map<String, dynamic> data) async {
+    final response = await http.put(
+      Uri.parse('$_baseUrl/api/products/$id'),
+      headers: _getHeaders(),
+      body: jsonEncode(data),
+    );
+    if (response.statusCode == 200) {
+      return ProductModel.fromJson(jsonDecode(response.body));
+    }
+    try {
+      final errData = jsonDecode(response.body);
+      throw Exception(errData['error'] ?? 'Failed to update product');
+    } catch (_) {
+      throw Exception('Server error (${response.statusCode}): ${response.reasonPhrase}');
+    }
+  }
+
+  Future<void> deleteProduct(int id) async {
+    final response = await http.delete(Uri.parse('$_baseUrl/api/products/$id'), headers: _getHeaders());
+    if (response.statusCode != 200) {
+      try {
+        final errData = jsonDecode(response.body);
+        throw Exception(errData['error'] ?? 'Failed to delete product');
+      } catch (_) {
+        throw Exception('Server error (${response.statusCode}): ${response.reasonPhrase}');
+      }
+    }
+  }
+
+  Future<void> importProductsExcel(List<int> fileBytes, String fileName) async {
+    final uri = Uri.parse('$_baseUrl/api/products/import');
+    final request = http.MultipartRequest('POST', uri)
+      ..headers.addAll({
+        'Authorization': 'Bearer $_token',
+      })
+      ..files.add(http.MultipartFile.fromBytes(
+        'file',
+        fileBytes,
+        filename: fileName,
+      ));
+    
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+    if (response.statusCode != 200) {
+      final errData = jsonDecode(response.body);
+      throw Exception(errData['error'] ?? 'Failed to import Excel');
+    }
+  }
+
+  Future<List<int>> downloadProductsExcel() async {
+    final response = await http.get(Uri.parse('$_baseUrl/api/products/export'), headers: _getHeaders());
+    if (response.statusCode == 200) {
+      return response.bodyBytes;
+    }
+    throw Exception('Failed to export Excel');
+  }
+
   Future<List<DiningTableModel>> getTables() async {
     final response = await http.get(Uri.parse('$_baseUrl/api/tables'), headers: _getHeaders());
     if (response.statusCode == 200) {
@@ -143,6 +226,52 @@ class APIService {
         'current_order_id': currentOrderId,
       }),
     );
+  }
+
+  Future<DiningTableModel> createTable(Map<String, dynamic> data) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/api/tables'),
+      headers: _getHeaders(),
+      body: jsonEncode(data),
+    );
+    if (response.statusCode == 200) {
+      return DiningTableModel.fromJson(jsonDecode(response.body));
+    }
+    try {
+      final errData = jsonDecode(response.body);
+      throw Exception(errData['error'] ?? 'Failed to create table');
+    } catch (_) {
+      throw Exception('Server error (${response.statusCode}): ${response.reasonPhrase}');
+    }
+  }
+
+  Future<DiningTableModel> updateTable(int id, Map<String, dynamic> data) async {
+    final response = await http.put(
+      Uri.parse('$_baseUrl/api/tables/$id'),
+      headers: _getHeaders(),
+      body: jsonEncode(data),
+    );
+    if (response.statusCode == 200) {
+      return DiningTableModel.fromJson(jsonDecode(response.body));
+    }
+    try {
+      final errData = jsonDecode(response.body);
+      throw Exception(errData['error'] ?? 'Failed to update table');
+    } catch (_) {
+      throw Exception('Server error (${response.statusCode}): ${response.reasonPhrase}');
+    }
+  }
+
+  Future<void> deleteTable(int id) async {
+    final response = await http.delete(Uri.parse('$_baseUrl/api/tables/$id'), headers: _getHeaders());
+    if (response.statusCode != 200) {
+      try {
+        final errData = jsonDecode(response.body);
+        throw Exception(errData['error'] ?? 'Failed to delete table');
+      } catch (_) {
+        throw Exception('Server error (${response.statusCode}): ${response.reasonPhrase}');
+      }
+    }
   }
 
   Future<List<CustomerModel>> getCustomers() async {
