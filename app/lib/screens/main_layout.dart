@@ -18,6 +18,7 @@ import 'settings_screen.dart';
 import 'items_screen.dart';
 import 'pos_orders_screen.dart';
 import 'offers_screen.dart';
+import 'users_screen.dart';
 
 class MainLayout extends StatefulWidget {
   const MainLayout({Key? key}) : super(key: key);
@@ -43,6 +44,12 @@ class _MainLayoutState extends State<MainLayout> {
     'Items',
     'POS Orders',
     'Offers',
+    'Administrators',
+    'Delivery Boys',
+    'Customers',
+    'Employees',
+    'Waiters',
+    'Chefs',
   ];
 
   Widget _getScreen(int index) {
@@ -69,6 +76,18 @@ class _MainLayoutState extends State<MainLayout> {
         return const POSOrdersScreen();
       case 10:
         return const OffersScreen();
+      case 11:
+        return const UsersScreen(userType: 'Administrators');
+      case 12:
+        return const UsersScreen(userType: 'Delivery Boys');
+      case 13:
+        return const UsersScreen(userType: 'Customers');
+      case 14:
+        return const UsersScreen(userType: 'Employees');
+      case 15:
+        return const UsersScreen(userType: 'Waiters');
+      case 16:
+        return const UsersScreen(userType: 'Chefs');
       default:
         return const DashboardScreen();
     }
@@ -114,6 +133,17 @@ class _MainLayoutState extends State<MainLayout> {
         'PROMO',
         [
           _SidebarItem(Icons.local_offer_outlined, 'Offers', 10),
+        ],
+      ),
+      _SidebarCategory(
+        'USERS',
+        [
+          _SidebarItem(Icons.admin_panel_settings_outlined, 'Administrators', 11),
+          _SidebarItem(Icons.local_shipping_outlined, 'Delivery Boys', 12),
+          _SidebarItem(Icons.people_outline, 'Customers', 13),
+          _SidebarItem(Icons.badge_outlined, 'Employees', 14),
+          _SidebarItem(Icons.room_service_outlined, 'Waiters', 15),
+          _SidebarItem(Icons.soup_kitchen_outlined, 'Chefs', 16),
         ],
       ),
       _SidebarCategory(

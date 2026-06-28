@@ -139,6 +139,53 @@ async function initializeDatabase() {
                 console.error("Migration: Creating offers table failed:", err.message);
             }
 
+            // Migration: Add email and phone to users table
+            try {
+                await dbPool.query("ALTER TABLE users ADD COLUMN email VARCHAR(100) NULL");
+                console.log("Migration: Added email to users table.");
+            } catch (_) {}
+            try {
+                await dbPool.query("ALTER TABLE users ADD COLUMN phone VARCHAR(20) NULL");
+                console.log("Migration: Added phone to users table.");
+            } catch (_) {}
+            try {
+                await dbPool.query("ALTER TABLE users MODIFY COLUMN role ENUM('admin', 'cashier', 'owner', 'kitchen', 'delivery', 'waiter') NOT NULL");
+                console.log("Migration: Expanded role ENUM in users table to include waiter.");
+            } catch (_) {}
+
+            // Migration: Add email to customers table
+            try {
+                await dbPool.query("ALTER TABLE customers ADD COLUMN email VARCHAR(100) NULL");
+                console.log("Migration: Added email to customers table.");
+            } catch (_) {}
+
+            // Migration: Add branch column to users table
+            try {
+                await dbPool.query("ALTER TABLE users ADD COLUMN branch VARCHAR(50) DEFAULT 'current' NULL");
+                console.log("Migration: Added branch to users table.");
+            } catch (_) {}
+
+            // Migration: Create user_addresses table
+            try {
+                await dbPool.query(`
+                    CREATE TABLE IF NOT EXISTS user_addresses (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        user_id INT NULL,
+                        customer_id INT NULL,
+                        label VARCHAR(50) NOT NULL,
+                        address_line VARCHAR(255) NOT NULL,
+                        latitude DECIMAL(10, 8) NULL,
+                        longitude DECIMAL(11, 8) NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                        FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+                `);
+                console.log("Migration: Created user_addresses table.");
+            } catch (err) {
+                console.error("Migration: Creating user_addresses table failed:", err.message);
+            }
+
             // Seed base64 image placeholders for default products & users
             try {
                 const redImg = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';

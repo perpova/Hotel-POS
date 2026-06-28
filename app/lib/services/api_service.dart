@@ -508,6 +508,125 @@ class APIService {
     }
   }
 
+  // User Management APIs
+  Future<List<UserModel>> getUsers({String? role}) async {
+    String url = '$_baseUrl/api/users';
+    if (role != null) {
+      url += '?role=$role';
+    }
+    final response = await http.get(Uri.parse(url), headers: _getHeaders());
+    if (response.statusCode == 200) {
+      final List data = jsonDecode(response.body);
+      return data.map((u) => UserModel.fromJson(u)).toList();
+    }
+    throw Exception('Failed to load users');
+  }
+
+  Future<UserModel> createUser(Map<String, dynamic> userData) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/api/users'),
+      headers: _getHeaders(),
+      body: jsonEncode(userData),
+    );
+    if (response.statusCode == 200) {
+      return UserModel.fromJson(jsonDecode(response.body));
+    }
+    throw Exception(jsonDecode(response.body)['error'] ?? 'Failed to create user');
+  }
+
+  Future<UserModel> updateUser(int id, Map<String, dynamic> userData) async {
+    final response = await http.put(
+      Uri.parse('$_baseUrl/api/users/$id'),
+      headers: _getHeaders(),
+      body: jsonEncode(userData),
+    );
+    if (response.statusCode == 200) {
+      return UserModel.fromJson(jsonDecode(response.body));
+    }
+    throw Exception(jsonDecode(response.body)['error'] ?? 'Failed to update user');
+  }
+
+  Future<void> resetUserPassword(int id, String password) async {
+    final response = await http.put(
+      Uri.parse('$_baseUrl/api/users/$id/password'),
+      headers: _getHeaders(),
+      body: jsonEncode({'password': password}),
+    );
+    if (response.statusCode != 200) {
+      throw Exception(jsonDecode(response.body)['error'] ?? 'Failed to reset password');
+    }
+  }
+
+  Future<void> deleteUser(int id) async {
+    final response = await http.delete(
+      Uri.parse('$_baseUrl/api/users/$id'),
+      headers: _getHeaders(),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to deactivate user');
+    }
+  }
+
+  // Customer Management APIs
+  Future<CustomerModel> updateCustomer(int id, Map<String, dynamic> customerData) async {
+    final response = await http.put(
+      Uri.parse('$_baseUrl/api/customers/$id'),
+      headers: _getHeaders(),
+      body: jsonEncode(customerData),
+    );
+    if (response.statusCode == 200) {
+      return CustomerModel.fromJson(jsonDecode(response.body));
+    }
+    throw Exception(jsonDecode(response.body)['error'] ?? 'Failed to update customer');
+  }
+
+  Future<void> deleteCustomer(int id) async {
+    final response = await http.delete(
+      Uri.parse('$_baseUrl/api/customers/$id'),
+      headers: _getHeaders(),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to delete customer');
+    }
+  }
+
+  // Address Management APIs
+  Future<List<AddressModel>> getAddresses(int id, {required bool isCustomer}) async {
+    final typePath = isCustomer ? 'customers' : 'users';
+    final response = await http.get(
+      Uri.parse('$_baseUrl/api/$typePath/$id/addresses'),
+      headers: _getHeaders(),
+    );
+    if (response.statusCode == 200) {
+      final List data = jsonDecode(response.body);
+      return data.map((a) => AddressModel.fromJson(a)).toList();
+    }
+    throw Exception('Failed to load addresses');
+  }
+
+  Future<AddressModel> saveAddress(int id, Map<String, dynamic> addrData, {required bool isCustomer}) async {
+    final typePath = isCustomer ? 'customers' : 'users';
+    final response = await http.post(
+      Uri.parse('$_baseUrl/api/$typePath/$id/addresses'),
+      headers: _getHeaders(),
+      body: jsonEncode(addrData),
+    );
+    if (response.statusCode == 200) {
+      return AddressModel.fromJson(jsonDecode(response.body));
+    }
+    throw Exception(jsonDecode(response.body)['error'] ?? 'Failed to save address');
+  }
+
+  Future<void> deleteAddress(int id) async {
+    final response = await http.delete(
+      Uri.parse('$_baseUrl/api/addresses/$id'),
+      headers: _getHeaders(),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to delete address');
+    }
+  }
+
   // Orders creation
   Future<Map<String, dynamic>> placeOrderOnline(OrderModel order) async {
     final response = await http.post(

@@ -11,25 +11,52 @@ double _toDouble(dynamic val) {
 
 double toDouble(dynamic val) => _toDouble(val);
 
-// User Model
 class UserModel {
   final int id;
   final String name;
   final String username;
-  final String role; // 'admin', 'cashier', 'owner', 'kitchen', 'delivery'
+  final String role; // 'admin', 'cashier', 'owner', 'kitchen', 'delivery', 'waiter'
+  final String? email;
+  final String? phone;
+  final String status; // 'active', 'inactive'
+  final String branch; // 'current', 'all'
   final String? imageBase64;
 
-  UserModel({required this.id, required this.name, required this.username, required this.role, this.imageBase64});
+  UserModel({
+    required this.id,
+    required this.name,
+    required this.username,
+    required this.role,
+    this.email,
+    this.phone,
+    this.status = 'active',
+    this.branch = 'current',
+    this.imageBase64,
+  });
 
   factory UserModel.fromJson(Map<String, dynamic> json) => UserModel(
     id: json['id'],
     name: json['name'],
     username: json['username'],
     role: json['role'],
+    email: json['email'],
+    phone: json['phone'],
+    status: json['status'] ?? 'active',
+    branch: json['branch'] ?? 'current',
     imageBase64: json['image_base64'],
   );
 
-  Map<String, dynamic> toJson() => {'id': id, 'name': name, 'username': username, 'role': role, 'image_base64': imageBase64};
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'username': username,
+    'role': role,
+    'email': email,
+    'phone': phone,
+    'status': status,
+    'branch': branch,
+    'image_base64': imageBase64,
+  };
 }
 
 // Category Model
@@ -186,11 +213,11 @@ class DiningTableModel {
   };
 }
 
-// Customer Model
 class CustomerModel {
   final int id;
   final String name;
   final String phone;
+  final String? email;
   final String? birthday;
   final String? favoriteItems;
   final double creditLimit;
@@ -201,6 +228,7 @@ class CustomerModel {
     required this.id,
     required this.name,
     required this.phone,
+    this.email,
     this.birthday,
     this.favoriteItems,
     required this.creditLimit,
@@ -212,6 +240,7 @@ class CustomerModel {
     id: json['id'],
     name: json['name'],
     phone: json['phone'],
+    email: json['email'],
     birthday: json['birthday'],
     favoriteItems: json['favorite_items'],
     creditLimit: _toDouble(json['credit_limit']),
@@ -223,11 +252,52 @@ class CustomerModel {
     'id': id,
     'name': name,
     'phone': phone,
+    'email': email,
     'birthday': birthday,
     'favorite_items': favoriteItems,
     'credit_limit': creditLimit,
     'outstanding_balance': outstandingBalance,
     'image_base64': imageBase64,
+  };
+}
+
+class AddressModel {
+  final int id;
+  final int? userId;
+  final int? customerId;
+  final String label; // 'Home', 'Work', 'Other'
+  final String addressLine;
+  final double? latitude;
+  final double? longitude;
+
+  AddressModel({
+    required this.id,
+    this.userId,
+    this.customerId,
+    required this.label,
+    required this.addressLine,
+    this.latitude,
+    this.longitude,
+  });
+
+  factory AddressModel.fromJson(Map<String, dynamic> json) => AddressModel(
+    id: json['id'],
+    userId: json['user_id'],
+    customerId: json['customer_id'],
+    label: json['label'] ?? 'Home',
+    addressLine: json['address_line'] ?? '',
+    latitude: json['latitude'] != null ? double.tryParse(json['latitude'].toString()) : null,
+    longitude: json['longitude'] != null ? double.tryParse(json['longitude'].toString()) : null,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'user_id': userId,
+    'customer_id': customerId,
+    'label': label,
+    'address_line': addressLine,
+    'latitude': latitude,
+    'longitude': longitude,
   };
 }
 

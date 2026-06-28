@@ -942,6 +942,278 @@ app.delete('/api/offers/:id', authenticateToken, async (req, res) => {
 });
 
 // ----------------------------------------------------
+// SYSTEM USER CRUD ENDPOINTS
+// ----------------------------------------------------
+
+app.get('/api/users', authenticateToken, async (req, res) => {
+    const { role } = req.query;
+    try {
+        let sql = 'SELECT id, name, username, email, phone, role, status, branch, image_base64, created_at FROM users';
+        let params = [];
+        if (role) {
+            if (role === 'admin_owner') {
+                sql += ' WHERE role IN ("admin", "owner")';
+            } else {
+                sql += ' WHERE role = ?';
+                params.push(role);
+            }
+        }
+        sql += ' ORDER BY created_at DESC';
+        const users = await db.query(sql, params);
+        res.json(users);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/users', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin' && req.user.role !== 'owner') {
+        return res.status(403).json({ error: 'Unauthorized' });
+    }
+    const { name, username, password, role, status, email, phone, branch, image_base64 } = req.body;
+    if (!username || !password || !role) {
+        return res.status(400).json({ error: 'Username, password, and role are required' });
+    }
+    try {
+        const passHash = await bcrypt.hash(password, 10);
+        const result = await db.query(
+            'INSERT INTO users (name, username, password_hash, role, status, email, phone, branch, image_base64) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [name, username, passHash, role, status || 'active', email || null, phone || null, branch || 'current', image_base64 || null]
+        );
+        const newId = result.insertId;
+        const [newUser] = await db.query('SELECT id, name, username, email, phone, role, status, branch, image_base64 FROM users WHERE id = ?', [newId]);
+        
+        await logAudit('modify_bill', 'users', newId, `User ${username} created.`, req.user.id);
+        broadcast({ type: 'user_created', data: newUser });
+        res.json(newUser);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.put('/api/users/:id', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin' && req.user.role !== 'owner') {
+        return res.status(403).json({ error: 'Unauthorized' });
+    }
+    const { id } = req.params;
+    const { name, username, role, status, email, phone, branch, image_base64 } = req.body;
+    try {
+        let updateFields = [];
+        let params = [];
+        
+        if (name !== undefined) { updateFields.push('name = ?'); params.push(name); }
+        if (username !== undefined) { updateFields.push('username = ?'); params.push(username); }
+        if (role !== undefined) { updateFields.push('role = ?'); params.push(role); }
+        if (status !== undefined) { updateFields.push('status = ?'); params.push(status); }
+        if (email !== undefined) { updateFields.push('email = ?'); params.push(email); }
+        if (phone !== undefined) { updateFields.push('phone = ?'); params.push(phone); }
+        if (branch !== undefined) { updateFields.push('branch = ?'); params.push(branch); }
+        if (image_base64 !== undefined) { updateFields.push('image_base64 = ?'); params.push(image_base64); }
+
+        if (updateFields.length === 0) {
+            return res.status(400).json({ error: 'No fields provided to update' });
+        }
+
+        params.push(id);
+        await db.query(`UPDATE users SET ${updateFields.join(', ')} WHERE id = ?`, params);
+        const [user] = await db.query('SELECT id, name, username, email, phone, role, status, branch, image_base64 FROM users WHERE id = ?', [id]);
+        
+        await logAudit('modify_bill', 'users', id, `User ${user.username} updated.`, req.user.id);
+        broadcast({ type: 'user_updated', data: user });
+        res.json(user);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.put('/api/users/:id/password', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin' && req.user.role !== 'owner') {
+        return res.status(403).json({ error: 'Unauthorized' });
+    }
+    const { id } = req.params;
+    const { password } = req.body;
+    if (!password) return res.status(400).json({ error: 'Password required' });
+    try {
+        const passHash = await bcrypt.hash(password, 10);
+        await db.query('UPDATE users SET password_hash = ? WHERE id = ?', [passHash, id]);
+        const [user] = await db.query('SELECT username FROM users WHERE id = ?', [id]);
+        await logAudit('modify_bill', 'users', id, `Password reset for user ${user.username}.`, req.user.id);
+        res.json({ success: true, message: 'Password updated successfully' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.delete('/api/users/:id', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin' && req.user.role !== 'owner') {
+        return res.status(403).json({ error: 'Unauthorized' });
+    }
+    const { id } = req.params;
+    try {
+        const [user] = await db.query('SELECT username FROM users WHERE id = ?', [id]);
+        if (!user) return res.status(404).json({ error: 'User not found' });
+        await db.query('UPDATE users SET status = "inactive" WHERE id = ?', [id]);
+        await logAudit('modify_bill', 'users', id, `User ${user.username} deactivated.`, req.user.id);
+        broadcast({ type: 'user_deactivated', data: { id } });
+        res.json({ success: true, message: 'User deactivated successfully' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ----------------------------------------------------
+// CUSTOMER CRUD ENDPOINTS
+// ----------------------------------------------------
+
+app.get('/api/customers', authenticateToken, async (req, res) => {
+    try {
+        const customers = await db.query('SELECT * FROM customers ORDER BY created_at DESC');
+        res.json(customers);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/customers', authenticateToken, async (req, res) => {
+    const { name, phone, email, birthday, credit_limit, outstanding_balance, image_base64 } = req.body;
+    if (!name || !phone) {
+        return res.status(400).json({ error: 'Customer Name and Phone number are required' });
+    }
+    try {
+        const result = await db.query(
+            'INSERT INTO customers (name, phone, email, birthday, credit_limit, outstanding_balance, image_base64) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [name, phone, email || null, birthday || null, credit_limit || 0.00, outstanding_balance || 0.00, image_base64 || null]
+        );
+        const newId = result.insertId;
+        const [customer] = await db.query('SELECT * FROM customers WHERE id = ?', [newId]);
+        
+        await logAudit('modify_bill', 'customers', newId, `Customer ${name} added.`, req.user.id);
+        broadcast({ type: 'customer_created', data: customer });
+        res.json(customer);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.put('/api/customers/:id', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    const { name, phone, email, birthday, credit_limit, outstanding_balance, image_base64 } = req.body;
+    try {
+        let updateFields = [];
+        let params = [];
+        
+        if (name !== undefined) { updateFields.push('name = ?'); params.push(name); }
+        if (phone !== undefined) { updateFields.push('phone = ?'); params.push(phone); }
+        if (email !== undefined) { updateFields.push('email = ?'); params.push(email); }
+        if (birthday !== undefined) { updateFields.push('birthday = ?'); params.push(birthday); }
+        if (credit_limit !== undefined) { updateFields.push('credit_limit = ?'); params.push(credit_limit); }
+        if (outstanding_balance !== undefined) { updateFields.push('outstanding_balance = ?'); params.push(outstanding_balance); }
+        if (image_base64 !== undefined) { updateFields.push('image_base64 = ?'); params.push(image_base64); }
+
+        if (updateFields.length === 0) {
+            return res.status(400).json({ error: 'No fields provided to update' });
+        }
+
+        params.push(id);
+        await db.query(`UPDATE customers SET ${updateFields.join(', ')} WHERE id = ?`, params);
+        const [customer] = await db.query('SELECT * FROM customers WHERE id = ?', [id]);
+        
+        await logAudit('modify_bill', 'customers', id, `Customer ${customer.name} updated.`, req.user.id);
+        broadcast({ type: 'customer_updated', data: customer });
+        res.json(customer);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.delete('/api/customers/:id', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin' && req.user.role !== 'owner') {
+        return res.status(403).json({ error: 'Unauthorized' });
+    }
+    const { id } = req.params;
+    try {
+        const [customer] = await db.query('SELECT name FROM customers WHERE id = ?', [id]);
+        if (!customer) return res.status(404).json({ error: 'Customer not found' });
+        await db.query('DELETE FROM customers WHERE id = ?', [id]);
+        await logAudit('modify_bill', 'customers', id, `Customer ${customer.name} deleted.`, req.user.id);
+        broadcast({ type: 'customer_deleted', data: { id } });
+        res.json({ success: true, message: 'Customer deleted successfully' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ----------------------------------------------------
+// USER & CUSTOMER ADDRESS ENDPOINTS
+// ----------------------------------------------------
+
+app.get('/api/users/:id/addresses', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    try {
+        const addresses = await db.query('SELECT * FROM user_addresses WHERE user_id = ? ORDER BY id DESC', [id]);
+        res.json(addresses);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/users/:id/addresses', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    const { label, address_line, latitude, longitude } = req.body;
+    if (!label || !address_line) {
+        return res.status(400).json({ error: 'Label and address are required' });
+    }
+    try {
+        const result = await db.query(
+            'INSERT INTO user_addresses (user_id, label, address_line, latitude, longitude) VALUES (?, ?, ?, ?, ?)',
+            [id, label, address_line, latitude || null, longitude || null]
+        );
+        const [newAddr] = await db.query('SELECT * FROM user_addresses WHERE id = ?', [result.insertId]);
+        res.json(newAddr);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.get('/api/customers/:id/addresses', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    try {
+        const addresses = await db.query('SELECT * FROM user_addresses WHERE customer_id = ? ORDER BY id DESC', [id]);
+        res.json(addresses);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/customers/:id/addresses', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    const { label, address_line, latitude, longitude } = req.body;
+    if (!label || !address_line) {
+        return res.status(400).json({ error: 'Label and address are required' });
+    }
+    try {
+        const result = await db.query(
+            'INSERT INTO user_addresses (customer_id, label, address_line, latitude, longitude) VALUES (?, ?, ?, ?, ?)',
+            [id, label, address_line, latitude || null, longitude || null]
+        );
+        const [newAddr] = await db.query('SELECT * FROM user_addresses WHERE id = ?', [result.insertId]);
+        res.json(newAddr);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.delete('/api/addresses/:id', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    try {
+        await db.query('DELETE FROM user_addresses WHERE id = ?', [id]);
+        res.json({ success: true, message: 'Address deleted successfully' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ----------------------------------------------------
 // BILLING PROCESS & ORDER ENDPOINTS
 // ----------------------------------------------------
 
