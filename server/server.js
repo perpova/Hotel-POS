@@ -823,6 +823,16 @@ app.post('/api/shifts/drawer-log', authenticateToken, async (req, res) => {
     }
 });
 
+app.get('/api/shifts/:id/drawer-logs', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    try {
+        const logs = await db.query('SELECT * FROM cash_drawer_logs WHERE shift_id = ? ORDER BY timestamp DESC', [id]);
+        res.json(logs);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ----------------------------------------------------
 // EXPENSE ENDPOINTS
 // ----------------------------------------------------

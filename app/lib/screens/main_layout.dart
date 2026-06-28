@@ -19,6 +19,9 @@ import 'items_screen.dart';
 import 'pos_orders_screen.dart';
 import 'offers_screen.dart';
 import 'users_screen.dart';
+import 'sales_report_screen.dart';
+import 'items_report_screen.dart';
+import 'credit_balance_report_screen.dart';
 
 class MainLayout extends StatefulWidget {
   const MainLayout({Key? key}) : super(key: key);
@@ -50,6 +53,9 @@ class _MainLayoutState extends State<MainLayout> {
     'Employees',
     'Waiters',
     'Chefs',
+    'Sales Report',
+    'Items Report',
+    'Credit Balance Report',
   ];
 
   Widget _getScreen(int index) {
@@ -88,6 +94,12 @@ class _MainLayoutState extends State<MainLayout> {
         return const UsersScreen(userType: 'Waiters');
       case 16:
         return const UsersScreen(userType: 'Chefs');
+      case 17:
+        return const SalesReportScreen();
+      case 18:
+        return const ItemsReportScreen();
+      case 19:
+        return const CreditBalanceReportScreen();
       default:
         return const DashboardScreen();
     }
@@ -149,6 +161,9 @@ class _MainLayoutState extends State<MainLayout> {
       _SidebarCategory(
         'REPORTS & SHIFTS',
         [
+          _SidebarItem(Icons.bar_chart_outlined, 'Sales Report', 17),
+          _SidebarItem(Icons.inventory_2_outlined, 'Items Report', 18),
+          _SidebarItem(Icons.account_balance_wallet_outlined, 'Credit Balance Report', 19),
           _SidebarItem(Icons.monetization_on_outlined, 'Shifts & Cash', 5),
           _SidebarItem(Icons.analytics_outlined, 'Reports & Logs', 6),
         ],

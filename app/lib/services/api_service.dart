@@ -378,6 +378,18 @@ class APIService {
     );
   }
 
+  Future<List<Map<String, dynamic>>> getDrawerLogs(int shiftId) async {
+    final response = await http.get(
+      Uri.parse('$_baseUrl/api/shifts/$shiftId/drawer-logs'),
+      headers: _getHeaders(),
+    );
+    if (response.statusCode == 200) {
+      final List data = jsonDecode(response.body);
+      return List<Map<String, dynamic>>.from(data);
+    }
+    throw Exception('Failed to load drawer logs');
+  }
+
   // Stock Adjustment
   Future<void> adjustStock(int productId, int changeQty, String type, String reason) async {
     final response = await http.post(
