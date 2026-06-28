@@ -22,6 +22,11 @@ import 'users_screen.dart';
 import 'sales_report_screen.dart';
 import 'items_report_screen.dart';
 import 'credit_balance_report_screen.dart';
+import 'raw_materials_screen.dart';
+import 'pos_stock_screen.dart';
+import 'edit_profile_screen.dart';
+import 'change_password_screen.dart';
+import 'roles_permissions_screen.dart';
 
 class MainLayout extends StatefulWidget {
   const MainLayout({Key? key}) : super(key: key);
@@ -56,6 +61,11 @@ class _MainLayoutState extends State<MainLayout> {
     'Sales Report',
     'Items Report',
     'Credit Balance Report',
+    'Raw Materials',
+    'POS Stock',
+    'Edit Profile',
+    'Change Password',
+    'Roles & Permissions',
   ];
 
   Widget _getScreen(int index) {
@@ -100,6 +110,16 @@ class _MainLayoutState extends State<MainLayout> {
         return const ItemsReportScreen();
       case 19:
         return const CreditBalanceReportScreen();
+      case 20:
+        return const RawMaterialsScreen();
+      case 21:
+        return const POSStockScreen();
+      case 22:
+        return const EditProfileScreen();
+      case 23:
+        return const ChangePasswordScreen();
+      case 24:
+        return const RolesPermissionsScreen();
       default:
         return const DashboardScreen();
     }
@@ -169,9 +189,16 @@ class _MainLayoutState extends State<MainLayout> {
         ],
       ),
       _SidebarCategory(
+        'STOCKS',
+        [
+          _SidebarItem(Icons.shopping_basket_outlined, 'Raw Materials', 20),
+          _SidebarItem(Icons.inventory_2_outlined, 'POS Stock', 21),
+        ],
+      ),
+      _SidebarCategory(
         'SYSTEM',
         [
-          _SidebarItem(Icons.settings_outlined, 'Settings & Stock', 7),
+          _SidebarItem(Icons.settings_outlined, 'Settings', 7),
         ],
       ),
     ];
@@ -234,7 +261,7 @@ class _MainLayoutState extends State<MainLayout> {
                     children: [
                       if (cat.title != null) ...[
                         Padding(
-                          padding: const EdgeInsets.only(left: 12, top: 16, bottom: 8),
+                          padding: const EdgeInsets.only(left: 12, top: 8, bottom: 4),
                           child: Text(
                             cat.title!,
                             style: GoogleFonts.inter(
@@ -249,7 +276,7 @@ class _MainLayoutState extends State<MainLayout> {
                       ...cat.items.map((item) {
                         final isSelected = _selectedIndex == item.screenIndex;
                         return Container(
-                          margin: const EdgeInsets.only(bottom: 4),
+                          margin: const EdgeInsets.only(bottom: 2),
                           child: ListTile(
                             selected: isSelected,
                             selectedTileColor: const Color(0xFFFFF0F5), // Light pink tile bg
@@ -638,49 +665,166 @@ class _MainLayoutState extends State<MainLayout> {
 
                       const SizedBox(width: 8),
 
-                      // Profile Display
-                      Row(
-                        children: [
-                          CircleAvatar(
-                            radius: 16,
-                            backgroundColor: Colors.teal.shade100,
-                            child: APIService.instance.currentUser?.imageBase64 != null && APIService.instance.currentUser!.imageBase64!.isNotEmpty
-                                ? ClipOval(
-                                    child: Base64ImageWidget(
-                                      base64Str: APIService.instance.currentUser!.imageBase64,
-                                      width: 32,
-                                      height: 32,
-                                      fit: BoxFit.cover,
+                      // Profile Display (Clickable Dropdown Popup)
+                      PopupMenuButton<int>(
+                        offset: const Offset(0, 50),
+                        tooltip: 'User Profile Menu',
+                        child: MouseRegion(
+                          cursor: SystemMouseCursors.click,
+                          child: Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 16,
+                                backgroundColor: Colors.teal.shade100,
+                                child: APIService.instance.currentUser?.imageBase64 != null && APIService.instance.currentUser!.imageBase64!.isNotEmpty
+                                    ? ClipOval(
+                                        child: Base64ImageWidget(
+                                          base64Str: APIService.instance.currentUser!.imageBase64,
+                                          width: 32,
+                                          height: 32,
+                                          fit: BoxFit.cover,
+                                        ),
+                                      )
+                                    : const Icon(Icons.face, color: Colors.teal, size: 20),
+                              ),
+                              if (isDesktop) ...[
+                                const SizedBox(width: 8),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      'Hello',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 9,
+                                        color: const Color(0xFF94A3B8),
+                                        fontWeight: FontWeight.w500,
+                                      ),
                                     ),
-                                  )
-                                : const Icon(Icons.face, color: Colors.teal, size: 20),
-                          ),
-                          if (isDesktop) ...[
-                            const SizedBox(width: 8),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  'Hello',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 9,
-                                    color: const Color(0xFF94A3B8),
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                                Text(
-                                  APIService.instance.currentUser?.name ?? 'John Doe',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 12,
-                                    color: const Color(0xFF1E293B),
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                                    Text(
+                                      APIService.instance.currentUser?.name ?? 'John Doe',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 12,
+                                        color: const Color(0xFF1E293B),
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ],
+                            ],
+                          ),
+                        ),
+                        onSelected: (val) async {
+                          if (val == 1) {
+                            setState(() {
+                              _selectedIndex = 22; // Edit Profile
+                            });
+                          } else if (val == 2) {
+                            setState(() {
+                              _selectedIndex = 23; // Change Password
+                            });
+                          } else if (val == 3) {
+                            await APIService.instance.logout();
+                            if (mounted) {
+                              Navigator.pushReplacement(
+                                context,
+                                MaterialPageRoute(builder: (context) => const LoginScreen()),
+                              );
+                            }
+                          }
+                        },
+                        itemBuilder: (context) {
+                          final user = APIService.instance.currentUser;
+                          final userRole = (user?.role ?? 'cashier').toUpperCase();
+                          return [
+                            PopupMenuItem<int>(
+                              enabled: false,
+                              child: Container(
+                                width: 220,
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                child: Column(
+                                  children: [
+                                    CircleAvatar(
+                                      radius: 36,
+                                      backgroundColor: Colors.teal.shade50,
+                                      child: (user?.imageBase64 ?? '').isNotEmpty
+                                          ? ClipOval(
+                                              child: Base64ImageWidget(
+                                                base64Str: user?.imageBase64,
+                                                width: 72,
+                                                height: 72,
+                                                fit: BoxFit.cover,
+                                              ),
+                                            )
+                                          : const Icon(Icons.face, color: Colors.teal, size: 40),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      user?.name ?? 'John Doe',
+                                      style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      user?.email ?? 'admin@example.com',
+                                      style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
+                                    ),
+                                    if ((user?.phone ?? '').isNotEmpty) ...[
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        user?.phone ?? '',
+                                        style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
+                                      ),
+                                    ],
+                                    const SizedBox(height: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: AppTheme.primary.withOpacity(0.08),
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                      child: Text(
+                                        userRole,
+                                        style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold, color: AppTheme.primary),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
-                          ],
-                        ],
+                            const PopupMenuDivider(),
+                            PopupMenuItem<int>(
+                              value: 1,
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.edit_outlined, size: 16, color: Color(0xFF64748B)),
+                                  const SizedBox(width: 10),
+                                  Text('Edit Profile', style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF1E293B))),
+                                ],
+                              ),
+                            ),
+                            PopupMenuItem<int>(
+                              value: 2,
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.key_outlined, size: 16, color: Color(0xFF64748B)),
+                                  const SizedBox(width: 10),
+                                  Text('Change Password', style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF1E293B))),
+                                ],
+                              ),
+                            ),
+                            PopupMenuItem<int>(
+                              value: 3,
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.logout_outlined, size: 16, color: AppTheme.danger),
+                                  const SizedBox(width: 10),
+                                  Text('Logout', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.danger)),
+                                ],
+                              ),
+                            ),
+                          ];
+                        },
                       ),
                     ],
                   ),

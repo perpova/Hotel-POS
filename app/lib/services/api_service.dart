@@ -96,6 +96,81 @@ class APIService {
     await prefs.remove('auth_user');
   }
 
+  Future<void> updateProfile(int id, Map<String, dynamic> userData) async {
+    final response = await http.put(
+      Uri.parse('$_baseUrl/api/users/$id'),
+      headers: _getHeaders(),
+      body: jsonEncode(userData),
+    );
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      currentUser = UserModel.fromJson(data);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('auth_user', jsonEncode(data));
+      return;
+    }
+    final errData = jsonDecode(response.body);
+    throw Exception(errData['error'] ?? 'Failed to update profile');
+  }
+
+  Future<void> updatePassword(int id, String password) async {
+    final response = await http.put(
+      Uri.parse('$_baseUrl/api/users/$id/password'),
+      headers: _getHeaders(),
+      body: jsonEncode({'password': password}),
+    );
+    if (response.statusCode != 200) {
+      final errData = jsonDecode(response.body);
+      throw Exception(errData['error'] ?? 'Failed to change password');
+    }
+  }
+
+  // ----------------------------------------------------
+  // ROLES & PERMISSIONS
+  // ----------------------------------------------------
+  Future<List<Map<String, dynamic>>> getRoles() async {
+    final response = await http.get(Uri.parse('$_baseUrl/api/roles'), headers: _getHeaders());
+    if (response.statusCode == 200) {
+      return List<Map<String, dynamic>>.from(jsonDecode(response.body));
+    }
+    throw Exception('Failed to load roles');
+  }
+
+  Future<Map<String, dynamic>> createRole(String name) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/api/roles'),
+      headers: _getHeaders(),
+      body: jsonEncode({'name': name}),
+    );
+    if (response.statusCode == 200) return jsonDecode(response.body);
+    final e = jsonDecode(response.body);
+    throw Exception(e['error'] ?? 'Failed to create role');
+  }
+
+  Future<void> updateRole(int id, String name) async {
+    await http.put(Uri.parse('$_baseUrl/api/roles/$id'), headers: _getHeaders(), body: jsonEncode({'name': name}));
+  }
+
+  Future<void> deleteRole(int id) async {
+    await http.delete(Uri.parse('$_baseUrl/api/roles/$id'), headers: _getHeaders());
+  }
+
+  Future<List<Map<String, dynamic>>> getRolePermissions(int roleId) async {
+    final response = await http.get(Uri.parse('$_baseUrl/api/roles/$roleId/permissions'), headers: _getHeaders());
+    if (response.statusCode == 200) {
+      return List<Map<String, dynamic>>.from(jsonDecode(response.body));
+    }
+    throw Exception('Failed to load permissions');
+  }
+
+  Future<void> saveRolePermissions(int roleId, List<Map<String, dynamic>> permissions) async {
+    await http.put(
+      Uri.parse('$_baseUrl/api/roles/$roleId/permissions'),
+      headers: _getHeaders(),
+      body: jsonEncode({'permissions': permissions}),
+    );
+  }
+
   Map<String, String> _getHeaders() {
     return {
       'Content-Type': 'application/json',
@@ -405,6 +480,74 @@ class APIService {
       final errData = jsonDecode(response.body);
       throw Exception(errData['error'] ?? 'Failed to adjust stock');
     }
+  }
+
+  Future<List<Map<String, dynamic>>> getProductStockLogs() async {
+    final response = await http.get(
+      Uri.parse('$_baseUrl/api/products/stock-logs'),
+      headers: _getHeaders(),
+    );
+    if (response.statusCode == 200) {
+      final List data = jsonDecode(response.body);
+      return List<Map<String, dynamic>>.from(data);
+    }
+    throw Exception('Failed to load product stock logs');
+  }
+
+  // Raw Ingredients Stock
+  Future<List<IngredientModel>> getIngredients() async {
+    final response = await http.get(
+      Uri.parse('$_baseUrl/api/ingredients'),
+      headers: _getHeaders(),
+    );
+    if (response.statusCode == 200) {
+      final List data = jsonDecode(response.body);
+      return data.map((i) => IngredientModel.fromJson(i)).toList();
+    }
+    throw Exception('Failed to load raw ingredients');
+  }
+
+  Future<void> createIngredient(String name, String unit) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/api/ingredients'),
+      headers: _getHeaders(),
+      body: jsonEncode({
+        'name': name,
+        'unit': unit,
+      }),
+    );
+    if (response.statusCode != 200) {
+      final errData = jsonDecode(response.body);
+      throw Exception(errData['error'] ?? 'Failed to create ingredient');
+    }
+  }
+
+  Future<void> adjustIngredientStock(int ingredientId, double changeQty, String type, String reason) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/api/ingredients/$ingredientId/stock'),
+      headers: _getHeaders(),
+      body: jsonEncode({
+        'change_qty': changeQty,
+        'type': type,
+        'reason': reason,
+      }),
+    );
+    if (response.statusCode != 200) {
+      final errData = jsonDecode(response.body);
+      throw Exception(errData['error'] ?? 'Failed to adjust raw ingredient stock');
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getIngredientStockLogs() async {
+    final response = await http.get(
+      Uri.parse('$_baseUrl/api/ingredients/logs'),
+      headers: _getHeaders(),
+    );
+    if (response.statusCode == 200) {
+      final List data = jsonDecode(response.body);
+      return List<Map<String, dynamic>>.from(data);
+    }
+    throw Exception('Failed to load ingredient stock logs');
   }
 
   Future<void> configureHappyHour(int productId, double promoPrice, String startTime, String endTime, String days) async {

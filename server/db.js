@@ -186,6 +186,46 @@ async function initializeDatabase() {
                 console.error("Migration: Creating user_addresses table failed:", err.message);
             }
 
+            // Migration: Create ingredients & ingredient_stock_logs tables
+            try {
+                await dbPool.query(`
+                    CREATE TABLE IF NOT EXISTS ingredients (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        name VARCHAR(100) UNIQUE NOT NULL,
+                        stock_qty DECIMAL(10, 2) DEFAULT 0.00,
+                        unit VARCHAR(50) DEFAULT 'kg' NOT NULL
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+                `);
+                
+                await dbPool.query(`
+                    CREATE TABLE IF NOT EXISTS ingredient_stock_logs (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        ingredient_id INT NOT NULL,
+                        change_qty DECIMAL(10, 2) NOT NULL,
+                        type VARCHAR(50) NOT NULL,
+                        reason TEXT NULL,
+                        user_id INT NOT NULL,
+                        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (ingredient_id) REFERENCES ingredients(id) ON DELETE CASCADE
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+                `);
+
+                // Seed ingredients
+                const ingredients = [
+                    ['Rice', 0.0, 'kg'],
+                    ['Egg', 0.0, 'units'],
+                    ['Chicken', 0.0, 'kg'],
+                    ['Oil', 0.0, 'liters'],
+                    ['Flour', 0.0, 'kg']
+                ];
+                for (const ing of ingredients) {
+                    await dbPool.query('INSERT IGNORE INTO ingredients (name, stock_qty, unit) VALUES (?, ?, ?)', ing);
+                }
+                console.log("Migration: Created and seeded ingredients successfully.");
+            } catch (err) {
+                console.error("Migration: Creating ingredients table failed:", err.message);
+            }
+
             // Seed base64 image placeholders for default products & users
             try {
                 const redImg = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
@@ -208,6 +248,37 @@ async function initializeDatabase() {
                 console.log("Migration: Seeded base64 images successfully.");
             } catch (err) {
                 console.error("Migration: Seeding base64 images failed:", err.message);
+            }
+
+            // ── Roles & Permissions ──────────────────────────────────────────
+            try {
+                await dbPool.query(`
+                    CREATE TABLE IF NOT EXISTS roles (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        name VARCHAR(100) NOT NULL UNIQUE,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+                `);
+                await dbPool.query(`
+                    CREATE TABLE IF NOT EXISTS role_permissions (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        role_id INT NOT NULL,
+                        page VARCHAR(100) NOT NULL,
+                        can_view TINYINT(1) DEFAULT 0,
+                        can_create TINYINT(1) DEFAULT 0,
+                        can_update TINYINT(1) DEFAULT 0,
+                        can_delete TINYINT(1) DEFAULT 0,
+                        FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE,
+                        UNIQUE KEY uq_role_page (role_id, page)
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+                `);
+                const defaultRoles = ['Admin', 'Cashier', 'Waiter', 'Chef', 'Delivery Boy'];
+                for (const r of defaultRoles) {
+                    await dbPool.query('INSERT IGNORE INTO roles (name) VALUES (?)', [r]);
+                }
+                console.log("Migration: Created roles & role_permissions tables.");
+            } catch (err) {
+                console.error("Migration: Creating roles tables failed:", err.message);
             }
         }
     } catch (error) {

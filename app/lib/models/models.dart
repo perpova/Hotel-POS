@@ -633,3 +633,31 @@ class OfferModel {
     'status': status,
   };
 }
+
+class IngredientModel {
+  final int id;
+  final String name;
+  final double stockQty;
+  final String unit;
+
+  IngredientModel({
+    required this.id,
+    required this.name,
+    required this.stockQty,
+    required this.unit,
+  });
+
+  factory IngredientModel.fromJson(Map<String, dynamic> json) => IngredientModel(
+        id: json['id'],
+        name: json['name'],
+        stockQty: double.tryParse(json['stock_qty'].toString()) ?? 0.0,
+        unit: json['unit'] ?? 'kg',
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'stock_qty': stockQty,
+        'unit': unit,
+      };
+}

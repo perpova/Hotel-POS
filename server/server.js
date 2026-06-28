@@ -241,6 +241,22 @@ app.get('/api/products', async (req, res) => {
 });
 
 // Stock Adjustments / Entering (requires senior level)
+app.get('/api/products/stock-logs', authenticateToken, async (req, res) => {
+    try {
+        const logs = await db.query(`
+            SELECT sl.*, p.name as product_name, u.name as recorder_name 
+            FROM stock_logs sl 
+            JOIN products p ON sl.product_id = p.id 
+            JOIN users u ON sl.user_id = u.id 
+            ORDER BY sl.timestamp DESC 
+            LIMIT 50
+        `);
+        res.json(logs);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 app.post('/api/products/:id/stock', authenticateToken, async (req, res) => {
     const { id } = req.params;
     const { change_qty, type, reason } = req.body; // type: 'purchase', 'adjustment', 'wastage'
@@ -272,6 +288,87 @@ app.post('/api/products/:id/stock', authenticateToken, async (req, res) => {
         broadcast({ type: 'stock_updated', data: { productId: id, stock_qty: product.stock_qty } });
         
         res.json(product);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ----------------------------------------------------
+// INGREDIENTS STOCK ENDPOINTS
+// ----------------------------------------------------
+app.get('/api/ingredients', authenticateToken, async (req, res) => {
+    try {
+        const ingredients = await db.query('SELECT * FROM ingredients ORDER BY name ASC');
+        res.json(ingredients);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.get('/api/ingredients/logs', authenticateToken, async (req, res) => {
+    try {
+        const logs = await db.query(`
+            SELECT isl.*, i.name as ingredient_name, u.name as recorder_name 
+            FROM ingredient_stock_logs isl 
+            JOIN ingredients i ON isl.ingredient_id = i.id 
+            JOIN users u ON isl.user_id = u.id 
+            ORDER BY isl.timestamp DESC 
+            LIMIT 50
+        `);
+        res.json(logs);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/ingredients', authenticateToken, async (req, res) => {
+    const { name, unit } = req.body;
+    if (req.user.role !== 'admin' && req.user.role !== 'owner') {
+        return res.status(403).json({ error: 'Unauthorized. Only admins or owners can add ingredients.' });
+    }
+    if (!name || !unit) {
+        return res.status(400).json({ error: 'Name and unit are required.' });
+    }
+    try {
+        const result = await db.query(
+            'INSERT INTO ingredients (name, stock_qty, unit) VALUES (?, 0.00, ?)',
+            [name, unit]
+        );
+        await logAudit('edit_stock', 'ingredients', result.insertId, `Ingredient ${name} created manually.`, req.user.id);
+        const [newIng] = await db.query('SELECT * FROM ingredients WHERE id = ?', [result.insertId]);
+        res.json(newIng);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/ingredients/:id/stock', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    const { change_qty, type, reason } = req.body; // type: 'purchase', 'adjustment', 'wastage'
+    
+    if (req.user.role !== 'admin' && req.user.role !== 'owner') {
+        return res.status(403).json({ error: 'Unauthorized. Only admins or owners can adjust stock.' });
+    }
+    
+    try {
+        // Update ingredient stock
+        await db.query('UPDATE ingredients SET stock_qty = stock_qty + ? WHERE id = ?', [change_qty, id]);
+        
+        // Insert ingredient stock log
+        await db.query(
+            'INSERT INTO ingredient_stock_logs (ingredient_id, change_qty, type, reason, user_id) VALUES (?, ?, ?, ?, ?)',
+            [id, change_qty, type, reason, req.user.id]
+        );
+        
+        // Log audit trail
+        await logAudit('edit_stock', 'ingredients', id, `Ingredient stock adjusted by ${change_qty} units (Type: ${type}). Reason: ${reason || 'N/A'}`, req.user.id);
+        
+        // Broadcast stock update
+        broadcast({ type: 'ingredient_stock_updated', data: { ingredientId: id } });
+        
+        // Fetch updated ingredient
+        const [updated] = await db.query('SELECT * FROM ingredients WHERE id = ?', [id]);
+        res.json(updated);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -1002,10 +1099,10 @@ app.post('/api/users', authenticateToken, async (req, res) => {
 });
 
 app.put('/api/users/:id', authenticateToken, async (req, res) => {
-    if (req.user.role !== 'admin' && req.user.role !== 'owner') {
+    const { id } = req.params;
+    if (req.user.role !== 'admin' && req.user.role !== 'owner' && req.user.id !== Number(id)) {
         return res.status(403).json({ error: 'Unauthorized' });
     }
-    const { id } = req.params;
     const { name, username, role, status, email, phone, branch, image_base64 } = req.body;
     try {
         let updateFields = [];
@@ -1037,10 +1134,10 @@ app.put('/api/users/:id', authenticateToken, async (req, res) => {
 });
 
 app.put('/api/users/:id/password', authenticateToken, async (req, res) => {
-    if (req.user.role !== 'admin' && req.user.role !== 'owner') {
+    const { id } = req.params;
+    if (req.user.role !== 'admin' && req.user.role !== 'owner' && req.user.id !== Number(id)) {
         return res.status(403).json({ error: 'Unauthorized' });
     }
-    const { id } = req.params;
     const { password } = req.body;
     if (!password) return res.status(400).json({ error: 'Password required' });
     try {
@@ -1771,6 +1868,99 @@ app.get('/api/reports/logs', authenticateToken, async (req, res) => {
             LIMIT 100
         `);
         res.json(logs);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ----------------------------------------------------
+// ROLES & PERMISSIONS ENDPOINTS
+// ----------------------------------------------------
+
+// List all roles with member count
+app.get('/api/roles', authenticateToken, async (req, res) => {
+    try {
+        const roles = await db.query(`
+            SELECT r.id, r.name, r.created_at,
+                   COUNT(u.id) AS member_count
+            FROM roles r
+            LEFT JOIN users u ON LOWER(u.role) = LOWER(r.name)
+            GROUP BY r.id, r.name, r.created_at
+            ORDER BY r.name
+        `);
+        res.json(roles);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Create a new role
+app.post('/api/roles', authenticateToken, async (req, res) => {
+    try {
+        const { name } = req.body;
+        if (!name) return res.status(400).json({ error: 'Role name is required' });
+        const result = await db.query('INSERT INTO roles (name) VALUES (?)', [name]);
+        res.json({ id: result.insertId, name });
+    } catch (err) {
+        if (err.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'Role already exists' });
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Update a role name
+app.put('/api/roles/:id', authenticateToken, async (req, res) => {
+    try {
+        const { name } = req.body;
+        await db.query('UPDATE roles SET name = ? WHERE id = ?', [name, req.params.id]);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Delete a role
+app.delete('/api/roles/:id', authenticateToken, async (req, res) => {
+    try {
+        await db.query('DELETE FROM roles WHERE id = ?', [req.params.id]);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Get permissions for a role
+app.get('/api/roles/:id/permissions', authenticateToken, async (req, res) => {
+    try {
+        const perms = await db.query(
+            'SELECT * FROM role_permissions WHERE role_id = ?',
+            [req.params.id]
+        );
+        res.json(perms);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Save permissions for a role (bulk upsert)
+app.put('/api/roles/:id/permissions', authenticateToken, async (req, res) => {
+    try {
+        const roleId = req.params.id;
+        const { permissions } = req.body; // array of { page, can_view, can_create, can_update, can_delete }
+        if (!Array.isArray(permissions)) return res.status(400).json({ error: 'permissions must be an array' });
+
+        // Upsert each page permission
+        for (const p of permissions) {
+            await db.query(`
+                INSERT INTO role_permissions (role_id, page, can_view, can_create, can_update, can_delete)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE
+                    can_view = VALUES(can_view),
+                    can_create = VALUES(can_create),
+                    can_update = VALUES(can_update),
+                    can_delete = VALUES(can_delete)
+            `, [roleId, p.page, p.can_view ? 1 : 0, p.can_create ? 1 : 0, p.can_update ? 1 : 0, p.can_delete ? 1 : 0]);
+        }
+        res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
