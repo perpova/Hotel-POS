@@ -120,6 +120,24 @@ async function initializeDatabase() {
                 await dbPool.query("ALTER TABLE categories ADD COLUMN image_base64 LONGTEXT NULL");
                 console.log("Migration: Added image_base64 to categories table.");
             } catch (_) {}
+            
+            try {
+                await dbPool.query(`
+                    CREATE TABLE IF NOT EXISTS offers (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        name VARCHAR(255) NOT NULL,
+                        discount_percentage DECIMAL(5,2) NOT NULL,
+                        start_date DATE NOT NULL,
+                        end_date DATE NOT NULL,
+                        image_base64 LONGTEXT NULL,
+                        status ENUM('active', 'inactive') DEFAULT 'active',
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+                `);
+                console.log("Migration: Created offers table if not exists.");
+            } catch (err) {
+                console.error("Migration: Creating offers table failed:", err.message);
+            }
 
             // Seed base64 image placeholders for default products & users
             try {

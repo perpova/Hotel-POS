@@ -16,6 +16,8 @@ import 'shift_screen.dart';
 import 'reports_screen.dart';
 import 'settings_screen.dart';
 import 'items_screen.dart';
+import 'pos_orders_screen.dart';
+import 'offers_screen.dart';
 
 class MainLayout extends StatefulWidget {
   const MainLayout({Key? key}) : super(key: key);
@@ -39,6 +41,8 @@ class _MainLayoutState extends State<MainLayout> {
     'Reports & Logs',
     'Settings & Stock',
     'Items',
+    'POS Orders',
+    'Offers',
   ];
 
   Widget _getScreen(int index) {
@@ -61,6 +65,10 @@ class _MainLayoutState extends State<MainLayout> {
         return const SettingsScreen();
       case 8:
         return const ItemsScreen();
+      case 9:
+        return const POSOrdersScreen();
+      case 10:
+        return const OffersScreen();
       default:
         return const DashboardScreen();
     }
@@ -97,8 +105,15 @@ class _MainLayoutState extends State<MainLayout> {
         'POS & ORDERS',
         [
           _SidebarItem(Icons.point_of_sale_outlined, 'POS System', 1),
+          _SidebarItem(Icons.receipt_long_outlined, 'POS Orders', 9),
           _SidebarItem(Icons.queue_play_next_outlined, 'Queue Screen', 4),
           _SidebarItem(Icons.kitchen_outlined, 'K.D.S (Kitchen)', 3),
+        ],
+      ),
+      _SidebarCategory(
+        'PROMO',
+        [
+          _SidebarItem(Icons.local_offer_outlined, 'Offers', 10),
         ],
       ),
       _SidebarCategory(

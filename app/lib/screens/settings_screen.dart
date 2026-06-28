@@ -3,9 +3,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../pos_controller.dart';
 import '../theme.dart';
-import '../api_service.dart';
-import '../models.dart';
-import '../local_db.dart';
+import '../services/api_service.dart';
+import '../models/models.dart';
+import '../services/local_db.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({Key? key}) : super(key: key);
@@ -23,13 +23,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _stockReasonController = TextEditingController();
   String _stockType = 'purchase'; // 'purchase', 'adjustment', 'wastage'
 
-  // Happy Hour Controllers
-  ProductModel? _selectedPromoProduct;
-  final _promoPriceController = TextEditingController();
-  final _startTimeController = TextEditingController(text: '17:00:00');
-  final _endTimeController = TextEditingController(text: '19:00:00');
-  String _selectedDays = '1,2,3,4,5'; // Monday to Friday
-
   @override
   void initState() {
     super.initState();
@@ -41,22 +34,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _apiUrlController.dispose();
     _stockChangeController.dispose();
     _stockReasonController.dispose();
-    _promoPriceController.dispose();
-    _startTimeController.dispose();
-    _endTimeController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final controller = Provider.of<POSController>(context);
-    final size = MediaQuery.of(context).size;
-    final isDesktop = size.width > 950;
-    
     final userRole = APIService.instance.currentUser?.role ?? 'cashier';
     final hasSeniorAccess = userRole == 'admin' || userRole == 'owner';
 
     return Scaffold(
+      backgroundColor: AppTheme.bgLight,
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(
@@ -64,14 +52,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
           children: [
             // API Base URL config
             Card(
+              elevation: 0,
+              color: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               child: Padding(
                 padding: const EdgeInsets.all(20),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('API / VPS Connection Settings', style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold)),
+                    Text('API / VPS Connection Settings', style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
                     const SizedBox(height: 12),
-                    const Text('Change base URL to switch from localhost testing to remote database VPS hosting.', style: TextStyle(fontSize: 12)),
+                    Text('Change base URL to switch from localhost testing to remote database VPS hosting.', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
                     const SizedBox(height: 16),
                     Row(
                       children: [
@@ -97,6 +88,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               );
                             }
                           },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.primary,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
                           child: const Text('Save & Reconnect'),
                         ),
                       ],
@@ -120,7 +116,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          'Stock Adjustments and Happy Hour configurations are locked. Please login as Admin or Owner to access.',
+                          'Stock Adjustments configurations are locked. Please login as Admin or Owner to access.',
                           style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.danger),
                         ),
                       ),
@@ -129,30 +125,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
             ] else ...[
-              isDesktop
-                  ? Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Left: Stock Adjustments (60%)
-                        Expanded(
-                          flex: 3,
-                          child: _buildStockAdjustmentCard(controller),
-                        ),
-                        const SizedBox(width: 24),
-                        // Right: Happy Hour Configs (40%)
-                        Expanded(
-                          flex: 2,
-                          child: _buildHappyHourCard(controller),
-                        ),
-                      ],
-                    )
-                  : Column(
-                      children: [
-                        _buildStockAdjustmentCard(controller),
-                        const SizedBox(height: 20),
-                        _buildHappyHourCard(controller),
-                      ],
-                    ),
+              _buildStockAdjustmentCard(controller),
             ],
           ],
         ),
@@ -165,6 +138,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // ----------------------------------------------------
   Widget _buildStockAdjustmentCard(POSController controller) {
     return Card(
+      elevation: 0,
+      color: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -174,7 +150,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               children: [
                 const Icon(Icons.inventory_2_outlined, color: AppTheme.primary),
                 const SizedBox(width: 8),
-                Text('Stock Entering & Corrections', style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold)),
+                Text('Stock Entering & Corrections', style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
               ],
             ),
             const SizedBox(height: 16),
@@ -231,6 +207,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
             ElevatedButton(
               onPressed: () => _handleAdjustStock(controller),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
               child: const Text('Update Inventory Level'),
             ),
           ],
@@ -249,7 +231,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (controller.isOnline) {
         await APIService.instance.adjustStock(_selectedStockProduct!.id, qty, _stockType, reason);
       } else {
-        // Offline Save Mock
         await LocalDB.instance.saveStockLogOffline(_selectedStockProduct!.id, qty, _stockType, reason, APIService.instance.currentUser?.id ?? 1);
       }
       
@@ -261,114 +242,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Stock level adjusted and activity logged.')),
-        );
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString()), backgroundColor: AppTheme.danger),
-      );
-    }
-  }
-
-  // ----------------------------------------------------
-  // CARD 2: HAPPY HOUR CONFIG
-  // ----------------------------------------------------
-  Widget _buildHappyHourCard(POSController controller) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.celebration_outlined, color: AppTheme.primary),
-                const SizedBox(width: 8),
-                Text('Happy Hour Configuration', style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold)),
-              ],
-            ),
-            const SizedBox(height: 16),
-            
-            // Product Selector
-            DropdownButtonFormField<ProductModel>(
-              value: _selectedPromoProduct,
-              decoration: const InputDecoration(labelText: 'Select Promo Product'),
-              items: [
-                ...controller.products.map((p) => DropdownMenuItem(
-                      value: p,
-                      child: Text('${p.name} (LKR ${p.price.toStringAsFixed(0)})', style: const TextStyle(fontSize: 12)),
-                    )),
-              ],
-              onChanged: (p) => setState(() => _selectedPromoProduct = p),
-            ),
-            const SizedBox(height: 12),
-
-            TextField(
-              controller: _promoPriceController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Promo Price (LKR)'),
-            ),
-            const SizedBox(height: 12),
-
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _startTimeController,
-                    decoration: const InputDecoration(labelText: 'Start Time', hintText: '17:00:00'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    controller: _endTimeController,
-                    decoration: const InputDecoration(labelText: 'End Time', hintText: '19:00:00'),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            DropdownButtonFormField<String>(
-              value: _selectedDays,
-              decoration: const InputDecoration(labelText: 'Promotion Days'),
-              items: const [
-                DropdownMenuItem(value: '1,2,3,4,5', child: Text('Weekdays (Mon-Fri)')),
-                DropdownMenuItem(value: '6,7', child: Text('Weekends (Sat-Sun)')),
-                DropdownMenuItem(value: '1,2,3,4,5,6,7', child: Text('Every Day')),
-              ],
-              onChanged: (val) => setState(() => _selectedDays = val!),
-            ),
-            const SizedBox(height: 20),
-
-            ElevatedButton(
-              onPressed: () => _handleConfigureHappyHour(controller),
-              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.secondary),
-              child: const Text('Save Happy Hour Pricing'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _handleConfigureHappyHour(POSController controller) async {
-    if (_selectedPromoProduct == null) return;
-    final price = double.tryParse(_promoPriceController.text) ?? 0.00;
-    final start = _startTimeController.text.trim();
-    final end = _endTimeController.text.trim();
-    if (price <= 0 || start.isEmpty || end.isEmpty) return;
-
-    try {
-      await APIService.instance.configureHappyHour(_selectedPromoProduct!.id, price, start, end, _selectedDays);
-      
-      _promoPriceController.clear();
-      _selectedPromoProduct = null;
-      await controller.reloadEnvironment();
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Happy hour pricing saved. Price updates broadcasted to all terminals.')),
         );
       }
     } catch (e) {

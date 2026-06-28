@@ -522,3 +522,44 @@ class AuditLogModel {
     'timestamp': timestamp,
   };
 }
+
+// Offer Model
+class OfferModel {
+  final int? id;
+  final String name;
+  final double discountPercentage;
+  final String startDate;
+  final String endDate;
+  final String? imageBase64;
+  final String status; // 'active', 'inactive'
+
+  OfferModel({
+    this.id,
+    required this.name,
+    required this.discountPercentage,
+    required this.startDate,
+    required this.endDate,
+    this.imageBase64,
+    this.status = 'active',
+  });
+
+  factory OfferModel.fromJson(Map<String, dynamic> json) => OfferModel(
+    id: json['id'],
+    name: json['name'],
+    discountPercentage: toDouble(json['discount_percentage']),
+    startDate: json['start_date'],
+    endDate: json['end_date'],
+    imageBase64: json['image_base64'],
+    status: json['status'] ?? 'active',
+  );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'discount_percentage': discountPercentage,
+    'start_date': startDate,
+    'end_date': endDate,
+    'image_base64': imageBase64,
+    'status': status,
+  };
+}

@@ -395,7 +395,6 @@ class APIService {
     }
   }
 
-  // Happy Hour Promo Pricing
   Future<void> configureHappyHour(int productId, double promoPrice, String startTime, String endTime, String days) async {
     final response = await http.post(
       Uri.parse('$_baseUrl/api/happyhour'),
@@ -410,6 +409,22 @@ class APIService {
     );
     if (response.statusCode != 200) {
       throw Exception('Failed to configure happy hour');
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getHappyHours() async {
+    final response = await http.get(Uri.parse('$_baseUrl/api/happyhour'), headers: _getHeaders());
+    if (response.statusCode == 200) {
+      final List data = jsonDecode(response.body);
+      return List<Map<String, dynamic>>.from(data);
+    }
+    throw Exception('Failed to load happy hours');
+  }
+
+  Future<void> deleteHappyHour(int id) async {
+    final response = await http.delete(Uri.parse('$_baseUrl/api/happyhour/$id'), headers: _getHeaders());
+    if (response.statusCode != 200) {
+      throw Exception('Failed to delete happy hour configuration');
     }
   }
 
@@ -438,6 +453,59 @@ class APIService {
       return data.map((o) => OrderModel.fromJson(o)).toList();
     }
     throw Exception('Failed to load orders');
+  }
+
+  Future<List<OrderItemModel>> getOrderItems(int orderId) async {
+    final response = await http.get(Uri.parse('$_baseUrl/api/orders/$orderId/items'), headers: _getHeaders());
+    if (response.statusCode == 200) {
+      final List data = jsonDecode(response.body);
+      return data.map((i) => OrderItemModel.fromJson(i)).toList();
+    }
+    throw Exception('Failed to load order items');
+  }
+
+  // Promotions & Offers APIs
+  Future<List<OfferModel>> getOffers() async {
+    final response = await http.get(Uri.parse('$_baseUrl/api/offers'), headers: _getHeaders());
+    if (response.statusCode == 200) {
+      final List data = jsonDecode(response.body);
+      return data.map((o) => OfferModel.fromJson(o)).toList();
+    }
+    throw Exception('Failed to load offers');
+  }
+
+  Future<OfferModel> createOffer(Map<String, dynamic> offerData) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/api/offers'),
+      headers: _getHeaders(),
+      body: jsonEncode(offerData),
+    );
+    if (response.statusCode == 200) {
+      return OfferModel.fromJson(jsonDecode(response.body));
+    }
+    throw Exception('Failed to create offer');
+  }
+
+  Future<OfferModel> updateOffer(int id, Map<String, dynamic> offerData) async {
+    final response = await http.put(
+      Uri.parse('$_baseUrl/api/offers/$id'),
+      headers: _getHeaders(),
+      body: jsonEncode(offerData),
+    );
+    if (response.statusCode == 200) {
+      return OfferModel.fromJson(jsonDecode(response.body));
+    }
+    throw Exception('Failed to update offer');
+  }
+
+  Future<void> deleteOffer(int id) async {
+    final response = await http.delete(
+      Uri.parse('$_baseUrl/api/offers/$id'),
+      headers: _getHeaders(),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to delete offer');
+    }
   }
 
   // Orders creation

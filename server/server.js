@@ -563,6 +563,35 @@ app.post('/api/happyhour', authenticateToken, async (req, res) => {
     }
 });
 
+app.get('/api/happyhour', authenticateToken, async (req, res) => {
+    try {
+        const promos = await db.query(`
+            SELECT hhp.*, p.name as product_name, p.price as original_price
+            FROM happy_hour_pricing hhp
+            JOIN products p ON hhp.product_id = p.id
+            WHERE hhp.status = "active"
+            ORDER BY hhp.id DESC
+        `);
+        res.json(promos);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.delete('/api/happyhour/:id', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin' && req.user.role !== 'owner') {
+        return res.status(403).json({ error: 'Unauthorized' });
+    }
+    const { id } = req.params;
+    try {
+        await db.query('UPDATE happy_hour_pricing SET status = "inactive" WHERE id = ?', [id]);
+        broadcast({ type: 'happy_hour_updated' });
+        res.json({ success: true, message: 'Happy hour pricing deactivated successfully.' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ----------------------------------------------------
 // TABLE MANAGEMENT ENDPOINTS
 // ----------------------------------------------------
@@ -827,6 +856,86 @@ app.post('/api/expenses', authenticateToken, async (req, res) => {
         }
         
         res.json({ success: true, insertId: result.insertId });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ----------------------------------------------------
+// PROMOTIONS & OFFERS ENDPOINTS
+// ----------------------------------------------------
+
+app.get('/api/offers', authenticateToken, async (req, res) => {
+    try {
+        const offers = await db.query('SELECT * FROM offers ORDER BY created_at DESC');
+        res.json(offers);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/offers', authenticateToken, async (req, res) => {
+    const { name, discount_percentage, start_date, end_date, image_base64, status } = req.body;
+    try {
+        const result = await db.query(
+            'INSERT INTO offers (name, discount_percentage, start_date, end_date, image_base64, status) VALUES (?, ?, ?, ?, ?, ?)',
+            [name, discount_percentage, start_date, end_date, image_base64 || null, status || 'active']
+        );
+        const newId = result.insertId;
+        const [offer] = await db.query('SELECT * FROM offers WHERE id = ?', [newId]);
+        
+        await logAudit('modify_bill', 'offers', newId, `Offer ${name} created.`, req.user.id);
+        broadcast({ type: 'offer_created', data: offer });
+
+        res.json(offer);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.put('/api/offers/:id', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    const { name, discount_percentage, start_date, end_date, image_base64, status } = req.body;
+    try {
+        let updateFields = [];
+        let params = [];
+        
+        if (name !== undefined) { updateFields.push('name = ?'); params.push(name); }
+        if (discount_percentage !== undefined) { updateFields.push('discount_percentage = ?'); params.push(discount_percentage); }
+        if (start_date !== undefined) { updateFields.push('start_date = ?'); params.push(start_date); }
+        if (end_date !== undefined) { updateFields.push('end_date = ?'); params.push(end_date); }
+        if (image_base64 !== undefined) { updateFields.push('image_base64 = ?'); params.push(image_base64); }
+        if (status !== undefined) { updateFields.push('status = ?'); params.push(status); }
+
+        if (updateFields.length === 0) {
+            return res.status(400).json({ error: 'No fields provided to update.' });
+        }
+
+        params.push(id);
+        await db.query(`UPDATE offers SET ${updateFields.join(', ')} WHERE id = ?`, params);
+        const [offer] = await db.query('SELECT * FROM offers WHERE id = ?', [id]);
+        
+        await logAudit('modify_bill', 'offers', id, `Offer ${offer.name} updated.`, req.user.id);
+        broadcast({ type: 'offer_updated', data: offer });
+
+        res.json(offer);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.delete('/api/offers/:id', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    try {
+        const offers = await db.query('SELECT name FROM offers WHERE id = ?', [id]);
+        if (offers.length === 0) return res.status(404).json({ error: 'Offer not found' });
+        const offer = offers[0];
+
+        await db.query('DELETE FROM offers WHERE id = ?', [id]);
+        await logAudit('modify_bill', 'offers', id, `Offer ${offer.name} deleted.`, req.user.id);
+        broadcast({ type: 'offer_deleted', data: { id } });
+
+        res.json({ success: true, message: 'Offer deleted successfully.' });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
