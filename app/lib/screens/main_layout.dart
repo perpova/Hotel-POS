@@ -26,6 +26,7 @@ class MainLayout extends StatefulWidget {
 
 class _MainLayoutState extends State<MainLayout> {
   int _selectedIndex = 0;
+  bool _isSidebarCollapsed = false;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   final List<String> _titles = [
@@ -210,6 +211,11 @@ class _MainLayoutState extends State<MainLayout> {
                             onTap: () {
                               setState(() {
                                 _selectedIndex = item.screenIndex;
+                                if (item.screenIndex == 1) {
+                                  _isSidebarCollapsed = true;
+                                } else {
+                                  _isSidebarCollapsed = false;
+                                }
                               });
                               if (!isDesktop) {
                                 Navigator.pop(context);
@@ -310,12 +316,12 @@ class _MainLayoutState extends State<MainLayout> {
       body: Row(
         children: [
           // Sidebar on Desktop
-          if (isDesktop)
+          if (isDesktop && !_isSidebarCollapsed)
             SizedBox(
               width: 240,
               child: buildSidebarContent(),
             ),
-          if (isDesktop)
+          if (isDesktop && !_isSidebarCollapsed)
             const VerticalDivider(width: 1, color: Color(0xFFE2E8F0)),
 
           // Main Body Area
@@ -329,11 +335,51 @@ class _MainLayoutState extends State<MainLayout> {
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: Row(
                     children: [
-                      if (!isDesktop)
+                      if (!isDesktop) ...[
                         IconButton(
                           icon: const Icon(Icons.menu),
                           onPressed: () => _scaffoldKey.currentState?.openDrawer(),
                         ),
+                        const SizedBox(width: 8),
+                      ],
+
+                      if (isDesktop && _isSidebarCollapsed) ...[
+                        // Logo area styled exactly like FoodKing
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: AppTheme.primary.withOpacity(0.1),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.restaurant_menu, color: AppTheme.primary, size: 20),
+                            ),
+                            const SizedBox(width: 8),
+                            RichText(
+                              text: TextSpan(
+                                text: 'Food',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppTheme.primary,
+                                ),
+                                children: [
+                                  TextSpan(
+                                    text: 'King',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold,
+                                      color: const Color(0xFFFFB300), // Amber yellow
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(width: 24),
+                      ],
 
                       Text(
                         _titles[_selectedIndex],
@@ -498,6 +544,28 @@ class _MainLayoutState extends State<MainLayout> {
                         const SizedBox(width: 16),
                       ],
 
+                      // Pink menu toggle button on desktop
+                      if (isDesktop) ...[
+                        IconButton(
+                          icon: Icon(
+                            _isSidebarCollapsed ? Icons.menu : Icons.menu_open,
+                            color: AppTheme.primary,
+                            size: 18,
+                          ),
+                          style: IconButton.styleFrom(
+                            backgroundColor: const Color(0xFFFFF0F5),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            padding: const EdgeInsets.all(10),
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _isSidebarCollapsed = !_isSidebarCollapsed;
+                            });
+                          },
+                        ),
+                        const SizedBox(width: 16),
+                      ],
+
                       // Notification Bell with indicator badge
                       IconButton(
                         icon: const Badge(
@@ -559,13 +627,21 @@ class _MainLayoutState extends State<MainLayout> {
                 ),
                 const Divider(height: 1, color: Color(0xFFF1F5F9)),
 
-                // Screen Content
+                // Screen Content - always keep the screen widget in the tree
+                // so its State is never disposed during background reloads.
                 Expanded(
-                  child: posController.isLoading
-                      ? const Center(
-                          child: CircularProgressIndicator(color: AppTheme.primary),
-                        )
-                      : _getScreen(_selectedIndex),
+                  child: Stack(
+                    children: [
+                      _getScreen(_selectedIndex),
+                      if (posController.isLoading)
+                        Container(
+                          color: Colors.black.withOpacity(0.15),
+                          child: const Center(
+                            child: CircularProgressIndicator(color: AppTheme.primary),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ],
             ),

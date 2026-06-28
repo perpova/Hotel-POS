@@ -115,6 +115,23 @@ class APIService {
     throw Exception('Failed to load categories');
   }
 
+  Future<CategoryModel> createCategory(Map<String, dynamic> data) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/api/categories'),
+      headers: _getHeaders(),
+      body: jsonEncode(data),
+    );
+    if (response.statusCode == 200) {
+      return CategoryModel.fromJson(jsonDecode(response.body));
+    }
+    try {
+      final errData = jsonDecode(response.body);
+      throw Exception(errData['error'] ?? 'Failed to create category');
+    } catch (_) {
+      throw Exception('Server error (${response.statusCode}): ${response.reasonPhrase}');
+    }
+  }
+
   Future<List<ProductModel>> getProducts() async {
     final response = await http.get(Uri.parse('$_baseUrl/api/products'), headers: _getHeaders());
     if (response.statusCode == 200) {

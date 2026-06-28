@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS categories (
     name VARCHAR(100) NOT NULL,
     parent_id INT NULL,
     status ENUM('active', 'inactive') DEFAULT 'active',
+    image_base64 LONGTEXT NULL,
     FOREIGN KEY (parent_id) REFERENCES categories(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 

@@ -37,16 +37,23 @@ class CategoryModel {
   final int id;
   final String name;
   final int? parentId;
+  final String? imageBase64;
 
-  CategoryModel({required this.id, required this.name, this.parentId});
+  CategoryModel({required this.id, required this.name, this.parentId, this.imageBase64});
 
   factory CategoryModel.fromJson(Map<String, dynamic> json) => CategoryModel(
     id: json['id'],
     name: json['name'],
     parentId: json['parent_id'],
+    imageBase64: json['image_base64'],
   );
 
-  Map<String, dynamic> toJson() => {'id': id, 'name': name, 'parent_id': parentId};
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'parent_id': parentId,
+    'image_base64': imageBase64,
+  };
 }
 
 // Product Model

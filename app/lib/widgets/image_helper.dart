@@ -19,13 +19,13 @@ class Base64ImageWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (base64Str == null || base64Str!.isEmpty) {
+    // Treat base64 strings shorter than 200 characters as placeholders and show fallback.
+    if (base64Str == null || base64Str!.trim().isEmpty || base64Str!.trim().length < 200) {
       return _buildFallback();
     }
 
     try {
       String cleanStr = base64Str!;
-      // Handle "data:image/png;base64," prefix if it exists
       if (cleanStr.contains(',')) {
         cleanStr = cleanStr.split(',')[1];
       }
@@ -47,12 +47,12 @@ class Base64ImageWidget extends StatelessWidget {
         Container(
           width: width,
           height: height,
-          color: const Color(0xFFF1F5F9),
+          color: const Color(0xFFFFF0F5), // FoodKing light pink background
           child: const Center(
             child: Icon(
-              Icons.restaurant_outlined,
-              color: Color(0xFF94A3B8),
-              size: 24,
+              Icons.restaurant_menu,
+              color: Color(0xFFFF1B6B), // FoodKing primary pink
+              size: 28,
             ),
           ),
         );

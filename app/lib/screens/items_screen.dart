@@ -710,6 +710,7 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
   late TextEditingController _cautionController;
   late TextEditingController _descriptionController;
 
+  List<CategoryModel> _localCategories = [];
   int? _selectedCategoryId;
   String _itemType = 'Veg';
   bool _isFeatured = false;
@@ -720,6 +721,7 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
   @override
   void initState() {
     super.initState();
+    _localCategories = List.from(widget.categories);
     final p = widget.product;
     _nameController = TextEditingController(text: p?.name ?? '');
     _priceController = TextEditingController(text: p != null ? p.price.toStringAsFixed(2) : '');
@@ -727,7 +729,7 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
     _cautionController = TextEditingController(text: p?.caution ?? '');
     _descriptionController = TextEditingController(text: p?.description ?? '');
 
-    _selectedCategoryId = p?.categoryId ?? (widget.categories.isNotEmpty ? widget.categories[0].id : null);
+    _selectedCategoryId = p?.categoryId ?? (_localCategories.isNotEmpty ? _localCategories[0].id : null);
     _itemType = p?.itemType ?? 'Veg';
     _isFeatured = p?.isFeatured ?? false;
     _status = p?.status ?? 'active';
@@ -747,8 +749,7 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
   Future<void> _pickImage() async {
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['png', 'jpg', 'jpeg'],
+        type: FileType.image,
       );
 
       if (result != null) {
@@ -770,6 +771,155 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
         SnackBar(content: Text('Failed to pick image: $e'), backgroundColor: Colors.red),
       );
     }
+  }
+
+  void _showAddCategoryDialog() {
+    final TextEditingController categoryNameController = TextEditingController();
+    String? categoryImageBase64;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setStateDialog) => AlertDialog(
+          title: Text('Create Category', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: categoryNameController,
+                decoration: const InputDecoration(
+                  hintText: 'Enter category name',
+                  labelText: 'Category Name',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'Category Image',
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFF64748B),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Container(
+                    width: 70,
+                    height: 70,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFCBD5E1)),
+                    ),
+                    child: categoryImageBase64 != null
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Base64ImageWidget(
+                              base64Str: categoryImageBase64!,
+                              width: 70,
+                              height: 70,
+                              fit: BoxFit.cover,
+                            ),
+                          )
+                        : const Icon(Icons.category_outlined, color: Color(0xFF94A3B8), size: 30),
+                  ),
+                  const SizedBox(width: 16),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ElevatedButton.icon(
+                        onPressed: () async {
+                          try {
+                            FilePickerResult? result = await FilePicker.platform.pickFiles(
+                              type: FileType.image,
+                            );
+                            if (result != null) {
+                              List<int> bytes;
+                              final file = result.files.single;
+                              if (file.bytes != null) {
+                                bytes = file.bytes!;
+                              } else if (file.path != null) {
+                                bytes = await File(file.path!).readAsBytes();
+                              } else {
+                                return;
+                              }
+                              setStateDialog(() {
+                                categoryImageBase64 = base64Encode(bytes);
+                              });
+                            }
+                          } catch (e) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Failed to pick image: $e'), backgroundColor: Colors.red),
+                            );
+                          }
+                        },
+                        icon: const Icon(Icons.image_search, size: 16),
+                        label: const Text('Pick Image'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: const Color(0xFF64748B),
+                          elevation: 0,
+                          side: const BorderSide(color: Color(0xFFE2E8F0)),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        ),
+                      ),
+                      if (categoryImageBase64 != null) ...[
+                        const SizedBox(height: 4),
+                        TextButton.icon(
+                          onPressed: () {
+                            setStateDialog(() {
+                              categoryImageBase64 = null;
+                            });
+                          },
+                          icon: const Icon(Icons.delete_outline, size: 14, color: AppTheme.danger),
+                          label: const Text('Remove', style: TextStyle(fontSize: 12, color: AppTheme.danger)),
+                          style: TextButton.styleFrom(padding: EdgeInsets.zero),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final name = categoryNameController.text.trim();
+                if (name.isEmpty) return;
+                try {
+                  final newCat = await _api.createCategory({
+                    'name': name,
+                    'image_base64': categoryImageBase64,
+                  });
+                  setState(() {
+                    _localCategories.add(newCat);
+                    _selectedCategoryId = newCat.id;
+                  });
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Category "$name" created successfully!'), backgroundColor: Colors.green),
+                  );
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Failed to create category: $e'), backgroundColor: Colors.red),
+                  );
+                }
+              },
+              child: const Text('Create'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _submitForm() async {
@@ -889,30 +1039,47 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
                     ),
                     const SizedBox(height: 16),
 
-                    // Category Dropdown
+                    // Category Dropdown with "+ Add Category" button
                     _buildLabel('CATEGORY *'),
-                    Container(
-                      height: 48,
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: const Color(0xFFCBD5E1)),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<int>(
-                          value: _selectedCategoryId,
-                          hint: const Text('Select category', style: TextStyle(fontSize: 13)),
-                          isExpanded: true,
-                          items: widget.categories.map((c) {
-                            return DropdownMenuItem(value: c.id, child: Text(c.name, style: GoogleFonts.inter(fontSize: 13)));
-                          }).toList(),
-                          onChanged: (val) {
-                            setState(() {
-                              _selectedCategoryId = val;
-                            });
-                          },
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Container(
+                            height: 48,
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: const Color(0xFFCBD5E1)),
+                            ),
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<int>(
+                                value: _selectedCategoryId,
+                                hint: const Text('Select category', style: TextStyle(fontSize: 13)),
+                                isExpanded: true,
+                                items: _localCategories.map((c) {
+                                  return DropdownMenuItem(value: c.id, child: Text(c.name, style: GoogleFonts.inter(fontSize: 13)));
+                                }).toList(),
+                                onChanged: (val) {
+                                  setState(() {
+                                    _selectedCategoryId = val;
+                                  });
+                                },
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          icon: const Icon(Icons.add, color: Colors.white, size: 16),
+                          style: IconButton.styleFrom(
+                            backgroundColor: AppTheme.primary,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            padding: const EdgeInsets.all(12),
+                          ),
+                          tooltip: 'Add New Category',
+                          onPressed: () => _showAddCategoryDialog(),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 16),
 

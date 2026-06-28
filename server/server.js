@@ -157,6 +157,29 @@ app.get('/api/categories', async (req, res) => {
     }
 });
 
+// Create Product Category
+app.post('/api/categories', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin' && req.user.role !== 'owner') {
+        return res.status(403).json({ error: 'Unauthorized' });
+    }
+    const { name, image_base64 } = req.body;
+    if (!name || name.trim() === '') {
+        return res.status(400).json({ error: 'Category name is required' });
+    }
+    try {
+        const result = await db.query(
+            'INSERT INTO categories (name, image_base64, status) VALUES (?, ?, "active")',
+            [name.trim(), image_base64 || null]
+        );
+        const newId = result.insertId;
+        const [category] = await db.query('SELECT * FROM categories WHERE id = ?', [newId]);
+        broadcast({ type: 'database_synchronized' });
+        res.json(category);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 app.get('/api/products', async (req, res) => {
     const showAll = req.query.all === 'true';
     try {

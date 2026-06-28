@@ -116,6 +116,10 @@ async function initializeDatabase() {
                 await dbPool.query("ALTER TABLE dining_tables ADD COLUMN active_status VARCHAR(50) DEFAULT 'active'");
                 console.log("Migration: Added active_status to dining_tables table.");
             } catch (_) {}
+            try {
+                await dbPool.query("ALTER TABLE categories ADD COLUMN image_base64 LONGTEXT NULL");
+                console.log("Migration: Added image_base64 to categories table.");
+            } catch (_) {}
 
             // Seed base64 image placeholders for default products & users
             try {

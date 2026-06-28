@@ -51,13 +51,11 @@ class POSController extends ChangeNotifier {
   }
 
   Future<void> speakVoiceMessage(String text) async {
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      try {
-        await _tts.speak(text);
-      } catch (e) {
-        print('TTS Error: $e');
-      }
-    });
+    try {
+      await _tts.speak(text);
+    } catch (e) {
+      print('TTS Error: $e');
+    }
   }
 
   // Load and refresh POS local environment
