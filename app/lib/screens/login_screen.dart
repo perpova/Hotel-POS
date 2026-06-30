@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import '../api_service.dart';
 import '../theme.dart';
+import '../controllers/app_settings_controller.dart';
+import '../widgets/image_helper.dart';
 import 'main_layout.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -58,6 +61,15 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     final isDesktop = size.width > 800;
+    final appSettings = context.watch<AppSettingsController>();
+    final companyName = appSettings.companyName;
+    final hasLogo = appSettings.logoBase64 != null && appSettings.logoBase64!.isNotEmpty;
+    final hasFavicon = appSettings.faviconBase64 != null && appSettings.faviconBase64!.isNotEmpty;
+
+    final half = companyName.length > 4 ? companyName.length ~/ 2 : companyName.length;
+    final part1 = companyName.substring(0, half);
+    final part2 = companyName.substring(half);
+
 
     return Scaffold(
       body: Stack(
@@ -109,26 +121,68 @@ class _LoginScreenState extends State<LoginScreen> {
                           // App Logo
                           Center(
                             child: Container(
-                              padding: const EdgeInsets.all(12),
+                              width: 80,
+                              height: 80,
                               decoration: BoxDecoration(
+                                color: Colors.white,
                                 shape: BoxShape.circle,
-                                color: AppTheme.primary.withOpacity(0.1),
+                                border: Border.all(color: const Color(0xFFE2E8F0)),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.04),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
                               ),
-                              child: const Icon(
-                                Icons.restaurant_menu,
-                                size: 40,
-                                color: AppTheme.primary,
-                              ),
+                              clipBehavior: Clip.antiAlias,
+                              child: hasLogo
+                                  ? Base64ImageWidget(base64Str: appSettings.logoBase64, fit: BoxFit.cover)
+                                  : hasFavicon
+                                      ? Base64ImageWidget(base64Str: appSettings.faviconBase64, fit: BoxFit.cover)
+                                      : Container(
+                                          padding: const EdgeInsets.all(16),
+                                          decoration: BoxDecoration(
+                                            color: AppTheme.primary.withOpacity(0.1),
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: Icon(
+                                            Icons.restaurant_menu,
+                                            size: 40,
+                                            color: AppTheme.primary,
+                                          ),
+                                        ),
                             ),
                           ),
                           const SizedBox(height: 16),
                           Center(
-                            child: Text(
-                              'FoodKing POS',
-                              style: GoogleFonts.outfit(
-                                fontSize: 28,
-                                fontWeight: FontWeight.bold,
-                                color: AppTheme.textLightPrimary,
+                            child: RichText(
+                              textAlign: TextAlign.center,
+                              text: TextSpan(
+                                text: part1,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppTheme.primary,
+                                ),
+                                children: [
+                                  TextSpan(
+                                    text: part2,
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 28,
+                                      fontWeight: FontWeight.bold,
+                                      color: const Color(0xFFFFB300),
+                                    ),
+                                  ),
+                                  TextSpan(
+                                    text: ' POS',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 28,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppTheme.textLightPrimary,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),

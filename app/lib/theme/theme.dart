@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
+  static int dynamicPrimaryValue = 0xFFFF1B6B;
+
   // Brand Harmonious Palette
-  static const Color primary = Color(0xFFFF1B6B);       // Vibrant FoodKing Pink
+  static Color get primary => Color(dynamicPrimaryValue);       // Dynamic Primary Color (Defaults to FoodKing Pink)
   static const Color secondary = Color(0xFF4F46E5);     // Sleek Indigo
   static const Color accent = Color(0xFF10B981);        // Emerald Green (Success)
   static const Color warning = Color(0xFFFBBF24);       // Amber Yellow (Billing)
@@ -15,11 +17,13 @@ class AppTheme {
   static const Color textLightSecondary = Color(0xFF64748B); // Slate 500
 
   // Gradients for modern elements (glassmorphic look / widgets)
-  static const Gradient primaryGradient = LinearGradient(
-    colors: [Color(0xFFFF1B6B), Color(0xFFFF781E)],
+  static Gradient get primaryGradient => LinearGradient(
+    colors: [primary, const Color(0xFFFF781E)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
+
+
 
   static const Gradient indigoGradient = LinearGradient(
     colors: [Color(0xFF6366F1), Color(0xFF4F46E5)],
@@ -88,7 +92,7 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: primary, width: 1.5),
+          borderSide: BorderSide(color: primary, width: 1.5),
         ),
         labelStyle: GoogleFonts.inter(color: textLightSecondary, fontSize: 14),
         hintStyle: GoogleFonts.inter(color: textLightSecondary.withOpacity(0.7), fontSize: 13),

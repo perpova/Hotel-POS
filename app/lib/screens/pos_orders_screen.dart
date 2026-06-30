@@ -367,7 +367,7 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
               children: [
                 // Quick reload
                 IconButton(
-                  icon: const Icon(Icons.refresh, color: AppTheme.primary),
+                  icon: Icon(Icons.refresh, color: AppTheme.primary),
                   onPressed: _loadOrders,
                 ),
                 const SizedBox(width: 8),
@@ -467,7 +467,7 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
             color: Colors.white,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             child: _isLoadingOrders
-                ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
+                ? Center(child: CircularProgressIndicator(color: AppTheme.primary))
                 : _errorMessage.isNotEmpty
                     ? Center(
                         child: Column(
@@ -680,7 +680,7 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
                       color: const Color(0xFFFFF0F5),
                       borderRadius: BorderRadius.circular(6),
                     ),
-                    child: const Icon(Icons.visibility, color: AppTheme.primary, size: 16),
+                    child: Icon(Icons.visibility, color: AppTheme.primary, size: 16),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -766,7 +766,7 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
       icon: Icon(icon, size: 14, color: AppTheme.primary),
       label: Text(label, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primary)),
       style: OutlinedButton.styleFrom(
-        side: const BorderSide(color: AppTheme.primary),
+        side: BorderSide(color: AppTheme.primary),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       ),
@@ -792,7 +792,7 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
           color: isSelected ? const Color(0xFFFFF0F5) : Colors.transparent,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: isSelected ? AppTheme.primary : const Color(0xFFE2E8F0),
+            color: isSelected ? AppTheme.primary : Color(0xFFE2E8F0),
             width: isSelected ? 1.5 : 1,
           ),
         ),
@@ -801,7 +801,7 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
           style: GoogleFonts.inter(
             fontSize: 12,
             fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-            color: isSelected ? AppTheme.primary : const Color(0xFF64748B),
+            color: isSelected ? AppTheme.primary : Color(0xFF64748B),
           ),
         ),
       ),
@@ -867,7 +867,7 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
       selected: isSelected,
       onSelected: (_) => onSelected(val),
       selectedColor: const Color(0xFFFFF0F5),
-      labelStyle: TextStyle(color: isSelected ? AppTheme.primary : const Color(0xFF475569)),
+      labelStyle: TextStyle(color: isSelected ? AppTheme.primary : Color(0xFF475569)),
       checkmarkColor: AppTheme.primary,
     );
   }
@@ -992,7 +992,7 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
                         Text('Order Details', style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
                         const SizedBox(height: 16),
                         _isLoadingItems
-                            ? const Expanded(
+                            ? Expanded(
                                 child: Center(
                                   child: CircularProgressIndicator(color: AppTheme.primary),
                                 ),
@@ -1186,7 +1186,7 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
                                 children: [
                                   CircleAvatar(
                                     backgroundColor: AppTheme.primary.withOpacity(0.1),
-                                    child: const Icon(Icons.person, color: AppTheme.primary),
+                                    child: Icon(Icons.person, color: AppTheme.primary),
                                   ),
                                   const SizedBox(width: 12),
                                   Expanded(

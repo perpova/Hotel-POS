@@ -163,7 +163,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
                     color: const Color(0xFFFFF0F5),
                     borderRadius: BorderRadius.circular(30),
                   ),
-                  child: const Icon(Icons.lock_open, size: 30, color: AppTheme.primary),
+                  child: Icon(Icons.lock_open, size: 30, color: AppTheme.primary),
                 ),
                 const SizedBox(height: 20),
                 Center(
@@ -249,7 +249,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
                 const Divider(height: 24, color: Color(0xFFF1F5F9)),
                 _buildCashDetailRow('Today\'s Cash Sales', cashSalesVal, Icons.point_of_sale_outlined, const Color(0xFFE6F4EA), const Color(0xFF137333)),
                 const Divider(height: 24, color: Color(0xFFF1F5F9)),
-                _buildCashDetailRow('Expected Cash in Drawer', expectedTotal, Icons.wallet_outlined, const Color(0xFFFFF0F5), AppTheme.primary, isTotal: true),
+                _buildCashDetailRow('Expected Cash in Drawer', expectedTotal, Icons.wallet_outlined, Color(0xFFFFF0F5), AppTheme.primary, isTotal: true),
               ],
             ),
           ),
@@ -357,8 +357,8 @@ class _ShiftScreenState extends State<ShiftScreen> {
             const SizedBox(height: 16),
 
             if (_loadingLogs)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 40.0),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 40.0),
                 child: Center(child: CircularProgressIndicator(color: AppTheme.primary)),
               )
             else if (_drawerLogs.isEmpty)

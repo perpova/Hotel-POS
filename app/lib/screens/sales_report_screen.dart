@@ -269,10 +269,10 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                     // Filter Toggle Button
                     OutlinedButton.icon(
                       onPressed: () => setState(() => _isFilterExpanded = !_isFilterExpanded),
-                      icon: const Icon(Icons.filter_alt_outlined, size: 14, color: AppTheme.primary),
+                      icon: Icon(Icons.filter_alt_outlined, size: 14, color: AppTheme.primary),
                       label: Text('Filter', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primary)),
                       style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: AppTheme.primary),
+                        side: BorderSide(color: AppTheme.primary),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                       ),
@@ -319,14 +319,14 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                         child: Row(
                           children: [
-                            const Icon(Icons.download_outlined, size: 14, color: AppTheme.primary),
+                            Icon(Icons.download_outlined, size: 14, color: AppTheme.primary),
                             const SizedBox(width: 8),
                             Text(
                               'Export',
                               style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primary),
                             ),
                             const SizedBox(width: 4),
-                            const Icon(Icons.keyboard_arrow_down, size: 14, color: AppTheme.primary),
+                            Icon(Icons.keyboard_arrow_down, size: 14, color: AppTheme.primary),
                           ],
                         ),
                       ),
@@ -367,7 +367,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: _isLoading
-                    ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
+                    ? Center(child: CircularProgressIndicator(color: AppTheme.primary))
                     : _errorMessage.isNotEmpty
                         ? Center(child: Text(_errorMessage, style: GoogleFonts.inter(color: Colors.red)))
                         : displayList.isEmpty

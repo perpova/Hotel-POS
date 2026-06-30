@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../services/translation_service.dart';
 
 class OverviewCards extends StatelessWidget {
   final Map<String, dynamic>? summary;
@@ -25,24 +26,28 @@ class OverviewCards extends StatelessWidget {
       childAspectRatio: isDesktop ? 1.7 : 1.5,
       children: [
         _buildGradientCard(
+          context: context,
           label: 'Total Sales',
           value: '\$${sales.toStringAsFixed(2)}',
           icon: Icons.attach_money,
           colors: [const Color(0xFFE91E63), const Color(0xFFFF6090)], // Pink/Red
         ),
         _buildGradientCard(
+          context: context,
           label: 'Total Orders',
           value: orders.toString(),
           icon: Icons.inventory_2_outlined,
           colors: [const Color(0xFF7E57C2), const Color(0xFFB39DDB)], // Purple
         ),
         _buildGradientCard(
+          context: context,
           label: 'Total Customers',
           value: customers.toString(),
           icon: Icons.people_outline,
           colors: [const Color(0xFF42A5F5), const Color(0xFF90CAF9)], // Blue
         ),
         _buildGradientCard(
+          context: context,
           label: 'Total Menu Items',
           value: menuItems.toString(),
           icon: Icons.menu_book_outlined,
@@ -53,6 +58,7 @@ class OverviewCards extends StatelessWidget {
   }
 
   Widget _buildGradientCard({
+    required BuildContext context,
     required String label,
     required String value,
     required IconData icon,
@@ -84,7 +90,7 @@ class OverviewCards extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
-                  label,
+                  label.tr(context),
                   style: GoogleFonts.inter(
                     fontSize: 13,
                     color: Colors.white.withOpacity(0.9),

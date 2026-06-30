@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../pos_controller.dart';
 import '../controllers/dashboard_controller.dart';
+import '../controllers/app_settings_controller.dart';
+import '../services/translation_service.dart';
 import '../theme.dart';
 import '../api_service.dart';
 import '../widgets/image_helper.dart';
@@ -135,12 +137,89 @@ class _MainLayoutState extends State<MainLayout> {
     });
   }
 
+  /// Renders the two-tone company name with an optional favicon/icon beside it.
+  Widget _buildLogoText(String? faviconBase64, String part1, String part2) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Icon: custom favicon image or default restaurant icon
+        if (faviconBase64 != null && faviconBase64.isNotEmpty)
+          Container(
+            width: 34, height: 34,
+            margin: const EdgeInsets.only(right: 8),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Base64ImageWidget(base64Str: faviconBase64, fit: BoxFit.cover),
+          )
+        else
+          Container(
+            padding: const EdgeInsets.all(6),
+            margin: const EdgeInsets.only(right: 8),
+            decoration: BoxDecoration(
+              color: AppTheme.primary.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(Icons.restaurant_menu, color: AppTheme.primary, size: 22),
+          ),
+        // Two-tone name text
+        Flexible(
+          child: RichText(
+            overflow: TextOverflow.ellipsis,
+            text: TextSpan(
+              text: part1,
+              style: GoogleFonts.outfit(
+                fontSize: 22, fontWeight: FontWeight.bold, color: AppTheme.primary),
+              children: [
+                TextSpan(
+                  text: part2,
+                  style: GoogleFonts.outfit(
+                    fontSize: 22, fontWeight: FontWeight.bold, color: const Color(0xFFFFB300)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     final isDesktop = size.width > 950;
     final posController = Provider.of<POSController>(context);
     final dashController = Provider.of<DashboardController>(context);
+    final appSettings = context.watch<AppSettingsController>();
+
+    final branchNames = appSettings.branches.map((b) => b.name).toList();
+    if (branchNames.isEmpty) {
+      branchNames.add('Main Branch');
+    }
+    final isAdmin = APIService.instance.currentUser?.role == 'admin';
+
+    // Ensure selected branch is valid
+    String currentSelectedBranch = dashController.selectedBranch;
+    if (!branchNames.contains(currentSelectedBranch)) {
+      currentSelectedBranch = branchNames.first;
+      // Safely update DashboardController after build frame
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        dashController.setBranch(branchNames.first);
+      });
+    }
+
+    // Ensure selected language is valid (English or Sinhala only)
+    String currentSelectedLanguage = dashController.selectedLanguage;
+    if (currentSelectedLanguage != 'English' && currentSelectedLanguage != 'Sinhala') {
+      currentSelectedLanguage = 'English';
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        dashController.setLanguage('English');
+      });
+    }
+
+
 
     // Sidebar items structure categorized like FoodKing
     final categories = [
@@ -204,48 +283,99 @@ class _MainLayoutState extends State<MainLayout> {
     ];
 
     Widget buildSidebarContent() {
+      final appSettings = context.watch<AppSettingsController>();
+      final companyName = appSettings.companyName;
+      // Split into first-half / second-half for two-tone styling
+      final half = companyName.length > 4 ? companyName.length ~/ 2 : companyName.length;
+      final part1 = companyName.substring(0, half);
+      final part2 = companyName.substring(half);
+
       return Container(
         color: Colors.white,
         child: Column(
           children: [
-            // Logo area styled exactly like FoodKing
+            // Logo area - beautifully combines logo image / favicon and company name
             Container(
-              padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+              padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
               alignment: Alignment.centerLeft,
               child: Row(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: AppTheme.primary.withOpacity(0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.restaurant_menu, color: AppTheme.primary, size: 24),
-                  ),
-                  const SizedBox(width: 8),
-                  RichText(
-                    text: TextSpan(
-                      text: 'Food',
-                      style: GoogleFonts.outfit(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.primary,
-                      ),
-                      children: [
-                        TextSpan(
-                          text: 'King',
-                          style: GoogleFonts.outfit(
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                            color: const Color(0xFFFFB300), // Amber yellow
+                  // Logo / Icon
+                  if (appSettings.logoBase64 != null && appSettings.logoBase64!.isNotEmpty)
+                    Container(
+                      width: 42,
+                      height: 42,
+                      margin: const EdgeInsets.only(right: 12),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.04),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
                           ),
+                        ],
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: Base64ImageWidget(
+                        base64Str: appSettings.logoBase64,
+                        fit: BoxFit.cover,
+                      ),
+                    )
+                  else if (appSettings.faviconBase64 != null && appSettings.faviconBase64!.isNotEmpty)
+                    Container(
+                      width: 36,
+                      height: 36,
+                      margin: const EdgeInsets.only(right: 12),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: Base64ImageWidget(
+                        base64Str: appSettings.faviconBase64,
+                        fit: BoxFit.cover,
+                      ),
+                    )
+                  else
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      margin: const EdgeInsets.only(right: 12),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primary.withOpacity(0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(Icons.restaurant_menu, color: AppTheme.primary, size: 20),
+                    ),
+                  // Company Name Text
+                  Expanded(
+                    child: RichText(
+                      overflow: TextOverflow.ellipsis,
+                      text: TextSpan(
+                        text: part1,
+                        style: GoogleFonts.outfit(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.primary,
                         ),
-                      ],
+                        children: [
+                          TextSpan(
+                            text: part2,
+                            style: GoogleFonts.outfit(
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                              color: const Color(0xFFFFB300), // Amber yellow
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
+
             const Divider(height: 1, color: Color(0xFFF1F5F9)),
             const SizedBox(height: 16),
 
@@ -263,7 +393,7 @@ class _MainLayoutState extends State<MainLayout> {
                         Padding(
                           padding: const EdgeInsets.only(left: 12, top: 8, bottom: 4),
                           child: Text(
-                            cat.title!,
+                            cat.title!.tr(context),
                             style: GoogleFonts.inter(
                               fontSize: 10,
                               fontWeight: FontWeight.bold,
@@ -284,15 +414,15 @@ class _MainLayoutState extends State<MainLayout> {
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                             leading: Icon(
                               item.icon,
-                              color: isSelected ? AppTheme.primary : const Color(0xFF7A869A),
+                              color: isSelected ? AppTheme.primary : Color(0xFF7A869A),
                               size: 18,
                             ),
                             title: Text(
-                              item.title,
+                              item.title.tr(context),
                               style: GoogleFonts.inter(
                                 fontSize: 13,
                                 fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                                color: isSelected ? AppTheme.primary : const Color(0xFF7A869A),
+                                color: isSelected ? AppTheme.primary : Color(0xFF7A869A),
                               ),
                             ),
                             onTap: () {
@@ -340,7 +470,7 @@ class _MainLayoutState extends State<MainLayout> {
                               )
                             : Text(
                                 (APIService.instance.currentUser?.name ?? 'C')[0].toUpperCase(),
-                                style: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 13),
+                                style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 13),
                               ),
                       ),
                       const SizedBox(width: 12),
@@ -382,7 +512,7 @@ class _MainLayoutState extends State<MainLayout> {
                       }
                     },
                     icon: const Icon(Icons.logout, size: 14),
-                    label: const Text('Logout'),
+                    label: Text('Logout'.tr(context)),
                     style: TextButton.styleFrom(
                       foregroundColor: AppTheme.danger,
                       minimumSize: const Size.fromHeight(36),
@@ -431,45 +561,47 @@ class _MainLayoutState extends State<MainLayout> {
                       ],
 
                       if (isDesktop && _isSidebarCollapsed) ...[
-                        // Logo area styled exactly like FoodKing
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(6),
-                              decoration: BoxDecoration(
-                                color: AppTheme.primary.withOpacity(0.1),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(Icons.restaurant_menu, color: AppTheme.primary, size: 20),
-                            ),
-                            const SizedBox(width: 8),
-                            RichText(
-                              text: TextSpan(
-                                text: 'Food',
-                                style: GoogleFonts.outfit(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppTheme.primary,
+                        // Collapsed sidebar: show logo/icon + company name
+                        Consumer<AppSettingsController>(builder: (_, appS, __) {
+                          final cn = appS.companyName;
+                          final h = cn.length > 4 ? cn.length ~/ 2 : cn.length;
+                          return Row(children: [
+                            if (appS.faviconBase64 != null && appS.faviconBase64!.isNotEmpty)
+                              Container(
+                                width: 28, height: 28,
+                                margin: const EdgeInsets.only(right: 8),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(color: const Color(0xFFE2E8F0)),
                                 ),
-                                children: [
-                                  TextSpan(
-                                    text: 'King',
-                                    style: GoogleFonts.outfit(
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.bold,
-                                      color: const Color(0xFFFFB300), // Amber yellow
-                                    ),
-                                  ),
-                                ],
+                                clipBehavior: Clip.antiAlias,
+                                child: Base64ImageWidget(base64Str: appS.faviconBase64, fit: BoxFit.cover),
+                              )
+                            else
+                              Container(
+                                padding: const EdgeInsets.all(5),
+                                margin: const EdgeInsets.only(right: 8),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.primary.withOpacity(0.1),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(Icons.restaurant_menu, color: AppTheme.primary, size: 18),
                               ),
-                            ),
-                          ],
-                        ),
+                            RichText(text: TextSpan(
+                              text: cn.substring(0, h),
+                              style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.bold, color: AppTheme.primary),
+                              children: [TextSpan(
+                                text: cn.substring(h),
+                                style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.bold, color: const Color(0xFFFFB300)),
+                              )],
+                            )),
+                          ]);
+                        }),
                         const SizedBox(width: 24),
                       ],
 
                       Text(
-                        _titles[_selectedIndex],
+                        _titles[_selectedIndex].tr(context),
                         style: GoogleFonts.outfit(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
@@ -569,30 +701,38 @@ class _MainLayoutState extends State<MainLayout> {
                       if (isDesktop) ...[
                         Row(
                           children: [
-                            const Icon(Icons.storefront_outlined, color: AppTheme.primary, size: 18),
+                            Icon(Icons.storefront_outlined, color: AppTheme.primary, size: 18),
                             const SizedBox(width: 6),
-                            DropdownButton<String>(
-                              value: dashController.selectedBranch,
-                              icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF64748B), size: 18),
-                              underline: const SizedBox(),
-                              style: GoogleFonts.inter(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: const Color(0xFF1E293B),
-                              ),
-                              items: <String>['Mirpur-1 (Main)', 'Mirpur-2', 'Dhanmondi']
-                                  .map<DropdownMenuItem<String>>((String value) {
-                                return DropdownMenuItem<String>(
-                                  value: value,
-                                  child: Text(value),
-                                );
-                              }).toList(),
-                              onChanged: (String? newValue) {
-                                if (newValue != null) {
-                                  dashController.setBranch(newValue);
-                                }
-                              },
-                            ),
+                            isAdmin
+                                ? DropdownButton<String>(
+                                    value: currentSelectedBranch,
+                                    icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF64748B), size: 18),
+                                    underline: const SizedBox(),
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: const Color(0xFF1E293B),
+                                    ),
+                                    items: branchNames.map<DropdownMenuItem<String>>((String value) {
+                                      return DropdownMenuItem<String>(
+                                        value: value,
+                                        child: Text(value),
+                                      );
+                                    }).toList(),
+                                    onChanged: (String? newValue) {
+                                      if (newValue != null) {
+                                        dashController.setBranch(newValue);
+                                      }
+                                    },
+                                  )
+                                : Text(
+                                    currentSelectedBranch,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: const Color(0xFF1E293B),
+                                    ),
+                                  ),
                           ],
                         ),
                         const SizedBox(width: 16),
@@ -605,7 +745,7 @@ class _MainLayoutState extends State<MainLayout> {
                             const Icon(Icons.language_outlined, color: Colors.blue, size: 18),
                             const SizedBox(width: 6),
                             DropdownButton<String>(
-                              value: dashController.selectedLanguage,
+                              value: currentSelectedLanguage,
                               icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF64748B), size: 18),
                               underline: const SizedBox(),
                               style: GoogleFonts.inter(
@@ -613,7 +753,7 @@ class _MainLayoutState extends State<MainLayout> {
                                 fontWeight: FontWeight.bold,
                                 color: const Color(0xFF1E293B),
                               ),
-                              items: <String>['English', 'Sinhala', 'Spanish']
+                              items: <String>['English', 'Sinhala']
                                   .map<DropdownMenuItem<String>>((String value) {
                                 return DropdownMenuItem<String>(
                                   value: value,
@@ -694,7 +834,7 @@ class _MainLayoutState extends State<MainLayout> {
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
                                     Text(
-                                      'Hello',
+                                      'Hello'.tr(context),
                                       style: GoogleFonts.inter(
                                         fontSize: 9,
                                         color: const Color(0xFF94A3B8),
@@ -840,7 +980,7 @@ class _MainLayoutState extends State<MainLayout> {
                       if (posController.isLoading)
                         Container(
                           color: Colors.black.withOpacity(0.15),
-                          child: const Center(
+                          child: Center(
                             child: CircularProgressIndicator(color: AppTheme.primary),
                           ),
                         ),

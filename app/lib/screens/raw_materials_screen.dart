@@ -274,10 +274,10 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
                     // Filter Toggle Button
                     OutlinedButton.icon(
                       onPressed: () => setState(() => _isFilterExpanded = !_isFilterExpanded),
-                      icon: const Icon(Icons.filter_alt_outlined, size: 14, color: AppTheme.primary),
+                      icon: Icon(Icons.filter_alt_outlined, size: 14, color: AppTheme.primary),
                       label: Text('Filter', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primary)),
                       style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: AppTheme.primary),
+                        side: BorderSide(color: AppTheme.primary),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                       ),
@@ -324,14 +324,14 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                         child: Row(
                           children: [
-                            const Icon(Icons.download_outlined, size: 14, color: AppTheme.primary),
+                            Icon(Icons.download_outlined, size: 14, color: AppTheme.primary),
                             const SizedBox(width: 8),
                             Text(
                               'Export',
                               style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primary),
                             ),
                             const SizedBox(width: 4),
-                            const Icon(Icons.keyboard_arrow_down, size: 14, color: AppTheme.primary),
+                            Icon(Icons.keyboard_arrow_down, size: 14, color: AppTheme.primary),
                           ],
                         ),
                       ),
@@ -354,7 +354,7 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
 
             Expanded(
               child: _loading
-                  ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
+                  ? Center(child: CircularProgressIndicator(color: AppTheme.primary))
                   : isDesktop
                       ? Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -748,7 +748,7 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
           children: [
             Row(
               children: [
-                const Icon(Icons.add_circle_outline, color: AppTheme.primary),
+                Icon(Icons.add_circle_outline, color: AppTheme.primary),
                 const SizedBox(width: 8),
                 Text('Add New Raw Ingredient', style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
               ],

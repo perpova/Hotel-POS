@@ -109,6 +109,30 @@ async function initializeDatabase() {
                 console.log("Migration: Added caution to products table.");
             } catch (_) {}
             try {
+                await dbPool.query("ALTER TABLE products ADD COLUMN has_sizes BOOLEAN DEFAULT FALSE");
+                console.log("Migration: Added has_sizes to products table.");
+            } catch (_) {}
+            try {
+                await dbPool.query("ALTER TABLE products ADD COLUMN has_extras BOOLEAN DEFAULT FALSE");
+                console.log("Migration: Added has_extras to products table.");
+            } catch (_) {}
+            try {
+                await dbPool.query("ALTER TABLE products ADD COLUMN has_addons BOOLEAN DEFAULT FALSE");
+                console.log("Migration: Added has_addons to products table.");
+            } catch (_) {}
+            try {
+                await dbPool.query("ALTER TABLE products ADD COLUMN sizes TEXT NULL");
+                console.log("Migration: Added sizes to products table.");
+            } catch (_) {}
+            try {
+                await dbPool.query("ALTER TABLE products ADD COLUMN extras TEXT NULL");
+                console.log("Migration: Added extras to products table.");
+            } catch (_) {}
+            try {
+                await dbPool.query("ALTER TABLE products ADD COLUMN addons TEXT NULL");
+                console.log("Migration: Added addons to products table.");
+            } catch (_) {}
+            try {
                 await dbPool.query("ALTER TABLE customers ADD COLUMN image_base64 LONGTEXT NULL");
                 console.log("Migration: Added image_base64 to customers table.");
             } catch (_) {}

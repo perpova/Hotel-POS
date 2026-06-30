@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import '../../services/translation_service.dart';
 
 class OrderStatistics extends StatelessWidget {
   final List<dynamic>? statuses;
@@ -54,7 +55,7 @@ class OrderStatistics extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              'Order Statistics',
+              'Order Statistics'.tr(context),
               style: GoogleFonts.outfit(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -155,7 +156,7 @@ class OrderStatistics extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          item.title,
+                          item.title.tr(context),
                           overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.inter(
                             fontSize: 12,

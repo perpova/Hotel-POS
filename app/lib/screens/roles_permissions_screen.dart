@@ -325,7 +325,7 @@ class _RolesPermissionsContentState extends State<RolesPermissionsContent> {
               style: GoogleFonts.outfit(fontSize: widget.showHeader ? 20 : 15, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
               children: [
                 const TextSpan(text: 'Role & Permissions '),
-                TextSpan(text: '(${_selectedRole!['name']})', style: const TextStyle(color: AppTheme.primary)),
+                TextSpan(text: '(${_selectedRole!['name']})', style: TextStyle(color: AppTheme.primary)),
               ],
             ),
           ),

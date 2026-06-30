@@ -62,7 +62,7 @@ class _KDSScreenState extends State<KDSScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFF0F172A), // Dark mode background for high readability in hot kitchens
       body: _loadingItems
-          ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
+          ? Center(child: CircularProgressIndicator(color: AppTheme.primary))
           : kdsOrders.isEmpty
               ? Center(
                   child: Column(

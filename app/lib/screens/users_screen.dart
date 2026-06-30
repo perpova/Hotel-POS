@@ -665,9 +665,9 @@ class _UsersScreenState extends State<UsersScreen> {
 
   // Add Address Dialog using Google Static Map location finder
   void _showAddAddressDialog() {
-    final searchController = TextEditingController(text: '366, Mirpur 2');
+    final searchController = TextEditingController(text: 'Matara, Sri Lanka');
     final detailController = TextEditingController();
-    String searchLocation = '366, Mirpur 2';
+    String searchLocation = 'Matara, Sri Lanka';
     String labelValue = 'Home';
     bool isSavingAddress = false;
     final formKey = GlobalKey<FormState>();
@@ -711,7 +711,7 @@ class _UsersScreenState extends State<UsersScreen> {
                             controller: searchController,
                             decoration: const InputDecoration(
                               labelText: 'Enter a location',
-                              hintText: 'e.g. 366, Mirpur 2',
+                              hintText: 'e.g. Matara, Sri Lanka',
                               prefixIcon: Icon(Icons.search),
                             ),
                           ),
@@ -756,7 +756,7 @@ class _UsersScreenState extends State<UsersScreen> {
                       validator: (val) => val == null || val.isEmpty ? 'Address is required' : null,
                       decoration: const InputDecoration(
                         labelText: 'APARTMENT / STREET ADDRESS *',
-                        hintText: 'e.g. Apartment 4B, 366 Mirpur 2',
+                        hintText: 'e.g. Apartment 4B, Matara, Sri Lanka',
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -957,7 +957,7 @@ class _UsersScreenState extends State<UsersScreen> {
                             ),
                             Row(
                               children: [
-                                IconButton(icon: const Icon(Icons.refresh, color: AppTheme.primary), onPressed: _loadData),
+                                IconButton(icon: Icon(Icons.refresh, color: AppTheme.primary), onPressed: _loadData),
                                 const SizedBox(width: 8),
                                 _buildOutlineButton(
                                   icon: Icons.filter_alt_outlined,
@@ -1005,14 +1005,14 @@ class _UsersScreenState extends State<UsersScreen> {
                                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                                     child: Row(
                                       children: [
-                                        const Icon(Icons.download_outlined, size: 14, color: AppTheme.primary),
+                                        Icon(Icons.download_outlined, size: 14, color: AppTheme.primary),
                                         const SizedBox(width: 8),
                                         Text(
                                           'Export',
                                           style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primary),
                                         ),
                                         const SizedBox(width: 4),
-                                        const Icon(Icons.keyboard_arrow_down, size: 14, color: AppTheme.primary),
+                                        Icon(Icons.keyboard_arrow_down, size: 14, color: AppTheme.primary),
                                       ],
                                     ),
                                   ),
@@ -1087,7 +1087,7 @@ class _UsersScreenState extends State<UsersScreen> {
                             color: Colors.white,
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                             child: _isLoading
-                                ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
+                                ? Center(child: CircularProgressIndicator(color: AppTheme.primary))
                                 : _errorMessage.isNotEmpty
                                     ? Center(child: Text(_errorMessage, style: GoogleFonts.inter(color: Colors.red)))
                                     : filtered.isEmpty
@@ -1244,7 +1244,7 @@ class _UsersScreenState extends State<UsersScreen> {
       icon: Icon(icon, size: 14, color: AppTheme.primary),
       label: Text(label, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primary)),
       style: OutlinedButton.styleFrom(
-        side: const BorderSide(color: AppTheme.primary),
+        side: BorderSide(color: AppTheme.primary),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       ),
@@ -1384,7 +1384,7 @@ class _UsersScreenState extends State<UsersScreen> {
                               width: 36,
                               height: 36,
                               decoration: BoxDecoration(color: const Color(0xFFFFF0F5), borderRadius: BorderRadius.circular(18)),
-                              child: const Icon(Icons.person_outline, color: AppTheme.primary, size: 18),
+                              child: Icon(Icons.person_outline, color: AppTheme.primary, size: 18),
                             ),
                           const SizedBox(width: 12),
                           Expanded(
@@ -1433,7 +1433,7 @@ class _UsersScreenState extends State<UsersScreen> {
                             child: Container(
                               padding: const EdgeInsets.all(6),
                               decoration: BoxDecoration(color: const Color(0xFFFFF0F5), borderRadius: BorderRadius.circular(6)),
-                              child: const Icon(Icons.visibility_outlined, color: AppTheme.primary, size: 14),
+                              child: Icon(Icons.visibility_outlined, color: AppTheme.primary, size: 14),
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -1453,7 +1453,7 @@ class _UsersScreenState extends State<UsersScreen> {
                             child: Container(
                               padding: const EdgeInsets.all(6),
                               decoration: BoxDecoration(color: const Color(0xFFFFF0F5), borderRadius: BorderRadius.circular(6)),
-                              child: const Icon(Icons.edit, color: AppTheme.primary, size: 14),
+                              child: Icon(Icons.edit, color: AppTheme.primary, size: 14),
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -1544,7 +1544,7 @@ class _UsersScreenState extends State<UsersScreen> {
                 icon: const Icon(Icons.arrow_back, size: 14),
                 label: const Text('Back to List'),
                 style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: AppTheme.primary),
+                  side: BorderSide(color: AppTheme.primary),
                   foregroundColor: AppTheme.primary,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
@@ -1578,7 +1578,7 @@ class _UsersScreenState extends State<UsersScreen> {
                       width: 80,
                       height: 80,
                       decoration: BoxDecoration(color: const Color(0xFFFFF0F5), borderRadius: BorderRadius.circular(40)),
-                      child: const Icon(Icons.person, color: AppTheme.primary, size: 40),
+                      child: Icon(Icons.person, color: AppTheme.primary, size: 40),
                     ),
                   const SizedBox(width: 24),
                   
@@ -1879,7 +1879,7 @@ class _UsersScreenState extends State<UsersScreen> {
         const SizedBox(height: 20),
 
         if (_loadingAddresses)
-          const Center(child: CircularProgressIndicator(color: AppTheme.primary))
+          Center(child: CircularProgressIndicator(color: AppTheme.primary))
         else if (_addresses.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 40.0),
@@ -1965,7 +1965,7 @@ class _UsersScreenState extends State<UsersScreen> {
         const SizedBox(height: 20),
 
         if (_loadingOrders)
-          const Center(child: CircularProgressIndicator(color: AppTheme.primary))
+          Center(child: CircularProgressIndicator(color: AppTheme.primary))
         else if (_userOrders.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 40.0),

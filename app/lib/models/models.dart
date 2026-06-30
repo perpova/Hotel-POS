@@ -83,6 +83,51 @@ class CategoryModel {
   };
 }
 
+class ProductSize {
+  final String name;
+  final double price;
+
+  ProductSize({required this.name, required this.price});
+
+  factory ProductSize.fromJson(Map<String, dynamic> json) => ProductSize(
+    name: json['name'] ?? '',
+    price: _toDouble(json['price']),
+  );
+
+  Map<String, dynamic> toJson() => {
+    'name': name,
+    'price': price,
+  };
+}
+
+class ProductExtra {
+  final String name;
+  final double price;
+  final int? ingredientId;
+  final double? qty;
+
+  ProductExtra({
+    required this.name,
+    required this.price,
+    this.ingredientId,
+    this.qty,
+  });
+
+  factory ProductExtra.fromJson(Map<String, dynamic> json) => ProductExtra(
+    name: json['name'] ?? '',
+    price: _toDouble(json['price']),
+    ingredientId: json['ingredient_id'] != null ? int.tryParse(json['ingredient_id'].toString()) : null,
+    qty: json['qty'] != null ? _toDouble(json['qty']) : null,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'name': name,
+    'price': price,
+    'ingredient_id': ingredientId,
+    'qty': qty,
+  };
+}
+
 // Product Model
 class ProductModel {
   final int id;
@@ -104,6 +149,12 @@ class ProductModel {
   final double tax;
   final bool isFeatured;
   final String? caution;
+  final bool hasSizes;
+  final bool hasExtras;
+  final bool hasAddons;
+  final List<ProductSize> sizes;
+  final List<ProductExtra> extras;
+  final List<int> addons;
 
   ProductModel({
     required this.id,
@@ -125,29 +176,79 @@ class ProductModel {
     this.tax = 0.00,
     this.isFeatured = false,
     this.caution,
+    this.hasSizes = false,
+    this.hasExtras = false,
+    this.hasAddons = false,
+    this.sizes = const [],
+    this.extras = const [],
+    this.addons = const [],
   });
 
-  factory ProductModel.fromJson(Map<String, dynamic> json) => ProductModel(
-    id: json['id'],
-    name: json['name'],
-    sinhalaName: json['sinhala_name'],
-    description: json['description'],
-    categoryId: json['category_id'],
-    price: _toDouble(json['price']),
-    cost: _toDouble(json['cost']),
-    activePrice: _toDouble(json['active_price'] ?? json['price']),
-    isHappyHour: json['is_happy_hour'] == true || json['is_happy_hour'] == 1,
-    barcode: json['barcode'],
-    stockQty: json['stock_qty'] ?? 0,
-    minStockLevel: json['min_stock_level'] ?? 10,
-    isShortEat: json['is_short_eat'] == true || json['is_short_eat'] == 1,
-    imageBase64: json['image_base64'],
-    status: json['status'] ?? 'active',
-    itemType: json['item_type'] ?? 'Veg',
-    tax: _toDouble(json['tax']),
-    isFeatured: json['is_featured'] == true || json['is_featured'] == 1,
-    caution: json['caution'],
-  );
+  factory ProductModel.fromJson(Map<String, dynamic> json) {
+    List<ProductSize> sizesList = [];
+    if (json['sizes'] != null) {
+      if (json['sizes'] is String) {
+        try {
+          final decoded = jsonDecode(json['sizes']) as List;
+          sizesList = decoded.map((x) => ProductSize.fromJson(x)).toList();
+        } catch (_) {}
+      } else if (json['sizes'] is List) {
+        sizesList = (json['sizes'] as List).map((x) => ProductSize.fromJson(x)).toList();
+      }
+    }
+
+    List<ProductExtra> extrasList = [];
+    if (json['extras'] != null) {
+      if (json['extras'] is String) {
+        try {
+          final decoded = jsonDecode(json['extras']) as List;
+          extrasList = decoded.map((x) => ProductExtra.fromJson(x)).toList();
+        } catch (_) {}
+      } else if (json['extras'] is List) {
+        extrasList = (json['extras'] as List).map((x) => ProductExtra.fromJson(x)).toList();
+      }
+    }
+
+    List<int> addonsList = [];
+    if (json['addons'] != null) {
+      if (json['addons'] is String) {
+        try {
+          final decoded = jsonDecode(json['addons']) as List;
+          addonsList = decoded.map((x) => int.parse(x.toString())).toList();
+        } catch (_) {}
+      } else if (json['addons'] is List) {
+        addonsList = (json['addons'] as List).map((x) => int.parse(x.toString())).toList();
+      }
+    }
+
+    return ProductModel(
+      id: json['id'],
+      name: json['name'],
+      sinhalaName: json['sinhala_name'],
+      description: json['description'],
+      categoryId: json['category_id'],
+      price: _toDouble(json['price']),
+      cost: _toDouble(json['cost']),
+      activePrice: _toDouble(json['active_price'] ?? json['price']),
+      isHappyHour: json['is_happy_hour'] == true || json['is_happy_hour'] == 1,
+      barcode: json['barcode'],
+      stockQty: json['stock_qty'] ?? 0,
+      minStockLevel: json['min_stock_level'] ?? 10,
+      isShortEat: json['is_short_eat'] == true || json['is_short_eat'] == 1,
+      imageBase64: json['image_base64'],
+      status: json['status'] ?? 'active',
+      itemType: json['item_type'] ?? 'Veg',
+      tax: _toDouble(json['tax']),
+      isFeatured: json['is_featured'] == true || json['is_featured'] == 1,
+      caution: json['caution'],
+      hasSizes: json['has_sizes'] == true || json['has_sizes'] == 1,
+      hasExtras: json['has_extras'] == true || json['has_extras'] == 1,
+      hasAddons: json['has_addons'] == true || json['has_addons'] == 1,
+      sizes: sizesList,
+      extras: extrasList,
+      addons: addonsList,
+    );
+  }
 
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -169,6 +270,12 @@ class ProductModel {
     'tax': tax,
     'is_featured': isFeatured,
     'caution': caution,
+    'has_sizes': hasSizes,
+    'has_extras': hasExtras,
+    'has_addons': hasAddons,
+    'sizes': sizes.map((x) => x.toJson()).toList(),
+    'extras': extras.map((x) => x.toJson()).toList(),
+    'addons': addons,
   };
 }
 
@@ -313,6 +420,7 @@ class OrderItemModel {
   final String? notes;
   final String status; // 'pending', 'preparing', 'completed'
   final bool isShortEat;
+  final List<ProductExtra> extras;
 
   OrderItemModel({
     this.id,
@@ -325,20 +433,36 @@ class OrderItemModel {
     this.notes,
     this.status = 'pending',
     this.isShortEat = false,
+    this.extras = const [],
   });
 
-  factory OrderItemModel.fromJson(Map<String, dynamic> json) => OrderItemModel(
-    id: json['id'],
-    orderId: json['order_id'],
-    productId: json['product_id'],
-    productName: json['product_name'] ?? 'Product',
-    productSinhalaName: json['product_sinhala_name'],
-    quantity: json['quantity'],
-    price: _toDouble(json['price']),
-    notes: json['notes'],
-    status: json['status'] ?? 'pending',
-    isShortEat: json['is_short_eat'] == true || json['is_short_eat'] == 1,
-  );
+  factory OrderItemModel.fromJson(Map<String, dynamic> json) {
+    List<ProductExtra> extrasList = [];
+    if (json['extras'] != null) {
+      if (json['extras'] is String) {
+        try {
+          final decoded = jsonDecode(json['extras']) as List;
+          extrasList = decoded.map((x) => ProductExtra.fromJson(x)).toList();
+        } catch (_) {}
+      } else if (json['extras'] is List) {
+        extrasList = (json['extras'] as List).map((x) => ProductExtra.fromJson(x)).toList();
+      }
+    }
+
+    return OrderItemModel(
+      id: json['id'],
+      orderId: json['order_id'],
+      productId: json['product_id'],
+      productName: json['product_name'] ?? 'Product',
+      productSinhalaName: json['product_sinhala_name'],
+      quantity: json['quantity'],
+      price: _toDouble(json['price']),
+      notes: json['notes'],
+      status: json['status'] ?? 'pending',
+      isShortEat: json['is_short_eat'] == true || json['is_short_eat'] == 1,
+      extras: extrasList,
+    );
+  }
 
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -351,6 +475,7 @@ class OrderItemModel {
     'notes': notes,
     'status': status,
     'is_short_eat': isShortEat ? 1 : 0,
+    'extras': extras.map((e) => e.toJson()).toList(),
   };
 }
 

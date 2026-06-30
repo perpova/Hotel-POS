@@ -230,7 +230,13 @@ app.get('/api/products', async (req, res) => {
                 item_type: p.item_type || 'Veg',
                 tax: p.tax !== null ? Number(p.tax) : 0.00,
                 is_featured: !!p.is_featured,
-                caution: p.caution
+                caution: p.caution,
+                has_sizes: !!p.has_sizes,
+                has_extras: !!p.has_extras,
+                has_addons: !!p.has_addons,
+                sizes: p.sizes ? JSON.parse(p.sizes) : [],
+                extras: p.extras ? JSON.parse(p.extras) : [],
+                addons: p.addons ? JSON.parse(p.addons) : []
             };
         });
         
@@ -382,7 +388,9 @@ app.post('/api/products', authenticateToken, async (req, res) => {
     const {
         name, sinhala_name, description, category_id, price, cost, barcode,
         stock_qty, min_stock_level, is_short_eat, status, image_base64,
-        item_type, tax, is_featured, caution
+        item_type, tax, is_featured, caution,
+        has_sizes, has_extras, has_addons,
+        sizes, extras, addons
     } = req.body;
     
     try {
@@ -390,12 +398,18 @@ app.post('/api/products', authenticateToken, async (req, res) => {
             INSERT INTO products (
                 name, sinhala_name, description, category_id, price, cost, barcode,
                 stock_qty, min_stock_level, is_short_eat, status, image_base64,
-                item_type, tax, is_featured, caution
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                item_type, tax, is_featured, caution,
+                has_sizes, has_extras, has_addons,
+                sizes, extras, addons
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [
             name, sinhala_name || null, description || null, category_id, price, cost || 0.00, barcode || null,
             stock_qty || 0, min_stock_level || 10, is_short_eat ? 1 : 0, status || 'active', image_base64 || null,
-            item_type || 'Veg', tax || 0.00, is_featured ? 1 : 0, caution || null
+            item_type || 'Veg', tax || 0.00, is_featured ? 1 : 0, caution || null,
+            has_sizes ? 1 : 0, has_extras ? 1 : 0, has_addons ? 1 : 0,
+            sizes ? JSON.stringify(sizes) : null,
+            extras ? JSON.stringify(extras) : null,
+            addons ? JSON.stringify(addons) : null
         ]);
         
         const newId = result.insertId;
@@ -419,7 +433,9 @@ app.put('/api/products/:id', authenticateToken, async (req, res) => {
     const {
         name, sinhala_name, description, category_id, price, cost, barcode,
         stock_qty, min_stock_level, is_short_eat, status, image_base64,
-        item_type, tax, is_featured, caution
+        item_type, tax, is_featured, caution,
+        has_sizes, has_extras, has_addons,
+        sizes, extras, addons
     } = req.body;
     
     try {
@@ -427,12 +443,18 @@ app.put('/api/products/:id', authenticateToken, async (req, res) => {
             UPDATE products SET
                 name = ?, sinhala_name = ?, description = ?, category_id = ?, price = ?, cost = ?, barcode = ?,
                 stock_qty = ?, min_stock_level = ?, is_short_eat = ?, status = ?, image_base64 = ?,
-                item_type = ?, tax = ?, is_featured = ?, caution = ?
+                item_type = ?, tax = ?, is_featured = ?, caution = ?,
+                has_sizes = ?, has_extras = ?, has_addons = ?,
+                sizes = ?, extras = ?, addons = ?
             WHERE id = ?
         `, [
             name, sinhala_name || null, description || null, category_id, price, cost || 0.00, barcode || null,
             stock_qty || 0, min_stock_level || 10, is_short_eat ? 1 : 0, status || 'active', image_base64 || null,
             item_type || 'Veg', tax || 0.00, is_featured ? 1 : 0, caution || null,
+            has_sizes ? 1 : 0, has_extras ? 1 : 0, has_addons ? 1 : 0,
+            sizes ? JSON.stringify(sizes) : null,
+            extras ? JSON.stringify(extras) : null,
+            addons ? JSON.stringify(addons) : null,
             id
         ]);
         
@@ -1407,6 +1429,22 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
                 'INSERT INTO stock_logs (product_id, change_qty, type, reason, user_id) VALUES (?, ?, "sale", ?, ?)',
                 [item.product_id, -item.quantity, `Sale Order: ${orderNumber}`, req.user.id]
             );
+
+            // Extra Stock Reduction (Countable raw materials like Egg, Chicken, Cheese, etc.)
+            if (item.extras && Array.isArray(item.extras)) {
+                for (const extra of item.extras) {
+                    if (extra.ingredient_id && extra.qty) {
+                        const totalDeduct = extra.qty * item.quantity;
+                        // Deduct raw ingredient stock
+                        await conn.query('UPDATE ingredients SET stock_qty = stock_qty - ? WHERE id = ?', [totalDeduct, extra.ingredient_id]);
+                        // Insert raw ingredient stock log
+                        await conn.query(`
+                            INSERT INTO ingredient_stock_logs (ingredient_id, change_qty, type, reason, user_id)
+                            VALUES (?, ?, 'sale', ?, ?)
+                        `, [extra.ingredient_id, -totalDeduct, `Extra '${extra.name}' in Order: ${orderNumber}`, req.user.id]);
+                    }
+                }
+            }
         }
         
         // Update Table Status if Dine-in

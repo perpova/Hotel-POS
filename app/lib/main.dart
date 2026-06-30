@@ -4,21 +4,27 @@ import 'theme.dart';
 import 'api_service.dart';
 import 'pos_controller.dart';
 import 'controllers/dashboard_controller.dart';
+import 'controllers/app_settings_controller.dart';
 import 'screens/login_screen.dart';
 import 'screens/main_layout.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   // Initialize services
   final api = APIService.instance;
   await api.init();
+
+  // Initialize app-wide settings (company name, logo, theme color, branches)
+  final appSettings = AppSettingsController();
+  await appSettings.init();
 
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => POSController()),
         ChangeNotifierProvider(create: (_) => DashboardController()),
+        ChangeNotifierProvider<AppSettingsController>.value(value: appSettings),
       ],
       child: const HotelPOSApp(),
     ),
@@ -31,6 +37,8 @@ class HotelPOSApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final api = APIService.instance;
+    // Watch settings to trigger a rebuild of MaterialApp when color or other settings change.
+    context.watch<AppSettingsController>();
 
     return MaterialApp(
       title: 'FoodKing POS - LAN-first Restaurant POS System',
@@ -41,3 +49,5 @@ class HotelPOSApp extends StatelessWidget {
     );
   }
 }
+
+

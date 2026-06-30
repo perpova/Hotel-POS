@@ -175,7 +175,7 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
   // TAB 1: END-OF-DAY SUMMARY (Replica of Screenshot 4)
   // ----------------------------------------------------
   Widget _buildEODTab() {
-    if (_loadingData) return const Center(child: CircularProgressIndicator(color: AppTheme.primary));
+    if (_loadingData) return Center(child: CircularProgressIndicator(color: AppTheme.primary));
     
     final sales = _eodData?['sales'] as List? ?? [
       {'payment_method': 'cash', 'total': 12450.00, 'count': 12},
@@ -430,7 +430,7 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
                   const SizedBox(height: 16),
                   Expanded(
                     child: _loadingData
-                        ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
+                        ? Center(child: CircularProgressIndicator(color: AppTheme.primary))
                         : _expenses.isEmpty
                             ? Center(
                                 child: Text('No expenses recorded.', style: GoogleFonts.inter(color: AppTheme.textLightSecondary)),
@@ -635,7 +635,7 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
             child: Padding(
               padding: const EdgeInsets.all(20),
               child: _loadingData
-                  ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
+                  ? Center(child: CircularProgressIndicator(color: AppTheme.primary))
                   : _historicalReports.isEmpty
                       ? Center(child: Text('No historical summaries found.', style: GoogleFonts.inter(color: const Color(0xFF64748B))))
                       : ListView.separated(
@@ -644,7 +644,7 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
                           itemBuilder: (context, index) {
                             final r = _historicalReports[index];
                             return ListTile(
-                              leading: const Icon(Icons.calendar_month, color: AppTheme.primary),
+                              leading: Icon(Icons.calendar_month, color: AppTheme.primary),
                               title: Text('Period: ${r['period']}', style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
                               subtitle: Text('Total Orders: ${r['total_orders']} completed transactions.', style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B))),
                               trailing: Text('LKR ${(double.parse(r['revenue'].toString())).toStringAsFixed(2)}', style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: AppTheme.primary)),
@@ -681,7 +681,7 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
             child: Padding(
               padding: const EdgeInsets.all(20),
               child: _loadingData
-                  ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
+                  ? Center(child: CircularProgressIndicator(color: AppTheme.primary))
                   : _logs.isEmpty
                       ? Center(child: Text('No audit logs available.', style: GoogleFonts.inter(color: const Color(0xFF64748B))))
                       : ListView.separated(

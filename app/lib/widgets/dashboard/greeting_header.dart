@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../api_service.dart';
+import '../../services/translation_service.dart';
 
 class GreetingHeader extends StatelessWidget {
   const GreetingHeader({Key? key}) : super(key: key);
@@ -27,7 +28,7 @@ class GreetingHeader extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              _getGreeting(),
+              _getGreeting().tr(context),
               style: GoogleFonts.outfit(
                 fontSize: 28,
                 fontWeight: FontWeight.bold,
@@ -36,7 +37,7 @@ class GreetingHeader extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              user,
+              user == 'Guest User' ? 'Guest User'.tr(context) : user,
               style: GoogleFonts.inter(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
@@ -55,7 +56,7 @@ class GreetingHeader extends StatelessWidget {
             border: Border.all(color: const Color(0xFFFFC0CB), width: 1.5),
           ),
           child: Text(
-            'Version : 3.9',
+            'Version : 3.9'.tr(context),
             style: GoogleFonts.outfit(
               fontSize: 12,
               fontWeight: FontWeight.bold,

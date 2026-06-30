@@ -129,6 +129,12 @@ class POSController extends ChangeNotifier {
               tax: old.tax,
               isFeatured: old.isFeatured,
               caution: old.caution,
+              hasSizes: old.hasSizes,
+              hasExtras: old.hasExtras,
+              hasAddons: old.hasAddons,
+              sizes: old.sizes,
+              extras: old.extras,
+              addons: old.addons,
             );
             notifyListeners();
           }
@@ -255,7 +261,7 @@ class POSController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void addToCart(ProductModel product, {int quantity = 1, String? notes}) {
+  void addToCart(ProductModel product, {int quantity = 1, String? notes, List<ProductExtra> extras = const []}) {
     // Check if product is already in the cart
     final index = cart.indexWhere((item) => item.productId == product.id && item.notes == notes);
     
@@ -269,6 +275,7 @@ class POSController extends ChangeNotifier {
         price: oldItem.price,
         notes: oldItem.notes,
         isShortEat: oldItem.isShortEat,
+        extras: oldItem.extras,
       );
     } else {
       cart.add(OrderItemModel(
@@ -279,6 +286,7 @@ class POSController extends ChangeNotifier {
         price: product.activePrice,
         notes: notes,
         isShortEat: product.isShortEat,
+        extras: extras,
       ));
     }
     notifyListeners();

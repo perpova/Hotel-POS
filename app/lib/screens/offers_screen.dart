@@ -386,7 +386,7 @@ class _OffersScreenState extends State<OffersScreen> {
                       ),
                       Row(
                         children: [
-                          IconButton(icon: const Icon(Icons.refresh, color: AppTheme.primary), onPressed: _loadOffers),
+                          IconButton(icon: Icon(Icons.refresh, color: AppTheme.primary), onPressed: _loadOffers),
                           const SizedBox(width: 8),
                           _buildOutlineIconButton(icon: Icons.filter_alt_outlined, label: 'Filter', onTap: _showFilterDialog),
                           const SizedBox(width: 12),
@@ -460,7 +460,7 @@ class _OffersScreenState extends State<OffersScreen> {
                   // Tables list scrollable
                   Expanded(
                     child: _isLoading
-                        ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
+                        ? Center(child: CircularProgressIndicator(color: AppTheme.primary))
                         : _errorMessage.isNotEmpty
                             ? Center(child: Text(_errorMessage, style: GoogleFonts.inter(color: Colors.red)))
                             : SingleChildScrollView(
@@ -543,7 +543,7 @@ class _OffersScreenState extends State<OffersScreen> {
       icon: Icon(icon, size: 14, color: AppTheme.primary),
       label: Text(label, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primary)),
       style: OutlinedButton.styleFrom(
-        side: const BorderSide(color: AppTheme.primary),
+        side: BorderSide(color: AppTheme.primary),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       ),
@@ -709,7 +709,7 @@ class _OffersScreenState extends State<OffersScreen> {
                             width: 36,
                             height: 36,
                             decoration: BoxDecoration(color: const Color(0xFFFFF0F5), borderRadius: BorderRadius.circular(6)),
-                            child: const Icon(Icons.local_offer_outlined, color: AppTheme.primary, size: 18),
+                            child: Icon(Icons.local_offer_outlined, color: AppTheme.primary, size: 18),
                           ),
                         const SizedBox(width: 12),
                         Expanded(
@@ -759,7 +759,7 @@ class _OffersScreenState extends State<OffersScreen> {
                           child: Container(
                             padding: const EdgeInsets.all(6),
                             decoration: BoxDecoration(color: const Color(0xFFFFF0F5), borderRadius: BorderRadius.circular(6)),
-                            child: const Icon(Icons.edit, color: AppTheme.primary, size: 14),
+                            child: Icon(Icons.edit, color: AppTheme.primary, size: 14),
                           ),
                         ),
                         const SizedBox(width: 8),

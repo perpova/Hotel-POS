@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../services/translation_service.dart';
 
 class ReminderBanner extends StatelessWidget {
   const ReminderBanner({Key? key}) : super(key: key);
@@ -18,7 +19,7 @@ class ReminderBanner extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Reminder!',
+            'Reminder!'.tr(context),
             style: GoogleFonts.inter(
               fontSize: 14,
               fontWeight: FontWeight.bold,
@@ -27,7 +28,7 @@ class ReminderBanner extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            'Dummy data will be reset in every 60 minutes.',
+            'Dummy data will be reset in every 60 minutes.'.tr(context),
             style: GoogleFonts.inter(
               fontSize: 13,
               fontWeight: FontWeight.w500,

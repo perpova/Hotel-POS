@@ -221,7 +221,7 @@ class _TableManagementScreenState extends State<TableManagementScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
+          ? Center(child: CircularProgressIndicator(color: AppTheme.primary))
           : _isListView
               ? _buildListView(filtered)
               : _buildGridView(controller),
@@ -775,7 +775,7 @@ class _TableManagementScreenState extends State<TableManagementScreen> {
                           style: GoogleFonts.inter(
                             fontSize: 13,
                             fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                            color: isSelected ? AppTheme.primary : const Color(0xFF64748B),
+                            color: isSelected ? AppTheme.primary : Color(0xFF64748B),
                           ),
                         ),
                       ),
@@ -1035,7 +1035,7 @@ class _TableFormDrawerState extends State<_TableFormDrawer> {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: AppTheme.primary),
+        borderSide: BorderSide(color: AppTheme.primary),
       ),
     );
   }
