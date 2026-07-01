@@ -710,6 +710,33 @@ class _ThemeTabState extends State<_ThemeTab> {
             padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
           ),
         ),
+
+        const SizedBox(height: 32),
+        const Divider(color: Color(0xFFE2E8F0)),
+        const SizedBox(height: 20),
+
+        // ── POS Layout Toggle ──
+        Text('POS Layout Configuration', style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
+        const SizedBox(height: 8),
+        Text('Change the position of the Cart panel in the POS screen (Left side vs Right side).',
+            style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
+        const SizedBox(height: 16),
+        Row(children: [
+          Text('Cart Position:', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textLightPrimary)),
+          const SizedBox(width: 16),
+          Switch(
+            value: context.watch<AppSettingsController>().cartOnLeft,
+            activeColor: AppTheme.primary,
+            onChanged: (val) async {
+              await context.read<AppSettingsController>().toggleCartPosition();
+            },
+          ),
+          const SizedBox(width: 8),
+          Text(
+            context.watch<AppSettingsController>().cartOnLeft ? 'Left Hand Side' : 'Right Hand Side (Default)',
+            style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.primary),
+          ),
+        ]),
       ]),
     );
   }

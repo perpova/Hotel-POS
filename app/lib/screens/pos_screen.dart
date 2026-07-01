@@ -15,6 +15,7 @@ import '../theme.dart';
 import '../models.dart';
 import '../api_service.dart';
 import '../widgets/image_helper.dart';
+import '../controllers/app_settings_controller.dart';
 
 class POSScreen extends StatefulWidget {
   const POSScreen({Key? key}) : super(key: key);
@@ -78,6 +79,7 @@ class _POSScreenState extends State<POSScreen> {
   @override
   Widget build(BuildContext context) {
     final controller = Provider.of<POSController>(context);
+    final appSettings = Provider.of<AppSettingsController>(context);
     final size = MediaQuery.of(context).size;
     final isDesktop = size.width > 950;
 
@@ -85,19 +87,33 @@ class _POSScreenState extends State<POSScreen> {
       backgroundColor: const Color(0xFFF8FAFC),
       body: isDesktop
           ? Row(
-              children: [
-                // Left: Products Grid (71.4% width)
-                Expanded(
-                  flex: 5,
-                  child: _buildProductsArea(controller),
-                ),
-                const VerticalDivider(width: 1, color: Color(0xFFE2E8F0)),
-                // Right: Bill / Checkout Details (28.6% width)
-                Expanded(
-                  flex: 2,
-                  child: _buildBillingArea(controller),
-                ),
-              ],
+              children: appSettings.cartOnLeft
+                  ? [
+                      // Left: Bill / Checkout Details (28.6% width)
+                      Expanded(
+                        flex: 2,
+                        child: _buildBillingArea(controller),
+                      ),
+                      const VerticalDivider(width: 1, color: Color(0xFFE2E8F0)),
+                      // Right: Products Grid (71.4% width)
+                      Expanded(
+                        flex: 5,
+                        child: _buildProductsArea(controller),
+                      ),
+                    ]
+                  : [
+                      // Left: Products Grid (71.4% width)
+                      Expanded(
+                        flex: 5,
+                        child: _buildProductsArea(controller),
+                      ),
+                      const VerticalDivider(width: 1, color: Color(0xFFE2E8F0)),
+                      // Right: Bill / Checkout Details (28.6% width)
+                      Expanded(
+                        flex: 2,
+                        child: _buildBillingArea(controller),
+                      ),
+                    ],
             )
           : Column(
               children: [
@@ -317,7 +333,7 @@ class _POSScreenState extends State<POSScreen> {
   }
 
   Widget _buildProductCard(ProductModel product, POSController controller) {
-    final isLowStock = product.stockQty <= product.minStockLevel;
+    final isLowStock = product.trackStock && (product.stockQty <= product.minStockLevel);
 
     return Card(
       elevation: 0,
@@ -330,7 +346,7 @@ class _POSScreenState extends State<POSScreen> {
         ),
       ),
       child: InkWell(
-        onTap: product.stockQty > 0
+        onTap: (!product.trackStock || product.stockQty > 0)
             ? () {
                 if (product.hasSizes || product.hasExtras || product.hasAddons) {
                   _showProductOptionsModal(product, controller);
@@ -395,7 +411,7 @@ class _POSScreenState extends State<POSScreen> {
                           ),
                         ),
                       ),
-                    if (product.stockQty <= 0)
+                    if (product.trackStock && product.stockQty <= 0)
                       Positioned.fill(
                         child: Container(
                           decoration: BoxDecoration(
@@ -567,7 +583,7 @@ class _POSScreenState extends State<POSScreen> {
 
           // Token Number Input Field
           Container(
-            height: 36,
+            height: 44,
             padding: const EdgeInsets.symmetric(horizontal: 12),
             decoration: BoxDecoration(
               color: Colors.white,
@@ -577,15 +593,16 @@ class _POSScreenState extends State<POSScreen> {
             child: TextFormField(
               controller: _tokenNoController,
               keyboardType: TextInputType.number,
-              style: GoogleFonts.inter(fontSize: 11),
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold),
               decoration: InputDecoration(
                 hintText: 'Token No',
-                hintStyle: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
+                hintStyle: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF64748B)),
                 border: InputBorder.none,
                 enabledBorder: InputBorder.none,
                 focusedBorder: InputBorder.none,
                 filled: false,
-                contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                contentPadding: const EdgeInsets.symmetric(vertical: 10),
               ),
             ),
           ),
@@ -633,26 +650,41 @@ class _POSScreenState extends State<POSScreen> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Container(
-                    height: 36,
+                    height: 44,
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(color: const Color(0xFFE2E8F0)),
                     ),
-                    child: TextFormField(
-                      initialValue: controller.stewardName,
-                      style: GoogleFonts.inter(fontSize: 11),
-                      decoration: InputDecoration(
-                        hintText: 'Steward Name',
-                        hintStyle: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
-                        border: InputBorder.none,
-                        enabledBorder: InputBorder.none,
-                        focusedBorder: InputBorder.none,
-                        filled: false,
-                        contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButtonFormField<String>(
+                        value: controller.waiters.any((w) => w.name == controller.stewardName) ? controller.stewardName : null,
+                        hint: Align(
+                          alignment: Alignment.center,
+                          child: Text('Select Waiter', style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF64748B))),
+                        ),
+                        alignment: Alignment.center,
+                        decoration: const InputDecoration(
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          filled: false,
+                          contentPadding: EdgeInsets.symmetric(vertical: 4),
+                        ),
+                        iconSize: 18,
+                        style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)),
+                        items: [
+                          ...controller.waiters.map((w) => DropdownMenuItem(
+                                value: w.name,
+                                child: Align(
+                                  alignment: Alignment.center,
+                                  child: Text(w.name, style: GoogleFonts.inter(fontSize: 13)),
+                                ),
+                              )),
+                        ],
+                        onChanged: (val) => controller.setStewardName(val),
                       ),
-                      onChanged: (val) => controller.setStewardName(val),
                     ),
                   ),
                 ),
@@ -741,37 +773,38 @@ class _POSScreenState extends State<POSScreen> {
           // Discount selector and Apply button row
           Row(
             children: [
-              Container(
-                height: 36,
-                padding: const EdgeInsets.symmetric(horizontal: 6),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: const Color(0xFFE2E8F0)),
-                ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: _discountType,
-                    style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF1E293B)),
-                    items: const [
-                      DropdownMenuItem(value: 'percent', child: Text('Percentage')),
-                      DropdownMenuItem(value: 'fixed', child: Text('Fixed Amt')),
-                    ],
-                    onChanged: (val) {
-                      if (val != null) {
-                        setState(() {
-                          _discountType = val;
-                          _applyDiscount(controller);
-                        });
-                      }
-                    },
+              InkWell(
+                onTap: () {
+                  setState(() {
+                    _discountType = _discountType == 'percent' ? 'fixed' : 'percent';
+                    _applyDiscount(controller);
+                  });
+                },
+                borderRadius: BorderRadius.circular(10),
+                child: Container(
+                  height: 44,
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF0F5),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppTheme.primary.withOpacity(0.3)),
+                  ),
+                  child: Center(
+                    child: Text(
+                      _discountType == 'percent' ? '%' : 'LKR',
+                      style: GoogleFonts.inter(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.primary,
+                      ),
+                    ),
                   ),
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
                 child: Container(
-                  height: 36,
+                  height: 44,
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(10),
@@ -779,15 +812,16 @@ class _POSScreenState extends State<POSScreen> {
                   ),
                   child: TextField(
                     controller: _discountController,
-                    style: GoogleFonts.inter(fontSize: 11),
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold),
                     decoration: InputDecoration(
                       hintText: 'Add Discount',
-                      hintStyle: GoogleFonts.inter(color: const Color(0xFF94A3B8), fontSize: 11),
+                      hintStyle: GoogleFonts.inter(color: const Color(0xFF94A3B8), fontSize: 13),
                       border: InputBorder.none,
                       enabledBorder: InputBorder.none,
                       focusedBorder: InputBorder.none,
                       filled: false,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      contentPadding: const EdgeInsets.symmetric(vertical: 10),
                     ),
                     keyboardType: TextInputType.number,
                   ),
@@ -800,10 +834,10 @@ class _POSScreenState extends State<POSScreen> {
                   backgroundColor: const Color(0xFF0F766E), // Teal
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  minimumSize: const Size(70, 36),
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  minimumSize: const Size(70, 44),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
                 ),
-                child: Text('Apply', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold)),
+                child: Text('Apply', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold)),
               ),
             ],
           ),
@@ -856,10 +890,10 @@ class _POSScreenState extends State<POSScreen> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFFEF4444), // Red
                         foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        minimumSize: const Size(double.infinity, 48),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
-                      child: const Text('Cancel'),
+                      child: Text('Cancel', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold)),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -869,10 +903,10 @@ class _POSScreenState extends State<POSScreen> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF10B981), // Green
                         foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        minimumSize: const Size(double.infinity, 48),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
-                      child: const Text('Order'),
+                      child: Text('Order', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold)),
                     ),
                   ),
                 ],
@@ -992,30 +1026,34 @@ class _POSScreenState extends State<POSScreen> {
               children: [
                 InkWell(
                   onTap: () => controller.updateCartQuantity(index, item.quantity - 1),
+                  borderRadius: BorderRadius.circular(6),
                   child: Container(
-                    padding: const EdgeInsets.all(2.5),
+                    width: 32,
+                    height: 32,
                     decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: const Color(0xFFEF4444)),
+                      color: const Color(0xFFFEE2E2),
+                      borderRadius: BorderRadius.circular(6),
                     ),
-                    child: const Icon(Icons.remove, size: 9, color: Color(0xFFEF4444)),
+                    child: const Icon(Icons.remove, size: 14, color: Color(0xFFEF4444)),
                   ),
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: 8),
                 Text(
                   '${item.quantity}',
-                  style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold),
+                  style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold),
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: 8),
                 InkWell(
                   onTap: () => controller.updateCartQuantity(index, item.quantity + 1),
+                  borderRadius: BorderRadius.circular(6),
                   child: Container(
-                    padding: const EdgeInsets.all(2.5),
+                    width: 32,
+                    height: 32,
                     decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: const Color(0xFFEF4444)),
+                      color: const Color(0xFFDCFCE7),
+                      borderRadius: BorderRadius.circular(6),
                     ),
-                    child: const Icon(Icons.add, size: 9, color: Color(0xFFEF4444)),
+                    child: const Icon(Icons.add, size: 14, color: Color(0xFF15803D)),
                   ),
                 ),
               ],
@@ -1103,6 +1141,7 @@ class _POSScreenState extends State<POSScreen> {
             'name': addonProd.name,
             'price': addonProd.activePrice,
             'image': Icons.local_drink_outlined,
+            'product': addonProd,
           });
         }
       }
@@ -1113,7 +1152,10 @@ class _POSScreenState extends State<POSScreen> {
       builder: (context) {
         String selectedSize = sizes.first['name'];
         double selectedSizePrice = sizes.first['price'];
-        final selectedExtras = <String, double>{};
+        final selectedExtrasQty = <String, int>{};
+        for (var ex in extras) {
+          selectedExtrasQty[ex['name']] = 0;
+        }
         final selectedAddons = <String, Map<String, dynamic>>{};
         for (var add in addons) {
           selectedAddons[add['name']] = {
@@ -1128,7 +1170,11 @@ class _POSScreenState extends State<POSScreen> {
         return StatefulBuilder(
           builder: (context, setModalState) {
             double basePrice = product.hasSizes ? selectedSizePrice : product.activePrice;
-            double extrasSum = selectedExtras.values.fold(0.0, (sum, val) => sum + val);
+            double extrasSum = 0.0;
+            selectedExtrasQty.forEach((name, qty) {
+              final exObj = extras.firstWhere((e) => e['name'] == name);
+              extrasSum += exObj['price'] * qty;
+            });
             double addonsSum = 0.0;
             selectedAddons.forEach((name, data) {
               addonsSum += data['price'] * data['qty'];
@@ -1237,10 +1283,10 @@ class _POSScreenState extends State<POSScreen> {
                                 Row(
                                   children: [
                                     IconButton(
-                                      icon: const Icon(Icons.remove, size: 18),
+                                      icon: const Icon(Icons.remove, size: 20),
                                       style: IconButton.styleFrom(
-                                        side: const BorderSide(color: Color(0xFFE2E8F0)),
-                                        padding: const EdgeInsets.all(8),
+                                        backgroundColor: const Color(0xFFF1F5F9),
+                                        padding: const EdgeInsets.all(12),
                                       ),
                                       onPressed: () {
                                         if (itemQty > 1) {
@@ -1249,14 +1295,14 @@ class _POSScreenState extends State<POSScreen> {
                                       },
                                     ),
                                     Padding(
-                                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                                      child: Text('$itemQty', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 16)),
+                                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                                      child: Text('$itemQty', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 18)),
                                     ),
                                     IconButton(
-                                      icon: const Icon(Icons.add, size: 18),
+                                      icon: const Icon(Icons.add, size: 20),
                                       style: IconButton.styleFrom(
-                                        side: const BorderSide(color: Color(0xFFE2E8F0)),
-                                        padding: const EdgeInsets.all(8),
+                                        backgroundColor: const Color(0xFFF1F5F9),
+                                        padding: const EdgeInsets.all(12),
                                       ),
                                       onPressed: () {
                                         setModalState(() => itemQty++);
@@ -1343,36 +1389,84 @@ class _POSScreenState extends State<POSScreen> {
                               const SizedBox(height: 8),
                               Column(
                                 children: extras.map((ex) {
-                                  final isSel = selectedExtras.containsKey(ex['name']);
+                                  final name = ex['name'];
+                                  final qty = selectedExtrasQty[name] ?? 0;
                                   return Container(
                                     margin: const EdgeInsets.only(bottom: 8),
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                     decoration: BoxDecoration(
                                       border: Border.all(color: const Color(0xFFE2E8F0)),
                                       borderRadius: BorderRadius.circular(8),
+                                      color: qty > 0 ? const Color(0xFFFFF0F5) : Colors.white,
                                     ),
-                                    child: CheckboxListTile(
-                                      title: Text(
-                                        ex['name'],
-                                        style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF1E293B)),
-                                      ),
-                                      secondary: Text(
-                                        '+LKR ${ex['price'].toStringAsFixed(0)}',
-                                        style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: const Color(0xFF64748B)),
-                                      ),
-                                      value: isSel,
-                                      activeColor: AppTheme.primary,
-                                      onChanged: (val) {
-                                        setModalState(() {
-                                          if (val == true) {
-                                            selectedExtras[ex['name']] = ex['price'];
-                                          } else {
-                                            selectedExtras.remove(ex['name']);
-                                          }
-                                        });
-                                      },
-                                      controlAffinity: ListTileControlAffinity.leading,
-                                      contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-                                      dense: true,
+                                    child: Row(
+                                      children: [
+                                        // Left: Extra Name
+                                        Expanded(
+                                          child: Text(
+                                            name,
+                                            style: GoogleFonts.inter(
+                                              fontSize: 13,
+                                              color: const Color(0xFF1E293B),
+                                              fontWeight: qty > 0 ? FontWeight.bold : FontWeight.normal,
+                                            ),
+                                          ),
+                                        ),
+                                        // Middle: Price
+                                        Text(
+                                          '+LKR ${ex['price'].toStringAsFixed(0)}',
+                                          style: GoogleFonts.inter(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.bold,
+                                            color: qty > 0 ? AppTheme.primary : const Color(0xFF64748B),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 16),
+                                        // Right: Counter (- qty +)
+                                        Row(
+                                          children: [
+                                            InkWell(
+                                              onTap: () {
+                                                if (qty > 0) {
+                                                  setModalState(() {
+                                                    selectedExtrasQty[name] = qty - 1;
+                                                  });
+                                                }
+                                              },
+                                              borderRadius: BorderRadius.circular(6),
+                                              child: Container(
+                                                width: 32,
+                                                height: 32,
+                                                decoration: BoxDecoration(
+                                                  color: const Color(0xFFF1F5F9),
+                                                  borderRadius: BorderRadius.circular(6),
+                                                ),
+                                                child: const Icon(Icons.remove, size: 14, color: Color(0xFF475569)),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 10),
+                                            Text('$qty', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold)),
+                                            const SizedBox(width: 10),
+                                            InkWell(
+                                              onTap: () {
+                                                setModalState(() {
+                                                  selectedExtrasQty[name] = qty + 1;
+                                                });
+                                              },
+                                              borderRadius: BorderRadius.circular(6),
+                                              child: Container(
+                                                width: 32,
+                                                height: 32,
+                                                decoration: BoxDecoration(
+                                                  color: const Color(0xFFF1F5F9),
+                                                  borderRadius: BorderRadius.circular(6),
+                                                ),
+                                                child: const Icon(Icons.add, size: 14, color: Color(0xFF475569)),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
                                     ),
                                   );
                                 }).toList(),
@@ -1418,41 +1512,45 @@ class _POSScreenState extends State<POSScreen> {
                                             children: [
                                               Row(
                                                 children: [
-                                                  InkWell(
-                                                    onTap: () {
-                                                      if (qty > 0) {
-                                                        setModalState(() {
-                                                          selectedAddons[name]!['qty'] = qty - 1;
-                                                        });
-                                                      }
-                                                    },
-                                                    child: Container(
-                                                      padding: const EdgeInsets.all(2),
-                                                      decoration: BoxDecoration(
-                                                        shape: BoxShape.circle,
-                                                        border: Border.all(color: const Color(0xFFE2E8F0)),
-                                                      ),
-                                                      child: const Icon(Icons.remove, size: 12),
-                                                    ),
-                                                  ),
-                                                  const SizedBox(width: 6),
-                                                  Text('$qty', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold)),
-                                                  const SizedBox(width: 6),
-                                                  InkWell(
-                                                    onTap: () {
-                                                      setModalState(() {
-                                                        selectedAddons[name]!['qty'] = qty + 1;
-                                                      });
-                                                    },
-                                                    child: Container(
-                                                      padding: const EdgeInsets.all(2),
-                                                      decoration: BoxDecoration(
-                                                        shape: BoxShape.circle,
-                                                        border: Border.all(color: const Color(0xFFE2E8F0)),
-                                                      ),
-                                                      child: const Icon(Icons.add, size: 12),
-                                                    ),
-                                                  ),
+                                                   InkWell(
+                                                     onTap: () {
+                                                       if (qty > 0) {
+                                                         setModalState(() {
+                                                           selectedAddons[name]!['qty'] = qty - 1;
+                                                         });
+                                                       }
+                                                     },
+                                                     borderRadius: BorderRadius.circular(6),
+                                                     child: Container(
+                                                       width: 32,
+                                                       height: 32,
+                                                       decoration: BoxDecoration(
+                                                         color: const Color(0xFFF1F5F9),
+                                                         borderRadius: BorderRadius.circular(6),
+                                                       ),
+                                                       child: const Icon(Icons.remove, size: 14, color: Color(0xFF475569)),
+                                                     ),
+                                                   ),
+                                                   const SizedBox(width: 8),
+                                                   Text('$qty', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold)),
+                                                   const SizedBox(width: 8),
+                                                   InkWell(
+                                                     onTap: () {
+                                                       setModalState(() {
+                                                         selectedAddons[name]!['qty'] = qty + 1;
+                                                       });
+                                                     },
+                                                     borderRadius: BorderRadius.circular(6),
+                                                     child: Container(
+                                                       width: 32,
+                                                       height: 32,
+                                                       decoration: BoxDecoration(
+                                                         color: const Color(0xFFF1F5F9),
+                                                         borderRadius: BorderRadius.circular(6),
+                                                       ),
+                                                       child: const Icon(Icons.add, size: 14, color: Color(0xFF475569)),
+                                                     ),
+                                                   ),
                                                 ],
                                               ),
                                             ],
@@ -1495,26 +1593,25 @@ class _POSScreenState extends State<POSScreen> {
                         onPressed: () {
                           final List<String> notesParts = [];
                           notesParts.add('Size: $selectedSize');
-                          if (selectedExtras.isNotEmpty) {
-                            notesParts.add('Extras: ${selectedExtras.keys.join(", ")}');
-                          }
-                          final List<String> selectedAddonsNames = [];
-                          selectedAddons.forEach((name, data) {
-                            if (data['qty'] > 0) {
-                              selectedAddonsNames.add('$name (x${data['qty']})');
+                          
+                          final List<String> selectedExtrasNames = [];
+                          selectedExtrasQty.forEach((name, qty) {
+                            if (qty > 0) {
+                              selectedExtrasNames.add('$name (x$qty)');
                             }
                           });
-                          if (selectedAddonsNames.isNotEmpty) {
-                            notesParts.add('Addons: ${selectedAddonsNames.join(", ")}');
+                          if (selectedExtrasNames.isNotEmpty) {
+                            notesParts.add('Extras: ${selectedExtrasNames.join(", ")}');
                           }
+                          
                           if (instructionController.text.trim().isNotEmpty) {
                             notesParts.add('Instructions: ${instructionController.text.trim()}');
                           }
                           
                           final finalNotes = notesParts.join(' | ');
 
-                          // Calculate the single item price including size, extras, AND addons!
-                          double finalItemPrice = basePrice + extrasSum + (addonsSum / itemQty);
+                          // Calculate the single item price including size and extras (excluding addons!)
+                          double finalItemPrice = basePrice + extrasSum;
 
                           final customProduct = ProductModel(
                             id: product.id,
@@ -1524,7 +1621,7 @@ class _POSScreenState extends State<POSScreen> {
                             categoryId: product.categoryId,
                             price: product.price,
                             cost: product.cost,
-                            activePrice: finalItemPrice, // Dynamic updated price including size, extras, and addons
+                            activePrice: finalItemPrice, // Dynamic updated price including size and extras
                             isHappyHour: product.isHappyHour,
                             barcode: product.barcode,
                             stockQty: product.stockQty,
@@ -1544,23 +1641,34 @@ class _POSScreenState extends State<POSScreen> {
                             addons: product.addons,
                           );
 
+                          // Duplicate extra models for backend stock deduction based on their chosen count
                           final List<ProductExtra> selectedProductExtras = [];
-                          if (selectedExtras.isNotEmpty) {
-                            for (var entry in selectedExtras.entries) {
-                              final exMatch = product.extras.firstWhere(
-                                (e) => e.name == entry.key,
-                                orElse: () => ProductExtra(name: entry.key, price: entry.value),
-                              );
-                              selectedProductExtras.add(exMatch);
+                          selectedExtrasQty.forEach((name, qty) {
+                            if (qty > 0) {
+                              final originalExtra = product.extras.firstWhere((e) => e.name == name);
+                              for (int i = 0; i < qty; i++) {
+                                selectedProductExtras.add(originalExtra);
+                              }
                             }
-                          }
+                          });
 
+                          // 1. Add main item to cart
                           controller.addToCart(
                             customProduct,
                             quantity: itemQty,
                             notes: finalNotes,
                             extras: selectedProductExtras,
                           );
+
+                          // 2. Add addons to cart separately
+                          selectedAddons.forEach((name, data) {
+                            final qty = data['qty'] as int;
+                            if (qty > 0) {
+                              final addonMap = addons.firstWhere((a) => a['name'] == name);
+                              final ProductModel addonProductObj = addonMap['product'];
+                              controller.addToCart(addonProductObj, quantity: qty);
+                            }
+                          });
 
                           Navigator.pop(context);
                           ScaffoldMessenger.of(context).showSnackBar(

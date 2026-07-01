@@ -133,6 +133,10 @@ async function initializeDatabase() {
                 console.log("Migration: Added addons to products table.");
             } catch (_) {}
             try {
+                await dbPool.query("ALTER TABLE products ADD COLUMN track_stock BOOLEAN DEFAULT TRUE");
+                console.log("Migration: Added track_stock to products table.");
+            } catch (_) {}
+            try {
                 await dbPool.query("ALTER TABLE customers ADD COLUMN image_base64 LONGTEXT NULL");
                 console.log("Migration: Added image_base64 to customers table.");
             } catch (_) {}

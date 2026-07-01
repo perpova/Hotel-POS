@@ -234,6 +234,7 @@ app.get('/api/products', async (req, res) => {
                 has_sizes: !!p.has_sizes,
                 has_extras: !!p.has_extras,
                 has_addons: !!p.has_addons,
+                track_stock: p.track_stock === undefined || p.track_stock === null ? true : !!p.track_stock,
                 sizes: p.sizes ? JSON.parse(p.sizes) : [],
                 extras: p.extras ? JSON.parse(p.extras) : [],
                 addons: p.addons ? JSON.parse(p.addons) : []
@@ -389,7 +390,7 @@ app.post('/api/products', authenticateToken, async (req, res) => {
         name, sinhala_name, description, category_id, price, cost, barcode,
         stock_qty, min_stock_level, is_short_eat, status, image_base64,
         item_type, tax, is_featured, caution,
-        has_sizes, has_extras, has_addons,
+        has_sizes, has_extras, has_addons, track_stock,
         sizes, extras, addons
     } = req.body;
     
@@ -399,14 +400,14 @@ app.post('/api/products', authenticateToken, async (req, res) => {
                 name, sinhala_name, description, category_id, price, cost, barcode,
                 stock_qty, min_stock_level, is_short_eat, status, image_base64,
                 item_type, tax, is_featured, caution,
-                has_sizes, has_extras, has_addons,
+                has_sizes, has_extras, has_addons, track_stock,
                 sizes, extras, addons
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [
             name, sinhala_name || null, description || null, category_id, price, cost || 0.00, barcode || null,
             stock_qty || 0, min_stock_level || 10, is_short_eat ? 1 : 0, status || 'active', image_base64 || null,
             item_type || 'Veg', tax || 0.00, is_featured ? 1 : 0, caution || null,
-            has_sizes ? 1 : 0, has_extras ? 1 : 0, has_addons ? 1 : 0,
+            has_sizes ? 1 : 0, has_extras ? 1 : 0, has_addons ? 1 : 0, track_stock !== undefined ? (track_stock ? 1 : 0) : 1,
             sizes ? JSON.stringify(sizes) : null,
             extras ? JSON.stringify(extras) : null,
             addons ? JSON.stringify(addons) : null
@@ -434,7 +435,7 @@ app.put('/api/products/:id', authenticateToken, async (req, res) => {
         name, sinhala_name, description, category_id, price, cost, barcode,
         stock_qty, min_stock_level, is_short_eat, status, image_base64,
         item_type, tax, is_featured, caution,
-        has_sizes, has_extras, has_addons,
+        has_sizes, has_extras, has_addons, track_stock,
         sizes, extras, addons
     } = req.body;
     
@@ -444,14 +445,14 @@ app.put('/api/products/:id', authenticateToken, async (req, res) => {
                 name = ?, sinhala_name = ?, description = ?, category_id = ?, price = ?, cost = ?, barcode = ?,
                 stock_qty = ?, min_stock_level = ?, is_short_eat = ?, status = ?, image_base64 = ?,
                 item_type = ?, tax = ?, is_featured = ?, caution = ?,
-                has_sizes = ?, has_extras = ?, has_addons = ?,
+                has_sizes = ?, has_extras = ?, has_addons = ?, track_stock = ?,
                 sizes = ?, extras = ?, addons = ?
             WHERE id = ?
         `, [
             name, sinhala_name || null, description || null, category_id, price, cost || 0.00, barcode || null,
             stock_qty || 0, min_stock_level || 10, is_short_eat ? 1 : 0, status || 'active', image_base64 || null,
             item_type || 'Veg', tax || 0.00, is_featured ? 1 : 0, caution || null,
-            has_sizes ? 1 : 0, has_extras ? 1 : 0, has_addons ? 1 : 0,
+            has_sizes ? 1 : 0, has_extras ? 1 : 0, has_addons ? 1 : 0, track_stock !== undefined ? (track_stock ? 1 : 0) : 1,
             sizes ? JSON.stringify(sizes) : null,
             extras ? JSON.stringify(extras) : null,
             addons ? JSON.stringify(addons) : null,
@@ -1421,14 +1422,18 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
                 VALUES (?, ?, ?, ?, ?, ?)
             `, [newOrderId, item.product_id, item.quantity, item.price, item.notes || null, item.status || 'pending']);
             
-            // Stock Reduction
-            await conn.query('UPDATE products SET stock_qty = stock_qty - ? WHERE id = ?', [item.quantity, item.product_id]);
-            
-            // Insert Stock Log
-            await conn.query(
-                'INSERT INTO stock_logs (product_id, change_qty, type, reason, user_id) VALUES (?, ?, "sale", ?, ?)',
-                [item.product_id, -item.quantity, `Sale Order: ${orderNumber}`, req.user.id]
-            );
+            // Stock Reduction (only if track_stock is enabled)
+            const [prodRows] = await conn.query('SELECT track_stock FROM products WHERE id = ?', [item.product_id]);
+            const trackStock = prodRows[0] ? prodRows[0].track_stock : 1;
+            if (trackStock) {
+                await conn.query('UPDATE products SET stock_qty = stock_qty - ? WHERE id = ?', [item.quantity, item.product_id]);
+                
+                // Insert Stock Log
+                await conn.query(
+                    'INSERT INTO stock_logs (product_id, change_qty, type, reason, user_id) VALUES (?, ?, "sale", ?, ?)',
+                    [item.product_id, -item.quantity, `Sale Order: ${orderNumber}`, req.user.id]
+                );
+            }
 
             // Extra Stock Reduction (Countable raw materials like Egg, Chicken, Cheese, etc.)
             if (item.extras && Array.isArray(item.extras)) {
@@ -1531,11 +1536,15 @@ app.put('/api/orders/:id', authenticateToken, async (req, res) => {
             // Restore inventory if cancelled
             const items = await db.query('SELECT * FROM order_items WHERE order_id = ?', [id]);
             for (const item of items) {
-                await db.query('UPDATE products SET stock_qty = stock_qty + ? WHERE id = ?', [item.quantity, item.product_id]);
-                await db.query(
-                    'INSERT INTO stock_logs (product_id, change_qty, type, reason, user_id) VALUES (?, ?, "adjustment", ?, ?)',
-                    [item.product_id, item.quantity, `Order Cancelled: ${updatedOrder.order_number}`, req.user.id]
-                );
+                const [prodRows] = await db.query('SELECT track_stock FROM products WHERE id = ?', [item.product_id]);
+                const trackStock = prodRows[0] ? prodRows[0].track_stock : 1;
+                if (trackStock) {
+                    await db.query('UPDATE products SET stock_qty = stock_qty + ? WHERE id = ?', [item.quantity, item.product_id]);
+                    await db.query(
+                        'INSERT INTO stock_logs (product_id, change_qty, type, reason, user_id) VALUES (?, ?, "adjustment", ?, ?)',
+                        [item.product_id, item.quantity, `Order Cancelled: ${updatedOrder.order_number}`, req.user.id]
+                    );
+                }
             }
             await logAudit('delete_bill', 'orders', id, `Order ${updatedOrder.order_number} was CANCELLED. Inventory restored.`, req.user.id);
         }
@@ -1671,8 +1680,12 @@ app.post('/api/sync', authenticateToken, async (req, res) => {
                                 VALUES ((SELECT id FROM orders WHERE order_number = ?), ?, ?, ?, ?, ?)
                             `, [o.order_number, item.product_id, item.quantity, item.price, item.notes || null, item.status || 'pending']);
                             
-                            // Adjust online stocks
-                            await conn.query('UPDATE products SET stock_qty = stock_qty - ? WHERE id = ?', [item.quantity, item.product_id]);
+                            // Adjust online stocks if track_stock is enabled
+                            const [prodRows] = await conn.query('SELECT track_stock FROM products WHERE id = ?', [item.product_id]);
+                            const trackStock = prodRows[0] ? prodRows[0].track_stock : 1;
+                            if (trackStock) {
+                                await conn.query('UPDATE products SET stock_qty = stock_qty - ? WHERE id = ?', [item.quantity, item.product_id]);
+                            }
                         }
                     }
                 }

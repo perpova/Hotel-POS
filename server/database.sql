@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS products (
     has_sizes BOOLEAN DEFAULT FALSE,
     has_extras BOOLEAN DEFAULT FALSE,
     has_addons BOOLEAN DEFAULT FALSE,
+    track_stock BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (category_id) REFERENCES categories(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

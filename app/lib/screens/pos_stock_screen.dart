@@ -211,8 +211,9 @@ class _POSStockScreenState extends State<POSStockScreen> {
     final userRole = APIService.instance.currentUser?.role ?? 'cashier';
     final hasSeniorAccess = userRole == 'admin' || userRole == 'owner';
 
-    // Filter products list based on search query
+    // Filter products list based on search query and trackStock
     final filteredProducts = controller.products.where((p) {
+      if (!p.trackStock) return false;
       return p.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
           (p.sinhalaName ?? '').toLowerCase().contains(_searchQuery.toLowerCase());
     }).toList();
@@ -561,9 +562,9 @@ class _POSStockScreenState extends State<POSStockScreen> {
             _buildFieldLabel('SELECT PRODUCT *'),
             const SizedBox(height: 6),
             DropdownButtonFormField<ProductModel>(
-              value: _selectedStockProduct,
+              value: _selectedStockProduct != null && controller.products.contains(_selectedStockProduct) && _selectedStockProduct!.trackStock ? _selectedStockProduct : null,
               items: [
-                ...controller.products.map((p) => DropdownMenuItem(
+                ...controller.products.where((p) => p.trackStock).map((p) => DropdownMenuItem(
                       value: p,
                       child: Text(
                         '${p.name} ${p.sinhalaName != null ? "(${p.sinhalaName})" : ""} | Current: ${p.stockQty}',

@@ -14,6 +14,7 @@ class POSController extends ChangeNotifier {
   List<ProductModel> products = [];
   List<DiningTableModel> diningTables = [];
   List<CustomerModel> customers = [];
+  List<UserModel> waiters = [];
 
   // Local System States
   bool isOnline = false;
@@ -79,6 +80,7 @@ class POSController extends ChangeNotifier {
         products = await _api.getProducts();
         diningTables = await _api.getTables();
         customers = await _api.getCustomers();
+        waiters = await _api.getUsers(role: 'waiter');
         activeShift = await _api.getCurrentShift();
         await _fetchActiveOrders();
       } else {

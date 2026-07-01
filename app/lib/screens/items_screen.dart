@@ -732,6 +732,7 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
   bool _hasSizes = false;
   bool _hasExtras = false;
   bool _hasAddons = false;
+  bool _trackStock = true;
 
   List<Map<String, dynamic>> _sizesList = [];
   List<Map<String, dynamic>> _extrasList = [];
@@ -760,6 +761,7 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
     _hasSizes = p?.hasSizes ?? false;
     _hasExtras = p?.hasExtras ?? false;
     _hasAddons = p?.hasAddons ?? false;
+    _trackStock = p?.trackStock ?? true;
 
     _sizesList = p?.sizes.map((s) => {'name': s.name, 'price': s.price}).toList() ?? [];
     _extrasList = p?.extras.map((e) => {
@@ -1090,6 +1092,7 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
       'has_sizes': _hasSizes ? 1 : 0,
       'has_extras': _hasExtras ? 1 : 0,
       'has_addons': _hasAddons ? 1 : 0,
+      'track_stock': _trackStock ? 1 : 0,
       'sizes': sizes,
       'extras': extras,
       'addons': _hasAddons ? _selectedAddons : [],
@@ -1369,6 +1372,22 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
                           },
                         ),
                         Text('Addons', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w500)),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Inventory Settings
+                    _buildLabel('POS INVENTORY SETTINGS'),
+                    Row(
+                      children: [
+                        Checkbox(
+                          value: _trackStock,
+                          activeColor: AppTheme.primary,
+                          onChanged: (val) {
+                            setState(() => _trackStock = val ?? false);
+                          },
+                        ),
+                        Text('Track Stock Level in POS', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w500)),
                       ],
                     ),
                     const SizedBox(height: 16),

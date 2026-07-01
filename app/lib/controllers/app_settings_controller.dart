@@ -22,6 +22,7 @@ class AppSettingsController extends ChangeNotifier {
   String? _logoBase64;       // sidebar / header logo
   String? _faviconBase64;    // favicon / near-icon logo
   String? _footerLogoBase64;
+  bool _cartOnLeft = false;
 
   // ── Branches ───────────────────────────────────────────────────────────────
   List<BranchItem> _branches = [];
@@ -41,6 +42,7 @@ class AppSettingsController extends ChangeNotifier {
   String? get logoBase64     => _logoBase64;
   String? get faviconBase64  => _faviconBase64;
   String? get footerLogoBase64 => _footerLogoBase64;
+  bool get cartOnLeft        => _cartOnLeft;
 
   List<BranchItem> get branches => List.unmodifiable(_branches);
 
@@ -66,6 +68,7 @@ class AppSettingsController extends ChangeNotifier {
     _logoBase64       = prefs.getString('logo_base64');
     _faviconBase64    = prefs.getString('favicon_base64');
     _footerLogoBase64 = prefs.getString('footer_logo_base64');
+    _cartOnLeft       = prefs.getBool('cart_on_left') ?? false;
 
     final branchJson = prefs.getString('branches_json');
     if (branchJson != null) {
@@ -161,6 +164,14 @@ class AppSettingsController extends ChangeNotifier {
   Future<void> deleteBranch(int id) async {
     _branches.removeWhere((b) => b.id == id);
     await _save();
+    notifyListeners();
+  }
+
+  // ── Layout position toggle ──
+  Future<void> toggleCartPosition() async {
+    _cartOnLeft = !_cartOnLeft;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('cart_on_left', _cartOnLeft);
     notifyListeners();
   }
 }

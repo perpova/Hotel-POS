@@ -152,6 +152,7 @@ class ProductModel {
   final bool hasSizes;
   final bool hasExtras;
   final bool hasAddons;
+  final bool trackStock;
   final List<ProductSize> sizes;
   final List<ProductExtra> extras;
   final List<int> addons;
@@ -179,6 +180,7 @@ class ProductModel {
     this.hasSizes = false,
     this.hasExtras = false,
     this.hasAddons = false,
+    this.trackStock = true,
     this.sizes = const [],
     this.extras = const [],
     this.addons = const [],
@@ -244,6 +246,7 @@ class ProductModel {
       hasSizes: json['has_sizes'] == true || json['has_sizes'] == 1,
       hasExtras: json['has_extras'] == true || json['has_extras'] == 1,
       hasAddons: json['has_addons'] == true || json['has_addons'] == 1,
+      trackStock: json['track_stock'] == true || json['track_stock'] == 1 || json['track_stock'] == null,
       sizes: sizesList,
       extras: extrasList,
       addons: addonsList,
@@ -273,6 +276,7 @@ class ProductModel {
     'has_sizes': hasSizes,
     'has_extras': hasExtras,
     'has_addons': hasAddons,
+    'track_stock': trackStock ? 1 : 0,
     'sizes': sizes.map((x) => x.toJson()).toList(),
     'extras': extras.map((x) => x.toJson()).toList(),
     'addons': addons,
