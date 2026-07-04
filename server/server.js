@@ -1400,8 +1400,14 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
         await conn.beginTransaction();
         
         // Generate unique order number (e.g. ORD-20260617-1004)
-        const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-        const [countResult] = await conn.query('SELECT COUNT(*) as count FROM orders WHERE DATE(created_at) = CURDATE()');
+        const localDate = new Date();
+        const year = localDate.getFullYear();
+        const month = String(localDate.getMonth() + 1).padStart(2, '0');
+        const day = String(localDate.getDate()).padStart(2, '0');
+        const dateStr = `${year}${month}${day}`;
+        const queryDate = `${year}-${month}-${day}`;
+
+        const [countResult] = await conn.query('SELECT COUNT(*) as count FROM orders WHERE DATE(created_at) = ?', [queryDate]);
         const nextNum = (countResult[0].count + 1).toString().padStart(4, '0');
         const orderNumber = `ORD-${dateStr}-${nextNum}`;
         const barcode = orderNumber; // Barcode maps to order number

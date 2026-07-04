@@ -1990,7 +1990,7 @@ class _UsersScreenState extends State<UsersScreen> {
             ),
             itemBuilder: (context, index) {
               final o = _userOrders[index];
-              final dateFormatted = DateFormat('hh:mm a, dd-MM-yyyy').format(DateTime.tryParse(o.createdAt) ?? DateTime.now());
+              final dateFormatted = DateFormat('hh:mm a, dd-MM-yyyy').format((DateTime.tryParse(o.createdAt) ?? DateTime.now()).toLocal());
               
               return Card(
                 elevation: 0,

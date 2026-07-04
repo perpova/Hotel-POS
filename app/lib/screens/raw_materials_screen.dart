@@ -95,7 +95,7 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
       final matchType = _appliedType == '--' || typeStr == _appliedType.toLowerCase();
 
       final timestampStr = (l['timestamp'] ?? '').toString();
-      final dateFormatted = DateFormat('yyyy-MM-dd').format(DateTime.tryParse(timestampStr) ?? DateTime.now());
+      final dateFormatted = DateFormat('yyyy-MM-dd').format((DateTime.tryParse(timestampStr) ?? DateTime.now()).toLocal());
       final matchDate = _appliedDate.isEmpty || dateFormatted.contains(_appliedDate);
 
       return matchIngredient && matchType && matchDate;
@@ -109,7 +109,7 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
       for (var l in _filteredLogs.take(_entriesLimit)) {
         final changeVal = double.tryParse(l['change_qty'].toString()) ?? 0.00;
         final isPositive = changeVal > 0;
-        final timeFormatted = DateFormat('yyyy-MM-dd HH:mm').format(DateTime.tryParse(l['timestamp']) ?? DateTime.now());
+        final timeFormatted = DateFormat('yyyy-MM-dd HH:mm').format((DateTime.tryParse(l['timestamp']) ?? DateTime.now()).toLocal());
         
         csvContent += '${l['ingredient_name']},${isPositive ? "+" : ""}$changeVal,${l['type'].toString().toUpperCase()},${l['reason']},${l['recorder_name'] ?? "Admin"},$timeFormatted\n';
       }
@@ -148,7 +148,7 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
       final data = _filteredLogs.take(_entriesLimit).map((l) {
         final changeVal = double.tryParse(l['change_qty'].toString()) ?? 0.00;
         final isPositive = changeVal > 0;
-        final timeFormatted = DateFormat('yyyy-MM-dd HH:mm').format(DateTime.tryParse(l['timestamp']) ?? DateTime.now());
+        final timeFormatted = DateFormat('yyyy-MM-dd HH:mm').format((DateTime.tryParse(l['timestamp']) ?? DateTime.now()).toLocal());
         
         return [
           (l['ingredient_name'] ?? 'N/A').toString(),
@@ -850,7 +850,7 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
                           final l = logsList[index];
                           final changeVal = double.tryParse(l['change_qty'].toString()) ?? 0.00;
                           final isPositive = changeVal > 0;
-                          final timeFormatted = DateFormat('hh:mm a, dd-MM-yyyy').format(DateTime.tryParse(l['timestamp']) ?? DateTime.now());
+                          final timeFormatted = DateFormat('hh:mm a, dd-MM-yyyy').format((DateTime.tryParse(l['timestamp']) ?? DateTime.now()).toLocal());
                           
                           Color badgeColor;
                           Color badgeTextColor;

@@ -396,7 +396,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
                     itemBuilder: (context, index) {
                       final log = _drawerLogs[index];
                       final isCashIn = log['type'] == 'cash_in';
-                      final timeFormatted = DateFormat('hh:mm a').format(DateTime.tryParse(log['timestamp']) ?? DateTime.now());
+                      final timeFormatted = DateFormat('hh:mm a').format((DateTime.tryParse(log['timestamp']) ?? DateTime.now()).toLocal());
                       
                       return Padding(
                         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),

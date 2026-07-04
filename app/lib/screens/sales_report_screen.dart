@@ -85,7 +85,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
       final matchId = _appliedId.isEmpty || orderIdStr.contains(_appliedId);
       
       // Date formatting match
-      final dateFormatted = DateFormat('yyyy-MM-dd').format(DateTime.tryParse(o.createdAt) ?? DateTime.now());
+      final dateFormatted = DateFormat('yyyy-MM-dd').format((DateTime.tryParse(o.createdAt) ?? DateTime.now()).toLocal());
       final matchDate = _appliedDate.isEmpty || dateFormatted.contains(_appliedDate);
       
       final payMethodStr = (o.paymentMethod ?? 'N/A').toLowerCase();
@@ -102,7 +102,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
     try {
       String csvContent = 'Order ID,Date,Total,Discount,Delivery Charge,Payment Type,Payment Status\n';
       for (var o in _filteredOrders.take(_entriesLimit)) {
-        final dateFormatted = DateFormat('hh:mm a, dd-MM-yyyy').format(DateTime.tryParse(o.createdAt) ?? DateTime.now());
+        final dateFormatted = DateFormat('hh:mm a, dd-MM-yyyy').format((DateTime.tryParse(o.createdAt) ?? DateTime.now()).toLocal());
         final deliveryCharge = o.orderType == 'delivery' ? 150.00 : 0.00;
         final payType = o.paymentMethod ?? 'N/A';
         csvContent += '${o.orderNumber},$dateFormatted,${o.total},${o.discount},$deliveryCharge,$payType,${o.paymentStatus}\n';
@@ -140,7 +140,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
       
       final headers = ['Order ID', 'Date', 'Total', 'Discount', 'Delivery', 'Payment Type', 'Status'];
       final data = _filteredOrders.take(_entriesLimit).map((o) {
-        final dateFormatted = DateFormat('hh:mm a, dd-MM-yyyy').format(DateTime.tryParse(o.createdAt) ?? DateTime.now());
+        final dateFormatted = DateFormat('hh:mm a, dd-MM-yyyy').format((DateTime.tryParse(o.createdAt) ?? DateTime.now()).toLocal());
         final deliveryCharge = o.orderType == 'delivery' ? '150.00' : '0.00';
         return [
           o.orderNumber.length > 12 ? o.orderNumber.substring(o.orderNumber.length - 8) : o.orderNumber,
@@ -597,7 +597,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
             separatorBuilder: (context, index) => const Divider(height: 1, color: Color(0xFFF1F5F9)),
             itemBuilder: (context, index) {
               final o = list[index];
-              final dateFormatted = DateFormat('hh:mm a, dd-MM-yyyy').format(DateTime.tryParse(o.createdAt) ?? DateTime.now());
+              final dateFormatted = DateFormat('hh:mm a, dd-MM-yyyy').format((DateTime.tryParse(o.createdAt) ?? DateTime.now()).toLocal());
               final deliveryCharge = o.orderType == 'delivery' ? 150.00 : 0.00;
               final isPaid = o.paymentStatus.toLowerCase() == 'paid';
 
