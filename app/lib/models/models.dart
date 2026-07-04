@@ -128,6 +128,30 @@ class ProductExtra {
   };
 }
 
+class ProductIngredient {
+  final int ingredientId;
+  final double qty;
+  final String? size;
+
+  ProductIngredient({
+    required this.ingredientId,
+    required this.qty,
+    this.size,
+  });
+
+  factory ProductIngredient.fromJson(Map<String, dynamic> json) => ProductIngredient(
+    ingredientId: json['ingredient_id'] != null ? int.parse(json['ingredient_id'].toString()) : 0,
+    qty: json['qty'] != null ? _toDouble(json['qty']) : 0.0,
+    size: json['size']?.toString(),
+  );
+
+  Map<String, dynamic> toJson() => {
+    'ingredient_id': ingredientId,
+    'qty': qty,
+    'size': size,
+  };
+}
+
 // Product Model
 class ProductModel {
   final int id;
@@ -157,6 +181,7 @@ class ProductModel {
   final List<ProductSize> sizes;
   final List<ProductExtra> extras;
   final List<int> addons;
+  final List<ProductIngredient> ingredients;
 
   ProductModel({
     required this.id,
@@ -186,6 +211,7 @@ class ProductModel {
     this.sizes = const [],
     this.extras = const [],
     this.addons = const [],
+    this.ingredients = const [],
   });
 
   factory ProductModel.fromJson(Map<String, dynamic> json) {
@@ -225,6 +251,18 @@ class ProductModel {
       }
     }
 
+    List<ProductIngredient> ingredientsList = [];
+    if (json['ingredients'] != null) {
+      if (json['ingredients'] is String) {
+        try {
+          final decoded = jsonDecode(json['ingredients']) as List;
+          ingredientsList = decoded.map((x) => ProductIngredient.fromJson(x)).toList();
+        } catch (_) {}
+      } else if (json['ingredients'] is List) {
+        ingredientsList = (json['ingredients'] as List).map((x) => ProductIngredient.fromJson(x)).toList();
+      }
+    }
+
     return ProductModel(
       id: json['id'],
       name: json['name'],
@@ -253,6 +291,7 @@ class ProductModel {
       sizes: sizesList,
       extras: extrasList,
       addons: addonsList,
+      ingredients: ingredientsList,
     );
   }
 
@@ -284,6 +323,7 @@ class ProductModel {
     'sizes': sizes.map((x) => x.toJson()).toList(),
     'extras': extras.map((x) => x.toJson()).toList(),
     'addons': addons,
+    'ingredients': ingredients.map((x) => x.toJson()).toList(),
   };
 }
 

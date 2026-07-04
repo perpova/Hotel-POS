@@ -271,6 +271,12 @@ async function initializeDatabase() {
                 console.error("Migration: Creating ingredients table failed:", err.message);
             }
 
+            // Migration: Add ingredients column to products table
+            try {
+                await dbPool.query("ALTER TABLE products ADD COLUMN ingredients TEXT NULL");
+                console.log("Migration: Added ingredients to products table.");
+            } catch (_) {}
+
             // Seed base64 image placeholders for default products & users
             try {
                 const redImg = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';

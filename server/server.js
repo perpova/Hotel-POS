@@ -238,7 +238,8 @@ app.get('/api/products', async (req, res) => {
                 is_happy_hour_eligible: p.is_happy_hour_eligible === undefined || p.is_happy_hour_eligible === null ? true : !!p.is_happy_hour_eligible,
                 sizes: p.sizes ? JSON.parse(p.sizes) : [],
                 extras: p.extras ? JSON.parse(p.extras) : [],
-                addons: p.addons ? JSON.parse(p.addons) : []
+                addons: p.addons ? JSON.parse(p.addons) : [],
+                ingredients: p.ingredients ? JSON.parse(p.ingredients) : []
             };
         });
         
@@ -392,7 +393,7 @@ app.post('/api/products', authenticateToken, async (req, res) => {
         stock_qty, min_stock_level, is_short_eat, status, image_base64,
         item_type, tax, is_featured, caution,
         has_sizes, has_extras, has_addons, track_stock,
-        sizes, extras, addons, is_happy_hour_eligible
+        sizes, extras, addons, is_happy_hour_eligible, ingredients
     } = req.body;
     
     try {
@@ -402,8 +403,8 @@ app.post('/api/products', authenticateToken, async (req, res) => {
                 stock_qty, min_stock_level, is_short_eat, status, image_base64,
                 item_type, tax, is_featured, caution,
                 has_sizes, has_extras, has_addons, track_stock,
-                sizes, extras, addons, is_happy_hour_eligible
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                sizes, extras, addons, is_happy_hour_eligible, ingredients
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [
             name, sinhala_name || null, description || null, category_id, price, cost || 0.00, barcode || null,
             stock_qty || 0, min_stock_level || 10, is_short_eat ? 1 : 0, status || 'active', image_base64 || null,
@@ -412,7 +413,8 @@ app.post('/api/products', authenticateToken, async (req, res) => {
             sizes ? JSON.stringify(sizes) : null,
             extras ? JSON.stringify(extras) : null,
             addons ? JSON.stringify(addons) : null,
-            is_happy_hour_eligible !== undefined ? (is_happy_hour_eligible ? 1 : 0) : 1
+            is_happy_hour_eligible !== undefined ? (is_happy_hour_eligible ? 1 : 0) : 1,
+            ingredients ? JSON.stringify(ingredients) : null
         ]);
         
         const newId = result.insertId;
@@ -438,7 +440,7 @@ app.put('/api/products/:id', authenticateToken, async (req, res) => {
         stock_qty, min_stock_level, is_short_eat, status, image_base64,
         item_type, tax, is_featured, caution,
         has_sizes, has_extras, has_addons, track_stock,
-        sizes, extras, addons, is_happy_hour_eligible
+        sizes, extras, addons, is_happy_hour_eligible, ingredients
     } = req.body;
     
     try {
@@ -448,7 +450,7 @@ app.put('/api/products/:id', authenticateToken, async (req, res) => {
                 stock_qty = ?, min_stock_level = ?, is_short_eat = ?, status = ?, image_base64 = ?,
                 item_type = ?, tax = ?, is_featured = ?, caution = ?,
                 has_sizes = ?, has_extras = ?, has_addons = ?, track_stock = ?,
-                sizes = ?, extras = ?, addons = ?, is_happy_hour_eligible = ?
+                sizes = ?, extras = ?, addons = ?, is_happy_hour_eligible = ?, ingredients = ?
             WHERE id = ?
         `, [
             name, sinhala_name || null, description || null, category_id, price, cost || 0.00, barcode || null,
@@ -459,6 +461,7 @@ app.put('/api/products/:id', authenticateToken, async (req, res) => {
             extras ? JSON.stringify(extras) : null,
             addons ? JSON.stringify(addons) : null,
             is_happy_hour_eligible !== undefined ? (is_happy_hour_eligible ? 1 : 0) : 1,
+            ingredients ? JSON.stringify(ingredients) : null,
             id
         ]);
         
@@ -1427,7 +1430,7 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
             `, [newOrderId, item.product_id, item.quantity, item.price, item.notes || null, item.status || 'pending']);
             
             // Stock Reduction (only if track_stock is enabled)
-            const [prodRows] = await conn.query('SELECT track_stock FROM products WHERE id = ?', [item.product_id]);
+            const [prodRows] = await conn.query('SELECT track_stock, ingredients FROM products WHERE id = ?', [item.product_id]);
             const trackStock = prodRows[0] ? prodRows[0].track_stock : 1;
             if (trackStock) {
                 await conn.query('UPDATE products SET stock_qty = stock_qty - ? WHERE id = ?', [item.quantity, item.product_id]);
@@ -1437,6 +1440,47 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
                     'INSERT INTO stock_logs (product_id, change_qty, type, reason, user_id) VALUES (?, ?, "sale", ?, ?)',
                     [item.product_id, -item.quantity, `Sale Order: ${orderNumber}`, req.user.id]
                 );
+            }
+
+            // Deduct recipe/raw ingredients if product has any
+            if (prodRows[0] && prodRows[0].ingredients) {
+                try {
+                    const recipe = typeof prodRows[0].ingredients === 'string'
+                        ? JSON.parse(prodRows[0].ingredients)
+                        : prodRows[0].ingredients;
+                    if (Array.isArray(recipe)) {
+                        // Extract selected size from item.notes (e.g., "Size: Large | Extras: ...")
+                        let selectedSize = null;
+                        if (item.notes && item.notes.includes('Size: ')) {
+                            const match = item.notes.match(/Size:\s*([^|]+)/);
+                            if (match && match[1]) {
+                                selectedSize = match[1].trim();
+                            }
+                        }
+
+                        for (const ing of recipe) {
+                            if (ing.ingredient_id && ing.qty) {
+                                // If the recipe ingredient specifies a size, it must match the selected size
+                                // If it doesn't specify a size, it applies to all sizes
+                                if (ing.size && ing.size !== selectedSize) {
+                                    continue; // Skip deduction if size does not match
+                                }
+
+                                const totalDeduct = ing.qty * item.quantity;
+                                // Deduct raw ingredient stock
+                                await conn.query('UPDATE ingredients SET stock_qty = stock_qty - ? WHERE id = ?', [totalDeduct, ing.ingredient_id]);
+                                // Insert raw ingredient stock log
+                                const sizeSuffix = selectedSize ? ` (${selectedSize})` : '';
+                                await conn.query(`
+                                    INSERT INTO ingredient_stock_logs (ingredient_id, change_qty, type, reason, user_id)
+                                    VALUES (?, ?, 'sale', ?, ?)
+                                `, [ing.ingredient_id, -totalDeduct, `Product '${item.product_name || 'Product'}'${sizeSuffix} in Order: ${orderNumber}`, req.user.id]);
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.error('Error deducting recipe ingredients:', e);
+                }
             }
 
             // Extra Stock Reduction (Countable raw materials like Egg, Chicken, Cheese, etc.)

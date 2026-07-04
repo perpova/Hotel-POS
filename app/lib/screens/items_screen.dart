@@ -765,14 +765,19 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
     _trackStock = p?.trackStock ?? true;
     _isHappyHourEligible = p?.isHappyHourEligible ?? true;
 
-    _sizesList = p?.sizes.map((s) => {'name': s.name, 'price': s.price}).toList() ?? [];
-    _extrasList = p?.extras.map((e) => {
+    _sizesList = p?.sizes.map<Map<String, dynamic>>((s) => <String, dynamic>{'name': s.name, 'price': s.price}).toList() ?? <Map<String, dynamic>>[];
+    _extrasList = p?.extras.map<Map<String, dynamic>>((e) => <String, dynamic>{
       'name': e.name,
       'price': e.price,
       'ingredient_id': e.ingredientId,
       'qty': e.qty,
-    }).toList() ?? [];
+    }).toList() ?? <Map<String, dynamic>>[];
     _selectedAddons = List<int>.from(p?.addons ?? []);
+    _recipeIngredientsList = p?.ingredients.map<Map<String, dynamic>>((ing) => <String, dynamic>{
+      'ingredient_id': ing.ingredientId,
+      'qty': ing.qty,
+      'size': ing.size,
+    }).toList() ?? <Map<String, dynamic>>[];
 
     for (var s in _sizesList) {
       _sizeNameControllers.add(TextEditingController(text: s['name']));
@@ -782,6 +787,9 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
       _extraNameControllers.add(TextEditingController(text: e['name']));
       _extraPriceControllers.add(TextEditingController(text: e['price'] > 0 ? e['price'].toString() : ''));
       _extraQtyControllers.add(TextEditingController(text: e['qty'] != null ? e['qty'].toString() : '1'));
+    }
+    for (var ing in _recipeIngredientsList) {
+      _recipeQtyControllers.add(TextEditingController(text: ing['qty'] > 0 ? ing['qty'].toString() : ''));
     }
 
     _sinhalaFocusNode.addListener(() {
@@ -803,6 +811,9 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
   List<TextEditingController> _extraNameControllers = [];
   List<TextEditingController> _extraPriceControllers = [];
   List<TextEditingController> _extraQtyControllers = [];
+
+  List<Map<String, dynamic>> _recipeIngredientsList = [];
+  List<TextEditingController> _recipeQtyControllers = [];
 
   void _addSizeRow() {
     setState(() {
@@ -843,6 +854,34 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
     });
   }
 
+  void _addRecipeIngredientRow() {
+    setState(() {
+      _recipeIngredientsList.add({'ingredient_id': null, 'qty': 0.0, 'size': null});
+      _recipeQtyControllers.add(TextEditingController());
+    });
+  }
+
+  void _removeRecipeIngredientRow(int index) {
+    setState(() {
+      _recipeIngredientsList.removeAt(index);
+      _recipeQtyControllers[index].dispose();
+      _recipeQtyControllers.removeAt(index);
+    });
+  }
+
+  List<String> _getActiveSizeNames() {
+    final names = <String>[];
+    for (int i = 0; i < _sizesList.length; i++) {
+      if (i < _sizeNameControllers.length) {
+        final name = _sizeNameControllers[i].text.trim();
+        if (name.isNotEmpty) {
+          names.add(name);
+        }
+      }
+    }
+    return names;
+  }
+
   @override
   void dispose() {
     _nameController.dispose();
@@ -857,6 +896,7 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
     for (var c in _extraNameControllers) c.dispose();
     for (var c in _extraPriceControllers) c.dispose();
     for (var c in _extraQtyControllers) c.dispose();
+    for (var c in _recipeQtyControllers) c.dispose();
     super.dispose();
   }
 
@@ -1078,6 +1118,18 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
       }
     }
 
+    final recipeIngredients = <Map<String, dynamic>>[];
+    for (int i = 0; i < _recipeIngredientsList.length; i++) {
+      final ing = _recipeIngredientsList[i];
+      if (ing['ingredient_id'] != null) {
+        recipeIngredients.add({
+          'ingredient_id': ing['ingredient_id'],
+          'qty': double.tryParse(_recipeQtyControllers[i].text) ?? 0.0,
+          'size': ing['size'],
+        });
+      }
+    }
+
     final payload = {
       'name': _nameController.text.trim(),
       'sinhala_name': _sinhalaNameController.text.trim().isEmpty ? null : _sinhalaNameController.text.trim(),
@@ -1099,6 +1151,7 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
       'sizes': sizes,
       'extras': extras,
       'addons': _hasAddons ? _selectedAddons : [],
+      'ingredients': recipeIngredients,
     };
 
     try {
@@ -1120,14 +1173,406 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
     }
   }
 
+  Widget _buildNameField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildLabel('NAME *'),
+        TextFormField(
+          controller: _nameController,
+          style: GoogleFonts.inter(fontSize: 13),
+          decoration: _buildInputDecoration('Enter product name'),
+          validator: (v) => v == null || v.trim().isEmpty ? 'Name is required' : null,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSinhalaNameField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildLabel('SINHALA NAME (SINGLISH PHONETIC TYPE-ON-THE-FLY)'),
+        ValueListenableBuilder<TextEditingValue>(
+          valueListenable: _sinhalaNameController,
+          builder: (context, value, _) {
+            final preview = SinhalaTransliteration.transliterate(value.text);
+            final hasEnglish = RegExp(r'[a-zA-Z]').hasMatch(value.text);
+            
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextFormField(
+                  controller: _sinhalaNameController,
+                  focusNode: _sinhalaFocusNode,
+                  style: GoogleFonts.inter(fontSize: 13),
+                  decoration: _buildInputDecoration(
+                    'e.g. Type "koththu" here to get "කොත්තු"',
+                  ).copyWith(
+                    suffixIcon: IconButton(
+                      icon: const Icon(Icons.translate, size: 16),
+                      tooltip: 'Convert to Sinhala now',
+                      onPressed: () {
+                        final englishText = _sinhalaNameController.text;
+                        final sinhalaText = SinhalaTransliteration.transliterate(englishText);
+                        if (sinhalaText.isNotEmpty) {
+                          setState(() {
+                            _sinhalaNameController.text = sinhalaText;
+                          });
+                        }
+                      },
+                    ),
+                  ),
+                ),
+                if (hasEnglish && preview.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Text(
+                        'Sinhala Preview: ',
+                        style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
+                      ),
+                      Text(
+                        preview,
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.accent,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPriceField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildLabel('PRICE *'),
+        TextFormField(
+          controller: _priceController,
+          style: GoogleFonts.inter(fontSize: 13),
+          decoration: _buildInputDecoration('Enter price'),
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          validator: (v) {
+            if (_hasSizes) return null;
+            if (v == null || v.trim().isEmpty) return 'Price is required';
+            if (double.tryParse(v) == null) return 'Invalid number';
+            return null;
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCategoryField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildLabel('CATEGORY *'),
+        Row(
+          children: [
+            Expanded(
+              child: Container(
+                height: 48,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFCBD5E1)),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<int>(
+                    value: _selectedCategoryId,
+                    hint: const Text('Select category', style: TextStyle(fontSize: 13)),
+                    isExpanded: true,
+                    items: _localCategories.map((c) {
+                      return DropdownMenuItem(value: c.id, child: Text(c.name, style: GoogleFonts.inter(fontSize: 13)));
+                    }).toList(),
+                    onChanged: (val) {
+                      setState(() {
+                        _selectedCategoryId = val;
+                      });
+                    },
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            IconButton(
+              icon: const Icon(Icons.add, color: Colors.white, size: 16),
+              style: IconButton.styleFrom(
+                backgroundColor: AppTheme.primary,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                padding: const EdgeInsets.all(12),
+              ),
+              tooltip: 'Add New Category',
+              onPressed: () => _showAddCategoryDialog(),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTaxField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildLabel('TAX (INCLUDING)'),
+        TextFormField(
+          controller: _taxController,
+          style: GoogleFonts.inter(fontSize: 13),
+          decoration: _buildInputDecoration('Enter tax %'),
+          keyboardType: TextInputType.number,
+          validator: (v) {
+            if (v != null && v.isNotEmpty && double.tryParse(v) == null) {
+              return 'Invalid number';
+            }
+            return null;
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildImageField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildLabel('IMAGE'),
+        Row(
+          children: [
+            CircleAvatar(
+              radius: 28,
+              backgroundColor: const Color(0xFFF1F5F9),
+              child: _imageBase64 != null && _imageBase64!.isNotEmpty
+                  ? ClipOval(
+                      child: Base64ImageWidget(
+                        base64Str: _imageBase64!,
+                        width: 56,
+                        height: 56,
+                        fit: BoxFit.cover,
+                      ),
+                    )
+                  : const Icon(Icons.image_outlined, color: Color(0xFF64748B), size: 24),
+            ),
+            const SizedBox(width: 16),
+            OutlinedButton(
+              onPressed: _pickImage,
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: Color(0xFFCBD5E1)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              child: Text('Choose File', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF475569))),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCustomizationOptions() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildLabel('POS CUSTOMIZATION OPTIONS'),
+        Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 12,
+          runSpacing: 8,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Checkbox(
+                  value: _hasSizes,
+                  activeColor: AppTheme.primary,
+                  onChanged: (val) {
+                    setState(() => _hasSizes = val ?? false);
+                  },
+                ),
+                Text('Sizes', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w500)),
+              ],
+            ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Checkbox(
+                  value: _hasExtras,
+                  activeColor: AppTheme.primary,
+                  onChanged: (val) {
+                    setState(() => _hasExtras = val ?? false);
+                  },
+                ),
+                Text('Extras', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w500)),
+              ],
+            ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Checkbox(
+                  value: _hasAddons,
+                  activeColor: AppTheme.primary,
+                  onChanged: (val) {
+                    setState(() => _hasAddons = val ?? false);
+                  },
+                ),
+                Text('Addons', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w500)),
+              ],
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildInventorySettings() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildLabel('POS INVENTORY SETTINGS'),
+        Row(
+          children: [
+            Checkbox(
+              value: _trackStock,
+              activeColor: AppTheme.primary,
+              onChanged: (val) {
+                setState(() => _trackStock = val ?? false);
+              },
+            ),
+            Text('Track Stock Level in POS', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w500)),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHappyHourSettings() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildLabel('HAPPY HOUR SETTINGS'),
+        Row(
+          children: [
+            Checkbox(
+              value: _isHappyHourEligible,
+              activeColor: AppTheme.primary,
+              onChanged: (val) {
+                setState(() => _isHappyHourEligible = val ?? true);
+              },
+            ),
+            Text('Available for Happy Hour Offer', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w500)),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildItemTypeField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildLabel('ITEM TYPE'),
+        Row(
+          children: [
+            _buildRadioButton('Veg', _itemType == 'Veg', (val) {
+              setState(() => _itemType = 'Veg');
+            }),
+            const SizedBox(width: 24),
+            _buildRadioButton('Non Veg', _itemType == 'Non Veg', (val) {
+              setState(() => _itemType = 'Non Veg');
+            }),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildIsFeaturedField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildLabel('IS FEATURED'),
+        Row(
+          children: [
+            _buildRadioButton('Yes', _isFeatured == true, (val) {
+              setState(() => _isFeatured = true);
+            }),
+            const SizedBox(width: 24),
+            _buildRadioButton('No', _isFeatured == false, (val) {
+              setState(() => _isFeatured = false);
+            }),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatusField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildLabel('STATUS'),
+        Row(
+          children: [
+            _buildRadioButton('Active', _status == 'active', (val) {
+              setState(() => _status = 'active');
+            }),
+            const SizedBox(width: 24),
+            _buildRadioButton('Inactive', _status == 'inactive', (val) {
+              setState(() => _status = 'inactive');
+            }),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCautionField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildLabel('CAUTION'),
+        TextFormField(
+          controller: _cautionController,
+          style: GoogleFonts.inter(fontSize: 13),
+          decoration: _buildInputDecoration('Enter caution guidelines'),
+          maxLines: 2,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDescriptionField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildLabel('DESCRIPTION'),
+        TextFormField(
+          controller: _descriptionController,
+          style: GoogleFonts.inter(fontSize: 13),
+          decoration: _buildInputDecoration('Enter description'),
+          maxLines: 3,
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
-    final isViewMode = widget.product != null && _isSubmitting == false && ModalRoute.of(context)!.settings.arguments == 'view';
-    // Actually we will allow edit mode.
+    final isWide = size.width > 900;
+    final drawerWidth = isWide ? size.width * 0.5 : (size.width > 500 ? 460.0 : size.width * 0.85);
 
     return Container(
-      width: size.width > 500 ? 460 : size.width * 0.85,
+      width: drawerWidth,
       height: size.height,
       decoration: const BoxDecoration(
         color: Colors.white,
@@ -1168,247 +1613,89 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Product Name
-                    _buildLabel('NAME *'),
-                    TextFormField(
-                      controller: _nameController,
-                      style: GoogleFonts.inter(fontSize: 13),
-                      decoration: _buildInputDecoration('Enter product name'),
-                      validator: (v) => v == null || v.trim().isEmpty ? 'Name is required' : null,
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Sinhala Name
-                    _buildLabel('SINHALA NAME (SINGLISH PHONETIC TYPE-ON-THE-FLY)'),
-                    ValueListenableBuilder<TextEditingValue>(
-                      valueListenable: _sinhalaNameController,
-                      builder: (context, value, _) {
-                        final preview = SinhalaTransliteration.transliterate(value.text);
-                        final hasEnglish = RegExp(r'[a-zA-Z]').hasMatch(value.text);
-                        
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            TextFormField(
-                              controller: _sinhalaNameController,
-                              focusNode: _sinhalaFocusNode,
-                              style: GoogleFonts.inter(fontSize: 13),
-                              decoration: _buildInputDecoration(
-                                'e.g. Type "koththu" here to get "කොත්තු"',
-                              ).copyWith(
-                                suffixIcon: IconButton(
-                                  icon: const Icon(Icons.translate, size: 16),
-                                  tooltip: 'Convert to Sinhala now',
-                                  onPressed: () {
-                                    final englishText = _sinhalaNameController.text;
-                                    final sinhalaText = SinhalaTransliteration.transliterate(englishText);
-                                    if (sinhalaText.isNotEmpty) {
-                                      setState(() {
-                                        _sinhalaNameController.text = sinhalaText;
-                                      });
-                                    }
-                                  },
-                                ),
-                              ),
+                    if (isWide)
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Left Column
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _buildNameField(),
+                                const SizedBox(height: 16),
+                                _buildSinhalaNameField(),
+                                const SizedBox(height: 16),
+                                _buildCategoryField(),
+                                const SizedBox(height: 16),
+                                _buildImageField(),
+                                const SizedBox(height: 16),
+                                _buildItemTypeField(),
+                                const SizedBox(height: 16),
+                                _buildIsFeaturedField(),
+                                const SizedBox(height: 16),
+                                _buildStatusField(),
+                              ],
                             ),
-                            if (hasEnglish && preview.isNotEmpty) ...[
-                              const SizedBox(height: 6),
-                              Row(
-                                children: [
-                                  Text(
-                                    'Sinhala Preview: ',
-                                    style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
-                                  ),
-                                  Text(
-                                    preview,
-                                    style: GoogleFonts.inter(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                      color: AppTheme.accent,
-                                    ),
-                                  ),
+                          ),
+                          const SizedBox(width: 32),
+                          // Right Column
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (!_hasSizes) ...[
+                                  _buildPriceField(),
+                                  const SizedBox(height: 16),
                                 ],
-                              ),
-                            ],
-                          ],
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Price
-                    if (!_hasSizes) ...[
-                      _buildLabel('PRICE *'),
-                      TextFormField(
-                        controller: _priceController,
-                        style: GoogleFonts.inter(fontSize: 13),
-                        decoration: _buildInputDecoration('Enter price'),
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        validator: (v) {
-                          if (_hasSizes) return null;
-                          if (v == null || v.trim().isEmpty) return 'Price is required';
-                          if (double.tryParse(v) == null) return 'Invalid number';
-                          return null;
-                        },
-                      ),
+                                _buildTaxField(),
+                                const SizedBox(height: 16),
+                                _buildCustomizationOptions(),
+                                const SizedBox(height: 16),
+                                _buildInventorySettings(),
+                                const SizedBox(height: 16),
+                                _buildHappyHourSettings(),
+                                const SizedBox(height: 16),
+                                _buildCautionField(),
+                                const SizedBox(height: 16),
+                                _buildDescriptionField(),
+                              ],
+                            ),
+                          ),
+                        ],
+                      )
+                    else ...[
+                      _buildNameField(),
                       const SizedBox(height: 16),
+                      _buildSinhalaNameField(),
+                      const SizedBox(height: 16),
+                      if (!_hasSizes) ...[
+                        _buildPriceField(),
+                        const SizedBox(height: 16),
+                      ],
+                      _buildCategoryField(),
+                      const SizedBox(height: 16),
+                      _buildTaxField(),
+                      const SizedBox(height: 16),
+                      _buildImageField(),
+                      const SizedBox(height: 16),
+                      _buildCustomizationOptions(),
+                      const SizedBox(height: 16),
+                      _buildInventorySettings(),
+                      const SizedBox(height: 16),
+                      _buildHappyHourSettings(),
+                      const SizedBox(height: 16),
+                      _buildItemTypeField(),
+                      const SizedBox(height: 16),
+                      _buildIsFeaturedField(),
+                      const SizedBox(height: 16),
+                      _buildStatusField(),
+                      const SizedBox(height: 16),
+                      _buildCautionField(),
+                      const SizedBox(height: 16),
+                      _buildDescriptionField(),
                     ],
-
-                    // Category Dropdown with "+ Add Category" button
-                    _buildLabel('CATEGORY *'),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Container(
-                            height: 48,
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: const Color(0xFFCBD5E1)),
-                            ),
-                            child: DropdownButtonHideUnderline(
-                              child: DropdownButton<int>(
-                                value: _selectedCategoryId,
-                                hint: const Text('Select category', style: TextStyle(fontSize: 13)),
-                                isExpanded: true,
-                                items: _localCategories.map((c) {
-                                  return DropdownMenuItem(value: c.id, child: Text(c.name, style: GoogleFonts.inter(fontSize: 13)));
-                                }).toList(),
-                                onChanged: (val) {
-                                  setState(() {
-                                    _selectedCategoryId = val;
-                                  });
-                                },
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          icon: const Icon(Icons.add, color: Colors.white, size: 16),
-                          style: IconButton.styleFrom(
-                            backgroundColor: AppTheme.primary,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                            padding: const EdgeInsets.all(12),
-                          ),
-                          tooltip: 'Add New Category',
-                          onPressed: () => _showAddCategoryDialog(),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Tax (Including)
-                    _buildLabel('TAX (INCLUDING)'),
-                    TextFormField(
-                      controller: _taxController,
-                      style: GoogleFonts.inter(fontSize: 13),
-                      decoration: _buildInputDecoration('Enter tax %'),
-                      keyboardType: TextInputType.number,
-                      validator: (v) {
-                        if (v != null && v.isNotEmpty && double.tryParse(v) == null) {
-                          return 'Invalid number';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Image Upload
-                    _buildLabel('IMAGE'),
-                    Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 28,
-                          backgroundColor: const Color(0xFFF1F5F9),
-                          child: _imageBase64 != null && _imageBase64!.isNotEmpty
-                              ? ClipOval(
-                                  child: Base64ImageWidget(
-                                    base64Str: _imageBase64!,
-                                    width: 56,
-                                    height: 56,
-                                    fit: BoxFit.cover,
-                                  ),
-                                )
-                              : const Icon(Icons.image_outlined, color: Color(0xFF64748B), size: 24),
-                        ),
-                        const SizedBox(width: 16),
-                        OutlinedButton(
-                          onPressed: _pickImage,
-                          style: OutlinedButton.styleFrom(
-                            side: const BorderSide(color: Color(0xFFCBD5E1)),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          ),
-                          child: Text('Choose File', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF475569))),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Customization Options
-                    _buildLabel('POS CUSTOMIZATION OPTIONS'),
-                    Row(
-                      children: [
-                        Checkbox(
-                          value: _hasSizes,
-                          activeColor: AppTheme.primary,
-                          onChanged: (val) {
-                            setState(() => _hasSizes = val ?? false);
-                          },
-                        ),
-                        Text('Sizes', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w500)),
-                        const SizedBox(width: 12),
-                        Checkbox(
-                          value: _hasExtras,
-                          activeColor: AppTheme.primary,
-                          onChanged: (val) {
-                            setState(() => _hasExtras = val ?? false);
-                          },
-                        ),
-                        Text('Extras', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w500)),
-                        const SizedBox(width: 12),
-                        Checkbox(
-                          value: _hasAddons,
-                          activeColor: AppTheme.primary,
-                          onChanged: (val) {
-                            setState(() => _hasAddons = val ?? false);
-                          },
-                        ),
-                        Text('Addons', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w500)),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Inventory Settings
-                    _buildLabel('POS INVENTORY SETTINGS'),
-                    Row(
-                      children: [
-                        Checkbox(
-                          value: _trackStock,
-                          activeColor: AppTheme.primary,
-                          onChanged: (val) {
-                            setState(() => _trackStock = val ?? false);
-                          },
-                        ),
-                        Text('Track Stock Level in POS', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w500)),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Happy Hour Settings
-                    _buildLabel('HAPPY HOUR SETTINGS'),
-                    Row(
-                      children: [
-                        Checkbox(
-                          value: _isHappyHourEligible,
-                          activeColor: AppTheme.primary,
-                          onChanged: (val) {
-                            setState(() => _isHappyHourEligible = val ?? true);
-                          },
-                        ),
-                        Text('Available for Happy Hour Offer', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w500)),
-                      ],
-                    ),
+                    
                     const SizedBox(height: 16),
 
                     if (_hasSizes) ...[
@@ -1657,69 +1944,143 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
                       const SizedBox(height: 16),
                     ],
 
-                    // Item Type (Veg / Non Veg)
-                    _buildLabel('ITEM TYPE'),
                     Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        _buildRadioButton('Veg', _itemType == 'Veg', (val) {
-                          setState(() => _itemType = 'Veg');
-                        }),
-                        const SizedBox(width: 24),
-                        _buildRadioButton('Non Veg', _itemType == 'Non Veg', (val) {
-                          setState(() => _itemType = 'Non Veg');
-                        }),
+                        _buildLabel('PRODUCT RECIPE (RAW MATERIALS)'),
+                        TextButton.icon(
+                          onPressed: _addRecipeIngredientRow,
+                          icon: const Icon(Icons.add, size: 14),
+                          label: const Text('Add Ingredient', style: TextStyle(fontSize: 12)),
+                          style: TextButton.styleFrom(
+                            foregroundColor: AppTheme.primary,
+                            padding: EdgeInsets.zero,
+                          ),
+                        ),
                       ],
                     ),
-                    const SizedBox(height: 16),
+                    if (_recipeIngredientsList.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8.0),
+                        child: Text(
+                          'No ingredients linked. Click "Add Ingredient" to configure recipe.',
+                          style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8), fontStyle: FontStyle.italic),
+                        ),
+                      )
+                    else
+                      ...List.generate(_recipeIngredientsList.length, (index) {
+                        final item = _recipeIngredientsList[index];
+                        final activeSizes = _getActiveSizeNames();
+                        final String? currentSize = item['size'];
+                        final dropdownItems = [
+                          const DropdownMenuItem<String?>(
+                            value: null,
+                            child: Text('All Sizes', style: TextStyle(fontSize: 11)),
+                          ),
+                          ...activeSizes.map((name) {
+                            return DropdownMenuItem<String?>(
+                              value: name,
+                              child: Text(name, style: const TextStyle(fontSize: 11)),
+                            );
+                          }),
+                        ];
+                        if (currentSize != null && !activeSizes.contains(currentSize)) {
+                          dropdownItems.add(
+                            DropdownMenuItem<String?>(
+                              value: currentSize,
+                              child: Text(currentSize, style: const TextStyle(fontSize: 11)),
+                            )
+                          );
+                        }
 
-                    // Is Featured
-                    _buildLabel('IS FEATURED'),
-                    Row(
-                      children: [
-                        _buildRadioButton('Yes', _isFeatured == true, (val) {
-                          setState(() => _isFeatured = true);
-                        }),
-                        const SizedBox(width: 24),
-                        _buildRadioButton('No', _isFeatured == false, (val) {
-                          setState(() => _isFeatured = false);
-                        }),
-                      ],
-                    ),
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 8.0),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                flex: 3,
+                                child: Container(
+                                  height: 38,
+                                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: const Color(0xFFCBD5E1)),
+                                  ),
+                                  child: DropdownButtonHideUnderline(
+                                    child: DropdownButton<int?>(
+                                      value: item['ingredient_id'],
+                                      hint: const Text('Select Ingredient', style: TextStyle(fontSize: 11)),
+                                      isExpanded: true,
+                                      style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF1E293B)),
+                                      items: widget.ingredients.map((ing) {
+                                        return DropdownMenuItem<int?>(
+                                          value: ing.id,
+                                          child: Text('${ing.name} (${ing.unit})', style: const TextStyle(fontSize: 11)),
+                                        );
+                                      }).toList(),
+                                      onChanged: (val) {
+                                        setState(() {
+                                          item['ingredient_id'] = val;
+                                        });
+                                      },
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              if (_hasSizes) ...[
+                                Expanded(
+                                  flex: 2,
+                                  child: Container(
+                                    height: 38,
+                                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(color: const Color(0xFFCBD5E1)),
+                                    ),
+                                    child: DropdownButtonHideUnderline(
+                                      child: DropdownButton<String?>(
+                                        value: currentSize,
+                                        hint: const Text('All Sizes', style: TextStyle(fontSize: 11)),
+                                        isExpanded: true,
+                                        style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF1E293B)),
+                                        items: dropdownItems,
+                                        onChanged: (val) {
+                                          setState(() {
+                                            item['size'] = val;
+                                          });
+                                        },
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                              ],
+                              Expanded(
+                                flex: 2,
+                                child: TextFormField(
+                                  controller: _recipeQtyControllers[index],
+                                  style: GoogleFonts.inter(fontSize: 11),
+                                  decoration: _buildInputDecoration('Qty (e.g. 0.2)'),
+                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                  validator: (v) {
+                                    if (item['ingredient_id'] != null) {
+                                      if (v == null || v.trim().isEmpty) return 'Req';
+                                      if (double.tryParse(v) == null) return 'Inv';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.delete_outline, color: AppTheme.danger, size: 18),
+                                onPressed: () => _removeRecipeIngredientRow(index),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
                     const SizedBox(height: 16),
-
-                    // Status (Active / Inactive)
-                    _buildLabel('STATUS'),
-                    Row(
-                      children: [
-                        _buildRadioButton('Active', _status == 'active', (val) {
-                          setState(() => _status = 'active');
-                        }),
-                        const SizedBox(width: 24),
-                        _buildRadioButton('Inactive', _status == 'inactive', (val) {
-                          setState(() => _status = 'inactive');
-                        }),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Caution
-                    _buildLabel('CAUTION'),
-                    TextFormField(
-                      controller: _cautionController,
-                      style: GoogleFonts.inter(fontSize: 13),
-                      decoration: _buildInputDecoration('Enter caution guidelines'),
-                      maxLines: 2,
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Description
-                    _buildLabel('DESCRIPTION'),
-                    TextFormField(
-                      controller: _descriptionController,
-                      style: GoogleFonts.inter(fontSize: 13),
-                      decoration: _buildInputDecoration('Enter description'),
-                      maxLines: 3,
-                    ),
                     const SizedBox(height: 24),
                   ],
                 ),
