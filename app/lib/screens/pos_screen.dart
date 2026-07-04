@@ -34,6 +34,9 @@ class _POSScreenState extends State<POSScreen> {
   final TextEditingController _discountController = TextEditingController();
   final TextEditingController _barcodeInputController = TextEditingController();
   final TextEditingController _tokenNoController = TextEditingController();
+  final TextEditingController _customerSearchController = TextEditingController();
+  bool _isCustomerDropdownOpen = false;
+  String _customerSearchQuery = '';
 
   String _discountType = 'percent';
 
@@ -48,6 +51,7 @@ class _POSScreenState extends State<POSScreen> {
     _discountController.dispose();
     _barcodeInputController.dispose();
     _tokenNoController.dispose();
+    _customerSearchController.dispose();
     super.dispose();
   }
 
@@ -453,19 +457,32 @@ class _POSScreenState extends State<POSScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'LKR ${product.activePrice.toStringAsFixed(0)}',
-                          style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.bold, color: AppTheme.primary),
+                        Builder(
+                          builder: (context) {
+                            final currentPrice = controller.getProductActivePrice(product);
+                            final isHappyHour = currentPrice < product.price;
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'LKR ${currentPrice.toStringAsFixed(0)}',
+                                  style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.bold, color: AppTheme.primary),
+                                ),
+                                if (isHappyHour)
+                                  Text(
+                                    'LKR ${product.price.toStringAsFixed(0)}',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 9,
+                                      color: AppTheme.textLightSecondary,
+                                      decoration: TextDecoration.lineThrough,
+                                      decorationColor: Colors.red,
+                                      decorationThickness: 1.5,
+                                    ),
+                                  ),
+                              ],
+                            );
+                          }
                         ),
-                        if (product.isHappyHour)
-                          Text(
-                            'LKR ${product.price.toStringAsFixed(0)}',
-                            style: GoogleFonts.inter(
-                              fontSize: 9,
-                              color: AppTheme.textLightSecondary,
-                              decoration: TextDecoration.lineThrough,
-                            ),
-                          ),
                       ],
                     ),
                   ),
@@ -475,7 +492,8 @@ class _POSScreenState extends State<POSScreen> {
                             if (product.hasSizes || product.hasExtras || product.hasAddons) {
                               _showProductOptionsModal(product, controller);
                             } else {
-                              controller.addToCart(product, quantity: 1);
+                              final activePrice = controller.getProductActivePrice(product);
+                              controller.addToCart(product, quantity: 1, customPrice: activePrice);
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text('${product.name} successfully added to cart'),
@@ -524,6 +542,18 @@ class _POSScreenState extends State<POSScreen> {
   // RIGHT: BILLING AREA
   // ----------------------------------------------------
   Widget _buildBillingArea(POSController controller) {
+    // Keep UI discount inputs in sync with controller state
+    if (controller.cart.isEmpty) {
+      if (_discountController.text.isNotEmpty) {
+        _discountController.clear();
+      }
+    } else {
+      if (controller.rawDiscountValue > 0 && (_discountController.text.isEmpty || _discountController.text == '0')) {
+        _discountController.text = controller.rawDiscountValue.toStringAsFixed(0);
+        _discountType = controller.discountType;
+      }
+    }
+
     return Container(
       color: Colors.white,
       padding: const EdgeInsets.all(16),
@@ -532,35 +562,133 @@ class _POSScreenState extends State<POSScreen> {
         children: [
           // Customer Picker Header styled like FoodKing
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: Container(
-                  height: 36,
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
-                  ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButtonFormField<CustomerModel>(
-                      value: controller.selectedCustomer,
-                      decoration: const InputDecoration(
-                        border: InputBorder.none,
-                        enabledBorder: InputBorder.none,
-                        focusedBorder: InputBorder.none,
-                        filled: false,
-                        contentPadding: EdgeInsets.zero,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    InkWell(
+                      onTap: () {
+                        setState(() {
+                          _isCustomerDropdownOpen = !_isCustomerDropdownOpen;
+                          if (_isCustomerDropdownOpen) {
+                            _customerSearchQuery = '';
+                            _customerSearchController.clear();
+                          }
+                        });
+                      },
+                      child: Container(
+                        height: 36,
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                controller.selectedCustomer != null
+                                    ? '${controller.selectedCustomer!.name} (${controller.selectedCustomer!.phone})'
+                                    : 'Select Customer',
+                                style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF1E293B), fontWeight: FontWeight.bold),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const Icon(Icons.arrow_drop_down, color: Color(0xFF64748B), size: 18),
+                          ],
+                        ),
                       ),
-                      items: [
-                        ...controller.customers.map((c) => DropdownMenuItem(
-                              value: c,
-                              child: Text('${c.name} (${c.phone})', style: GoogleFonts.inter(fontSize: 11)),
-                            )),
-                      ],
-                      onChanged: (c) => controller.selectCustomer(c),
                     ),
-                  ),
+                    if (_isCustomerDropdownOpen) ...[
+                      const SizedBox(height: 4),
+                      Container(
+                        constraints: const BoxConstraints(maxHeight: 200),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.05),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            )
+                          ],
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.all(6.0),
+                              child: Container(
+                                height: 32,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF1F5F9),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: TextField(
+                                  controller: _customerSearchController,
+                                  autofocus: true,
+                                  style: GoogleFonts.inter(fontSize: 11),
+                                  onChanged: (val) {
+                                    setState(() {
+                                      _customerSearchQuery = val;
+                                    });
+                                  },
+                                  decoration: InputDecoration(
+                                    hintText: 'Search customer name or phone...',
+                                    hintStyle: GoogleFonts.inter(fontSize: 10, color: const Color(0xFF94A3B8)),
+                                    prefixIcon: const Icon(Icons.search, size: 14, color: Color(0xFF94A3B8)),
+                                    border: InputBorder.none,
+                                    isDense: true,
+                                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                            Flexible(
+                              child: ListView(
+                                shrinkWrap: true,
+                                padding: EdgeInsets.zero,
+                                children: [
+                                  ...controller.customers
+                                      .where((c) {
+                                        if (_customerSearchQuery.isEmpty) return true;
+                                        final term = _customerSearchQuery.toLowerCase();
+                                        return c.name.toLowerCase().contains(term) ||
+                                            c.phone.contains(term);
+                                      })
+                                      .map((c) => ListTile(
+                                            dense: true,
+                                            visualDensity: VisualDensity.compact,
+                                            title: Text(
+                                              '${c.name} (${c.phone})',
+                                              style: GoogleFonts.inter(
+                                                fontSize: 11,
+                                                fontWeight: controller.selectedCustomer?.id == c.id ? FontWeight.bold : FontWeight.normal,
+                                                color: controller.selectedCustomer?.id == c.id ? AppTheme.primary : const Color(0xFF1E293B),
+                                              ),
+                                            ),
+                                            onTap: () {
+                                              controller.selectCustomer(c);
+                                              setState(() {
+                                                _isCustomerDropdownOpen = false;
+                                              });
+                                            },
+                                          )),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
               const SizedBox(width: 8),
@@ -770,14 +898,15 @@ class _POSScreenState extends State<POSScreen> {
           const Divider(height: 1, color: Color(0xFFE2E8F0)),
           const SizedBox(height: 8),
 
-          // Discount selector and Apply button row
+          // Discount selector row (no Apply button needed)
           Row(
             children: [
               InkWell(
                 onTap: () {
                   setState(() {
                     _discountType = _discountType == 'percent' ? 'fixed' : 'percent';
-                    _applyDiscount(controller);
+                    final parsed = double.tryParse(_discountController.text) ?? 0.0;
+                    controller.updateDiscount(parsed, _discountType);
                   });
                 },
                 borderRadius: BorderRadius.circular(10),
@@ -824,20 +953,12 @@ class _POSScreenState extends State<POSScreen> {
                       contentPadding: const EdgeInsets.symmetric(vertical: 10),
                     ),
                     keyboardType: TextInputType.number,
+                    onChanged: (val) {
+                      final parsed = double.tryParse(val) ?? 0.0;
+                      controller.updateDiscount(parsed, _discountType);
+                    },
                   ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              ElevatedButton(
-                onPressed: () => _applyDiscount(controller),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF0F766E), // Teal
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  minimumSize: const Size(70, 44),
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                ),
-                child: Text('Apply', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold)),
               ),
             ],
           ),
@@ -1122,7 +1243,7 @@ class _POSScreenState extends State<POSScreen> {
     final List<Map<String, dynamic>> sizes = product.hasSizes && product.sizes.isNotEmpty
         ? product.sizes.map((s) => {'name': s.name, 'price': s.price}).toList()
         : [
-            {'name': 'Regular', 'price': product.activePrice},
+            {'name': 'Regular', 'price': controller.getProductActivePrice(product)},
           ];
           
     final List<Map<String, dynamic>> extras = product.hasExtras && product.extras.isNotEmpty
@@ -1139,7 +1260,7 @@ class _POSScreenState extends State<POSScreen> {
         if (addonProd.id != 0) {
           addons.add({
             'name': addonProd.name,
-            'price': addonProd.activePrice,
+            'price': controller.getProductActivePrice(addonProd),
             'image': Icons.local_drink_outlined,
             'product': addonProd,
           });
@@ -1169,7 +1290,7 @@ class _POSScreenState extends State<POSScreen> {
 
         return StatefulBuilder(
           builder: (context, setModalState) {
-            double basePrice = product.hasSizes ? selectedSizePrice : product.activePrice;
+            double basePrice = product.hasSizes ? selectedSizePrice : controller.getProductActivePrice(product);
             double extrasSum = 0.0;
             selectedExtrasQty.forEach((name, qty) {
               final exObj = extras.firstWhere((e) => e['name'] == name);
@@ -1622,7 +1743,7 @@ class _POSScreenState extends State<POSScreen> {
                             price: product.price,
                             cost: product.cost,
                             activePrice: finalItemPrice, // Dynamic updated price including size and extras
-                            isHappyHour: product.isHappyHour,
+                            isHappyHour: controller.getProductActivePrice(product) < product.price,
                             barcode: product.barcode,
                             stockQty: product.stockQty,
                             minStockLevel: product.minStockLevel,
@@ -1652,12 +1773,13 @@ class _POSScreenState extends State<POSScreen> {
                             }
                           });
 
-                          // 1. Add main item to cart
+                          // 1. Add main item to cart with the finalItemPrice (which includes happy hour + size + extras)
                           controller.addToCart(
                             customProduct,
                             quantity: itemQty,
                             notes: finalNotes,
                             extras: selectedProductExtras,
+                            customPrice: finalItemPrice,
                           );
 
                           // 2. Add addons to cart separately
@@ -1701,65 +1823,147 @@ class _POSScreenState extends State<POSScreen> {
     _customerBirthdayController.clear();
     _customerLimitController.clear();
     
+    final formKey = GlobalKey<FormState>();
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Register New Customer'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(controller: _customerNameController, decoration: const InputDecoration(labelText: 'Name')),
-              const SizedBox(height: 10),
-              TextField(controller: _customerPhoneController, decoration: const InputDecoration(labelText: 'Phone Number')),
-              const SizedBox(height: 10),
-              TextField(controller: _customerBirthdayController, decoration: const InputDecoration(labelText: 'Birthday (YYYY-MM-DD)', hintText: '1990-05-15')),
-              const SizedBox(height: 10),
-              TextField(controller: _customerLimitController, decoration: const InputDecoration(labelText: 'Credit Limit (LKR)', hintText: '50000')),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () async {
-              try {
-                final double limit = double.tryParse(_customerLimitController.text) ?? 0.00;
-                final data = {
-                  'name': _customerNameController.text,
-                  'phone': _customerPhoneController.text,
-                  'birthday': _customerBirthdayController.text.isEmpty ? null : _customerBirthdayController.text,
-                  'credit_limit': limit
-                };
-                
-                if (controller.isOnline) {
-                  await APIService.instance.createCustomer(data);
-                } else {
-                  final newC = CustomerModel(
-                    id: DateTime.now().millisecondsSinceEpoch,
-                    name: _customerNameController.text,
-                    phone: _customerPhoneController.text,
-                    birthday: _customerBirthdayController.text.isEmpty ? null : _customerBirthdayController.text,
-                    creditLimit: limit,
-                    outstandingBalance: 0.00,
-                  );
-                  controller.customers.add(newC);
-                }
-                
-                await controller.reloadEnvironment();
-                if (mounted) {
-                  Navigator.pop(context);
-                }
-              } catch (e) {
-                if (mounted) {
-                  _showErrorSnackBar('Customer save failed: $e');
-                }
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            Future<void> selectBirthday() async {
+              DateTime initial = DateTime.now().subtract(const Duration(days: 365 * 25));
+              if (_customerBirthdayController.text.isNotEmpty) {
+                initial = DateTime.tryParse(_customerBirthdayController.text) ?? initial;
               }
-            },
-            child: const Text('Register'),
-          ),
-        ],
-      ),
+              final picked = await showDatePicker(
+                context: context,
+                initialDate: initial,
+                firstDate: DateTime(1920),
+                lastDate: DateTime.now(),
+              );
+              if (picked != null) {
+                setState(() {
+                  _customerBirthdayController.text = "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
+                });
+              }
+            }
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Text('Register New Customer', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+              content: Form(
+                key: formKey,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('NAME *', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: const Color(0xFF64748B))),
+                      const SizedBox(height: 6),
+                      TextFormField(
+                        controller: _customerNameController,
+                        style: GoogleFonts.inter(fontSize: 13),
+                        validator: (val) => val == null || val.isEmpty ? 'Please enter customer name' : null,
+                        decoration: const InputDecoration(hintText: 'Enter customer name'),
+                      ),
+                      const SizedBox(height: 16),
+                      
+                      Text('PHONE NUMBER *', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: const Color(0xFF64748B))),
+                      const SizedBox(height: 6),
+                      TextFormField(
+                        controller: _customerPhoneController,
+                        style: GoogleFonts.inter(fontSize: 13),
+                        keyboardType: TextInputType.phone,
+                        validator: (val) => val == null || val.isEmpty ? 'Please enter phone number' : null,
+                        decoration: const InputDecoration(hintText: 'Enter phone number'),
+                      ),
+                      const SizedBox(height: 16),
+                      
+                      Text('BIRTHDAY', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: const Color(0xFF64748B))),
+                      const SizedBox(height: 6),
+                      TextFormField(
+                        controller: _customerBirthdayController,
+                        style: GoogleFonts.inter(fontSize: 13),
+                        readOnly: true,
+                        onTap: selectBirthday,
+                        decoration: const InputDecoration(
+                          hintText: 'yyyy-mm-dd',
+                          suffixIcon: Icon(Icons.calendar_today, size: 16, color: Color(0xFF64748B)),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      
+                      Text('CREDIT LIMIT (LKR)', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: const Color(0xFF64748B))),
+                      const SizedBox(height: 6),
+                      TextFormField(
+                        controller: _customerLimitController,
+                        style: GoogleFonts.inter(fontSize: 13),
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(hintText: 'Enter credit limit'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text('Cancel', style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: const Color(0xFF64748B))),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    if (!formKey.currentState!.validate()) return;
+                    try {
+                      final double limit = double.tryParse(_customerLimitController.text) ?? 0.00;
+                      final data = {
+                        'name': _customerNameController.text,
+                        'phone': _customerPhoneController.text,
+                        'birthday': _customerBirthdayController.text.isEmpty ? null : _customerBirthdayController.text,
+                        'credit_limit': limit
+                      };
+                      
+                      if (controller.isOnline) {
+                        await APIService.instance.createCustomer(data);
+                      } else {
+                        final newC = CustomerModel(
+                          id: DateTime.now().millisecondsSinceEpoch,
+                          name: _customerNameController.text,
+                          phone: _customerPhoneController.text,
+                          birthday: _customerBirthdayController.text.isEmpty ? null : _customerBirthdayController.text,
+                          creditLimit: limit,
+                          outstandingBalance: 0.00,
+                        );
+                        controller.customers.add(newC);
+                      }
+                      
+                      await controller.reloadEnvironment();
+                      if (context.mounted) {
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Customer registered successfully'), backgroundColor: AppTheme.accent),
+                        );
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Customer save failed: $e'), backgroundColor: AppTheme.danger),
+                        );
+                      }
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  ),
+                  child: Text('Register', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 

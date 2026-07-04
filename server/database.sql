@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS products (
     has_extras BOOLEAN DEFAULT FALSE,
     has_addons BOOLEAN DEFAULT FALSE,
     track_stock BOOLEAN DEFAULT TRUE,
+    is_happy_hour_eligible BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (category_id) REFERENCES categories(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -62,7 +63,9 @@ CREATE TABLE IF NOT EXISTS happy_hour_pricing (
     end_time TIME NOT NULL,
     days_of_week VARCHAR(50) DEFAULT '1,2,3,4,5,6,7', -- Comma-separated days (1=Mon, 7=Sun)
     status ENUM('active', 'inactive') DEFAULT 'active',
-    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+    category_id INT NULL,
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+    FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 5. Table Management

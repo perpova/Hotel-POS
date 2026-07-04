@@ -235,6 +235,7 @@ app.get('/api/products', async (req, res) => {
                 has_extras: !!p.has_extras,
                 has_addons: !!p.has_addons,
                 track_stock: p.track_stock === undefined || p.track_stock === null ? true : !!p.track_stock,
+                is_happy_hour_eligible: p.is_happy_hour_eligible === undefined || p.is_happy_hour_eligible === null ? true : !!p.is_happy_hour_eligible,
                 sizes: p.sizes ? JSON.parse(p.sizes) : [],
                 extras: p.extras ? JSON.parse(p.extras) : [],
                 addons: p.addons ? JSON.parse(p.addons) : []
@@ -391,7 +392,7 @@ app.post('/api/products', authenticateToken, async (req, res) => {
         stock_qty, min_stock_level, is_short_eat, status, image_base64,
         item_type, tax, is_featured, caution,
         has_sizes, has_extras, has_addons, track_stock,
-        sizes, extras, addons
+        sizes, extras, addons, is_happy_hour_eligible
     } = req.body;
     
     try {
@@ -401,8 +402,8 @@ app.post('/api/products', authenticateToken, async (req, res) => {
                 stock_qty, min_stock_level, is_short_eat, status, image_base64,
                 item_type, tax, is_featured, caution,
                 has_sizes, has_extras, has_addons, track_stock,
-                sizes, extras, addons
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                sizes, extras, addons, is_happy_hour_eligible
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [
             name, sinhala_name || null, description || null, category_id, price, cost || 0.00, barcode || null,
             stock_qty || 0, min_stock_level || 10, is_short_eat ? 1 : 0, status || 'active', image_base64 || null,
@@ -410,7 +411,8 @@ app.post('/api/products', authenticateToken, async (req, res) => {
             has_sizes ? 1 : 0, has_extras ? 1 : 0, has_addons ? 1 : 0, track_stock !== undefined ? (track_stock ? 1 : 0) : 1,
             sizes ? JSON.stringify(sizes) : null,
             extras ? JSON.stringify(extras) : null,
-            addons ? JSON.stringify(addons) : null
+            addons ? JSON.stringify(addons) : null,
+            is_happy_hour_eligible !== undefined ? (is_happy_hour_eligible ? 1 : 0) : 1
         ]);
         
         const newId = result.insertId;
@@ -436,7 +438,7 @@ app.put('/api/products/:id', authenticateToken, async (req, res) => {
         stock_qty, min_stock_level, is_short_eat, status, image_base64,
         item_type, tax, is_featured, caution,
         has_sizes, has_extras, has_addons, track_stock,
-        sizes, extras, addons
+        sizes, extras, addons, is_happy_hour_eligible
     } = req.body;
     
     try {
@@ -446,7 +448,7 @@ app.put('/api/products/:id', authenticateToken, async (req, res) => {
                 stock_qty = ?, min_stock_level = ?, is_short_eat = ?, status = ?, image_base64 = ?,
                 item_type = ?, tax = ?, is_featured = ?, caution = ?,
                 has_sizes = ?, has_extras = ?, has_addons = ?, track_stock = ?,
-                sizes = ?, extras = ?, addons = ?
+                sizes = ?, extras = ?, addons = ?, is_happy_hour_eligible = ?
             WHERE id = ?
         `, [
             name, sinhala_name || null, description || null, category_id, price, cost || 0.00, barcode || null,
@@ -456,6 +458,7 @@ app.put('/api/products/:id', authenticateToken, async (req, res) => {
             sizes ? JSON.stringify(sizes) : null,
             extras ? JSON.stringify(extras) : null,
             addons ? JSON.stringify(addons) : null,
+            is_happy_hour_eligible !== undefined ? (is_happy_hour_eligible ? 1 : 0) : 1,
             id
         ]);
         
@@ -664,14 +667,14 @@ app.post('/api/happyhour', authenticateToken, async (req, res) => {
     if (req.user.role !== 'admin' && req.user.role !== 'owner') {
         return res.status(403).json({ error: 'Unauthorized' });
     }
-    const { product_id, promo_price, start_time, end_time, days_of_week } = req.body;
+    const { product_id, promo_price, start_time, end_time, days_of_week, name, category_id } = req.body;
     try {
         // Deactivate previous active promos for this product
         await db.query('UPDATE happy_hour_pricing SET status = "inactive" WHERE product_id = ?', [product_id]);
         
         const result = await db.query(
-            'INSERT INTO happy_hour_pricing (product_id, promo_price, start_time, end_time, days_of_week) VALUES (?, ?, ?, ?, ?)',
-            [product_id, promo_price, start_time, end_time, days_of_week]
+            'INSERT INTO happy_hour_pricing (product_id, promo_price, start_time, end_time, days_of_week, name, category_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [product_id, promo_price, start_time, end_time, days_of_week, name || null, category_id || null]
         );
         
         await logAudit('change_price', 'products', product_id, `Happy hour pricing configured to LKR ${promo_price}`, req.user.id);
@@ -686,9 +689,10 @@ app.post('/api/happyhour', authenticateToken, async (req, res) => {
 app.get('/api/happyhour', authenticateToken, async (req, res) => {
     try {
         const promos = await db.query(`
-            SELECT hhp.*, p.name as product_name, p.price as original_price
+            SELECT hhp.*, p.name as product_name, p.price as original_price, c.name as category_name
             FROM happy_hour_pricing hhp
             JOIN products p ON hhp.product_id = p.id
+            LEFT JOIN categories c ON hhp.category_id = c.id
             WHERE hhp.status = "active"
             ORDER BY hhp.id DESC
         `);

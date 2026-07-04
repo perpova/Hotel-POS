@@ -28,7 +28,13 @@ class POSController extends ChangeNotifier {
   String? stewardName;
   String orderType = 'dine_in'; // 'dine_in', 'takeaway', 'delivery'
   String? deliveryPlatform;     // 'uber_eats', 'pickme', 'phone', 'direct'
-  double discount = 0.00;
+  
+  // Discount States
+  double rawDiscountValue = 0.00;
+  String discountType = 'percent'; // 'percent', 'fixed'
+  List<OfferModel> offers = [];
+  List<Map<String, dynamic>> happyHours = [];
+  
   String searchWord = '';
   int? activeCategoryId;
   
@@ -82,6 +88,8 @@ class POSController extends ChangeNotifier {
         customers = await _api.getCustomers();
         waiters = await _api.getUsers(role: 'waiter');
         activeShift = await _api.getCurrentShift();
+        offers = await _api.getOffers();
+        happyHours = await _api.getHappyHours();
         await _fetchActiveOrders();
       } else {
         // Fallback: If completely offline in LAN-first mode,
@@ -104,6 +112,8 @@ class POSController extends ChangeNotifier {
       print('POS Event Received: ${event['type']}');
       switch (event['type']) {
         case 'table_status_changed':
+        case 'happy_hour_updated':
+        case 'database_synchronized':
           reloadEnvironment();
           break;
         case 'stock_updated':
@@ -186,9 +196,12 @@ class POSController extends ChangeNotifier {
           break;
         case 'order_created':
         case 'order_updated':
-        case 'happy_hour_updated':
-        case 'database_synchronized':
           _fetchActiveOrders();
+          break;
+        case 'offer_created':
+        case 'offer_updated':
+        case 'offer_deleted':
+          reloadEnvironment();
           break;
       }
     });
@@ -210,7 +223,56 @@ class POSController extends ChangeNotifier {
   // ----------------------------------------------------
 
   double get cartSubtotal {
-    return cart.fold(0.00, (sum, item) => sum + (item.price * item.quantity));
+    return cart.fold(0.00, (sum, item) {
+      ProductModel? p;
+      for (var prod in products) {
+        if (prod.id == item.productId) {
+          p = prod;
+          break;
+        }
+      }
+      double diff = 0.0;
+      if (p != null && !p.hasSizes) {
+        final activePrice = getProductActivePrice(p);
+        if (activePrice < p.price) {
+          diff = p.price - activePrice;
+        }
+      }
+      final originalPrice = item.price + diff;
+      return sum + (originalPrice * item.quantity);
+    });
+  }
+
+  double get discount {
+    // 1. Calculate Happy Hour discount
+    double hhDiscount = cart.fold(0.00, (sum, item) {
+      ProductModel? p;
+      for (var prod in products) {
+        if (prod.id == item.productId) {
+          p = prod;
+          break;
+        }
+      }
+      double diff = 0.0;
+      if (p != null && !p.hasSizes) {
+        final activePrice = getProductActivePrice(p);
+        if (activePrice < p.price) {
+          diff = p.price - activePrice;
+        }
+      }
+      return sum + (diff * item.quantity);
+    });
+
+    // 2. Calculate manual discount on the remaining subtotal
+    double subtotalAfterHh = cartSubtotal - hhDiscount;
+    double manualDiscountValue = 0.00;
+    if (discountType == 'percent') {
+      manualDiscountValue = subtotalAfterHh * (rawDiscountValue / 100.0);
+    } else {
+      manualDiscountValue = rawDiscountValue;
+    }
+
+    return hhDiscount + manualDiscountValue;
   }
 
   double get cartTotal {
@@ -249,8 +311,68 @@ class POSController extends ChangeNotifier {
   }
 
   void setDiscount(double amount) {
-    discount = amount;
+    rawDiscountValue = amount;
+    discountType = 'fixed';
     notifyListeners();
+  }
+
+  void updateDiscount(double value, String type) {
+    rawDiscountValue = value;
+    discountType = type;
+    notifyListeners();
+  }
+
+  void autoApplyActiveOffer() {
+    OfferModel? activeOffer;
+    for (var o in offers) {
+      if (o.status == 'active') {
+        activeOffer = o;
+        break;
+      }
+    }
+
+    if (activeOffer != null) {
+      rawDiscountValue = activeOffer.discountPercentage;
+      discountType = 'percent';
+    } else {
+      rawDiscountValue = 0.00;
+      discountType = 'percent';
+    }
+  }
+
+  double getProductActivePrice(ProductModel product) {
+    final now = DateTime.now();
+    final currentDay = now.weekday; // 1=Mon, 7=Sun
+    final currentMin = now.hour * 60 + now.minute;
+    
+    for (var hp in happyHours) {
+      if (hp['product_id'] == product.id && hp['status'] == 'active') {
+        final daysStr = hp['days_of_week']?.toString() ?? '1,2,3,4,5,6,7';
+        final days = daysStr.split(',').map((e) => int.tryParse(e.trim())).toList();
+        if (days.contains(currentDay)) {
+          final startMin = _parseTimeToMinutes(hp['start_time']?.toString() ?? '');
+          final endMin = _parseTimeToMinutes(hp['end_time']?.toString() ?? '');
+          if (startMin != null && endMin != null) {
+            if (currentMin >= startMin && currentMin <= endMin) {
+              return toDouble(hp['promo_price']);
+            }
+          }
+        }
+      }
+    }
+    return product.price;
+  }
+
+  int? _parseTimeToMinutes(String timeStr) {
+    try {
+      final parts = timeStr.split(':');
+      if (parts.isEmpty) return null;
+      final hour = int.parse(parts[0]);
+      final minute = parts.length > 1 ? int.parse(parts[1]) : 0;
+      return hour * 60 + minute;
+    } catch (_) {
+      return null;
+    }
   }
 
   void setSearchWord(String word) {
@@ -263,7 +385,10 @@ class POSController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void addToCart(ProductModel product, {int quantity = 1, String? notes, List<ProductExtra> extras = const []}) {
+  void addToCart(ProductModel product, {int quantity = 1, String? notes, List<ProductExtra> extras = const [], double? customPrice}) {
+    final currentPrice = customPrice ?? getProductActivePrice(product);
+    final wasEmpty = cart.isEmpty;
+    
     // Check if product is already in the cart
     final index = cart.indexWhere((item) => item.productId == product.id && item.notes == notes);
     
@@ -274,7 +399,7 @@ class POSController extends ChangeNotifier {
         productName: oldItem.productName,
         productSinhalaName: oldItem.productSinhalaName,
         quantity: oldItem.quantity + quantity,
-        price: oldItem.price,
+        price: currentPrice,
         notes: oldItem.notes,
         isShortEat: oldItem.isShortEat,
         extras: oldItem.extras,
@@ -285,18 +410,27 @@ class POSController extends ChangeNotifier {
         productName: product.name,
         productSinhalaName: product.sinhalaName,
         quantity: quantity,
-        price: product.activePrice,
+        price: currentPrice,
         notes: notes,
         isShortEat: product.isShortEat,
         extras: extras,
       ));
     }
+
+    if (wasEmpty) {
+      autoApplyActiveOffer();
+    }
+
     notifyListeners();
   }
 
   void updateCartQuantity(int index, int quantity) {
     if (quantity <= 0) {
       cart.removeAt(index);
+      if (cart.isEmpty) {
+        rawDiscountValue = 0.00;
+        discountType = 'percent';
+      }
     } else {
       final old = cart[index];
       cart[index] = OrderItemModel(
@@ -332,7 +466,8 @@ class POSController extends ChangeNotifier {
     selectedCustomer = null;
     stewardName = null;
     deliveryPlatform = null;
-    discount = 0.00;
+    rawDiscountValue = 0.00;
+    discountType = 'percent';
     activeLankaQR = null;
     cardTerminalStatus = null;
     cardTerminalTxRef = null;

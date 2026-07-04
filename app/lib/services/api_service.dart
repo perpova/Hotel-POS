@@ -550,7 +550,7 @@ class APIService {
     throw Exception('Failed to load ingredient stock logs');
   }
 
-  Future<void> configureHappyHour(int productId, double promoPrice, String startTime, String endTime, String days) async {
+  Future<void> configureHappyHour(int productId, double promoPrice, String startTime, String endTime, String days, String? name, int? categoryId) async {
     final response = await http.post(
       Uri.parse('$_baseUrl/api/happyhour'),
       headers: _getHeaders(),
@@ -560,6 +560,8 @@ class APIService {
         'start_time': startTime,
         'end_time': endTime,
         'days_of_week': days,
+        'name': name,
+        'category_id': categoryId,
       }),
     );
     if (response.statusCode != 200) {

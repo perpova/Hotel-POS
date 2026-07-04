@@ -723,7 +723,7 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
 
   List<CategoryModel> _localCategories = [];
   int? _selectedCategoryId;
-  String _itemType = 'Veg';
+  String _itemType = 'Non Veg';
   bool _isFeatured = false;
   String _status = 'active';
   String? _imageBase64;
@@ -733,6 +733,7 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
   bool _hasExtras = false;
   bool _hasAddons = false;
   bool _trackStock = true;
+  bool _isHappyHourEligible = true;
 
   List<Map<String, dynamic>> _sizesList = [];
   List<Map<String, dynamic>> _extrasList = [];
@@ -753,7 +754,7 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
     _descriptionController = TextEditingController(text: p?.description ?? '');
 
     _selectedCategoryId = p?.categoryId ?? (_localCategories.isNotEmpty ? _localCategories[0].id : null);
-    _itemType = p?.itemType ?? 'Veg';
+    _itemType = p?.itemType ?? 'Non Veg';
     _isFeatured = p?.isFeatured ?? false;
     _status = p?.status ?? 'active';
     _imageBase64 = p?.imageBase64;
@@ -762,6 +763,7 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
     _hasExtras = p?.hasExtras ?? false;
     _hasAddons = p?.hasAddons ?? false;
     _trackStock = p?.trackStock ?? true;
+    _isHappyHourEligible = p?.isHappyHourEligible ?? true;
 
     _sizesList = p?.sizes.map((s) => {'name': s.name, 'price': s.price}).toList() ?? [];
     _extrasList = p?.extras.map((e) => {
@@ -1093,6 +1095,7 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
       'has_extras': _hasExtras ? 1 : 0,
       'has_addons': _hasAddons ? 1 : 0,
       'track_stock': _trackStock ? 1 : 0,
+      'is_happy_hour_eligible': _isHappyHourEligible ? 1 : 0,
       'sizes': sizes,
       'extras': extras,
       'addons': _hasAddons ? _selectedAddons : [],
@@ -1388,6 +1391,22 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
                           },
                         ),
                         Text('Track Stock Level in POS', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w500)),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Happy Hour Settings
+                    _buildLabel('HAPPY HOUR SETTINGS'),
+                    Row(
+                      children: [
+                        Checkbox(
+                          value: _isHappyHourEligible,
+                          activeColor: AppTheme.primary,
+                          onChanged: (val) {
+                            setState(() => _isHappyHourEligible = val ?? true);
+                          },
+                        ),
+                        Text('Available for Happy Hour Offer', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w500)),
                       ],
                     ),
                     const SizedBox(height: 16),

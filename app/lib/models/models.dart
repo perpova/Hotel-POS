@@ -153,6 +153,7 @@ class ProductModel {
   final bool hasExtras;
   final bool hasAddons;
   final bool trackStock;
+  final bool isHappyHourEligible;
   final List<ProductSize> sizes;
   final List<ProductExtra> extras;
   final List<int> addons;
@@ -181,6 +182,7 @@ class ProductModel {
     this.hasExtras = false,
     this.hasAddons = false,
     this.trackStock = true,
+    this.isHappyHourEligible = true,
     this.sizes = const [],
     this.extras = const [],
     this.addons = const [],
@@ -247,6 +249,7 @@ class ProductModel {
       hasExtras: json['has_extras'] == true || json['has_extras'] == 1,
       hasAddons: json['has_addons'] == true || json['has_addons'] == 1,
       trackStock: json['track_stock'] == true || json['track_stock'] == 1 || json['track_stock'] == null,
+      isHappyHourEligible: json['is_happy_hour_eligible'] == true || json['is_happy_hour_eligible'] == 1 || json['is_happy_hour_eligible'] == null,
       sizes: sizesList,
       extras: extrasList,
       addons: addonsList,
@@ -277,6 +280,7 @@ class ProductModel {
     'has_extras': hasExtras,
     'has_addons': hasAddons,
     'track_stock': trackStock ? 1 : 0,
+    'is_happy_hour_eligible': isHappyHourEligible ? 1 : 0,
     'sizes': sizes.map((x) => x.toJson()).toList(),
     'extras': extras.map((x) => x.toJson()).toList(),
     'addons': addons,
@@ -505,6 +509,7 @@ class OrderModel {
   final String? cardTxReference;
   final String barcode;
   final String createdAt;
+  final String? updatedAt;
   final List<OrderItemModel> items;
 
   OrderModel({
@@ -528,6 +533,7 @@ class OrderModel {
     this.cardTxReference,
     required this.barcode,
     required this.createdAt,
+    this.updatedAt,
     required this.items,
   });
 
@@ -556,6 +562,7 @@ class OrderModel {
       cardTxReference: json['card_tx_reference'],
       barcode: json['barcode'] ?? json['order_number'],
       createdAt: json['created_at'],
+      updatedAt: json['updated_at'] ?? json['created_at'],
       items: mappedItems,
     );
   }
@@ -581,6 +588,7 @@ class OrderModel {
     'card_tx_reference': cardTxReference,
     'barcode': barcode,
     'created_at': createdAt,
+    'updated_at': updatedAt,
     'items': items.map((i) => i.toJson()).toList(),
   };
 }

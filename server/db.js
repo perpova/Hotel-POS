@@ -137,6 +137,10 @@ async function initializeDatabase() {
                 console.log("Migration: Added track_stock to products table.");
             } catch (_) {}
             try {
+                await dbPool.query("ALTER TABLE products ADD COLUMN is_happy_hour_eligible BOOLEAN DEFAULT TRUE");
+                console.log("Migration: Added is_happy_hour_eligible to products table.");
+            } catch (_) {}
+            try {
                 await dbPool.query("ALTER TABLE customers ADD COLUMN image_base64 LONGTEXT NULL");
                 console.log("Migration: Added image_base64 to customers table.");
             } catch (_) {}
@@ -147,6 +151,19 @@ async function initializeDatabase() {
             try {
                 await dbPool.query("ALTER TABLE categories ADD COLUMN image_base64 LONGTEXT NULL");
                 console.log("Migration: Added image_base64 to categories table.");
+            } catch (_) {}
+            
+            try {
+                await dbPool.query("ALTER TABLE happy_hour_pricing ADD COLUMN name VARCHAR(255) NULL");
+                console.log("Migration: Added name to happy_hour_pricing table.");
+            } catch (_) {}
+            try {
+                await dbPool.query("ALTER TABLE happy_hour_pricing ADD COLUMN category_id INT NULL");
+                console.log("Migration: Added category_id to happy_hour_pricing table.");
+            } catch (_) {}
+            try {
+                await dbPool.query("ALTER TABLE happy_hour_pricing ADD CONSTRAINT fk_hhp_category FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL");
+                console.log("Migration: Added fk_hhp_category constraint to happy_hour_pricing table.");
             } catch (_) {}
             
             try {

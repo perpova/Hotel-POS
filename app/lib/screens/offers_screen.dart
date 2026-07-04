@@ -48,7 +48,11 @@ class _OffersScreenState extends State<OffersScreen> {
   String _statusVal = 'active'; // 'active', 'inactive'
 
   // Happy Hour Controllers
-  ProductModel? _selectedPromoProduct;
+  final _happyHourNameController = TextEditingController();
+  List<ProductModel> _selectedPromoProducts = [];
+  String _happyHourPromoType = 'percent'; // 'fixed' or 'percent'
+  String _happyHourSelectionMode = 'product'; // 'product' or 'category'
+  int? _selectedHappyHourCategoryId;
   final _promoPriceController = TextEditingController();
   final _startTimeController = TextEditingController(text: '17:00:00');
   final _endTimeController = TextEditingController(text: '19:00:00');
@@ -68,6 +72,7 @@ class _OffersScreenState extends State<OffersScreen> {
     _discountController.dispose();
     _startDateController.dispose();
     _endDateController.dispose();
+    _happyHourNameController.dispose();
     _promoPriceController.dispose();
     _startTimeController.dispose();
     _endTimeController.dispose();
@@ -110,8 +115,8 @@ class _OffersScreenState extends State<OffersScreen> {
       if (offer != null) {
         _nameController.text = offer.name;
         _discountController.text = offer.discountPercentage.toStringAsFixed(0);
-        _startDateController.text = offer.startDate;
-        _endDateController.text = offer.endDate;
+        _startDateController.text = offer.startDate.length >= 10 ? offer.startDate.substring(0, 10) : offer.startDate;
+        _endDateController.text = offer.endDate.length >= 10 ? offer.endDate.substring(0, 10) : offer.endDate;
         _imageBase64 = offer.imageBase64;
         _imageName = offer.imageBase64 != null ? 'Existing Image' : null;
         _statusVal = offer.status;
@@ -134,7 +139,11 @@ class _OffersScreenState extends State<OffersScreen> {
       _editingOffer = null;
       _isDrawerOpen = true;
 
-      _selectedPromoProduct = null;
+      _happyHourNameController.clear();
+      _selectedPromoProducts.clear();
+      _happyHourPromoType = 'percent';
+      _happyHourSelectionMode = 'product';
+      _selectedHappyHourCategoryId = null;
       _promoPriceController.clear();
       _startTimeController.text = '17:00:00';
       _endTimeController.text = '19:00:00';
@@ -199,11 +208,14 @@ class _OffersScreenState extends State<OffersScreen> {
       _isSaving = true;
     });
 
+    final startDateStr = _startDateController.text.trim();
+    final endDateStr = _endDateController.text.trim();
+
     final payload = {
       'name': _nameController.text.trim(),
       'discount_percentage': double.tryParse(_discountController.text) ?? 0.0,
-      'start_date': _startDateController.text.trim(),
-      'end_date': _endDateController.text.trim(),
+      'start_date': startDateStr.length >= 10 ? startDateStr.substring(0, 10) : startDateStr,
+      'end_date': endDateStr.length >= 10 ? endDateStr.substring(0, 10) : endDateStr,
       'image_base64': _imageBase64,
       'status': _statusVal,
     };
@@ -233,26 +245,101 @@ class _OffersScreenState extends State<OffersScreen> {
     }
   }
 
+  String _formatTimeString(String timeStr) {
+    try {
+      final parts = timeStr.split(':');
+      if (parts.isEmpty) return timeStr;
+      final hour = int.parse(parts[0]);
+      final minute = parts.length > 1 ? int.parse(parts[1]) : 0;
+      
+      final isPm = hour >= 12;
+      final displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
+      final displayMin = minute.toString().padLeft(2, '0');
+      final suffix = isPm ? 'p.m.' : 'a.m.';
+      
+      return '$displayHour.$displayMin $suffix';
+    } catch (_) {
+      return timeStr;
+    }
+  }
+
+  Future<void> _selectTime(BuildContext context, TextEditingController controller) async {
+    TimeOfDay initial = const TimeOfDay(hour: 17, minute: 0);
+    try {
+      final parts = controller.text.split(':');
+      if (parts.length >= 2) {
+        initial = TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
+      }
+    } catch (_) {}
+
+    final TimeOfDay? picked = await showTimePicker(
+      context: context,
+      initialTime: initial,
+    );
+
+    if (picked != null) {
+      final hour = picked.hour.toString().padLeft(2, '0');
+      final minute = picked.minute.toString().padLeft(2, '0');
+      controller.text = '$hour:$minute:00';
+    }
+  }
+
   // Save Happy Hour (POST)
   Future<void> _saveHappyHour(POSController posController) async {
     if (!_happyHourFormKey.currentState!.validate()) return;
-    if (_selectedPromoProduct == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a product'), backgroundColor: AppTheme.danger),
-      );
-      return;
+
+    List<ProductModel> productsToSave = [];
+    if (_happyHourSelectionMode == 'category') {
+      if (_selectedHappyHourCategoryId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please select a category'), backgroundColor: AppTheme.danger),
+        );
+        return;
+      }
+      productsToSave = posController.products.where((p) => p.categoryId == _selectedHappyHourCategoryId && p.isHappyHourEligible).toList();
+      if (productsToSave.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No happy-hour eligible products found in this category'), backgroundColor: AppTheme.danger),
+        );
+        return;
+      }
+    } else {
+      if (_selectedPromoProducts.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please select at least one product'), backgroundColor: AppTheme.danger),
+        );
+        return;
+      }
+      productsToSave = List.from(_selectedPromoProducts);
     }
 
     setState(() {
       _isSaving = true;
     });
 
-    final price = double.tryParse(_promoPriceController.text) ?? 0.00;
+    final discountVal = double.tryParse(_promoPriceController.text) ?? 0.00;
     final start = _startTimeController.text.trim();
     final end = _endTimeController.text.trim();
 
     try {
-      await APIService.instance.configureHappyHour(_selectedPromoProduct!.id, price, start, end, _selectedDays);
+      for (var product in productsToSave) {
+        double price;
+        if (_happyHourPromoType == 'percent') {
+          price = product.price * (1 - (discountVal / 100.0));
+          price = double.parse(price.toStringAsFixed(2));
+        } else {
+          price = discountVal;
+        }
+        await APIService.instance.configureHappyHour(
+          product.id,
+          price,
+          start,
+          end,
+          _selectedDays,
+          _happyHourNameController.text.trim(),
+          _happyHourSelectionMode == 'category' ? _selectedHappyHourCategoryId : null,
+        );
+      }
       _closeDrawer();
       await _loadOffers();
       await posController.reloadEnvironment();
@@ -300,6 +387,48 @@ class _OffersScreenState extends State<OffersScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to delete: $e'), backgroundColor: AppTheme.danger),
         );
+      }
+    }
+  }
+
+  Future<void> _deactivateHappyHourGroup(List<int> ids, POSController posController) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Deactivate Promotion', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+        content: const Text('Are you sure you want to deactivate this happy hour promotion group?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: AppTheme.danger),
+            child: const Text('Deactivate'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      setState(() {
+        _isLoading = true;
+      });
+      try {
+        for (var id in ids) {
+          await APIService.instance.deleteHappyHour(id);
+        }
+        await _loadOffers();
+        await posController.reloadEnvironment();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Happy Hour promotion group deactivated successfully.'), backgroundColor: AppTheme.accent),
+        );
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to deactivate group: $e'), backgroundColor: AppTheme.danger),
+        );
+      } finally {
+        setState(() {
+          _isLoading = false;
+        });
       }
     }
   }
@@ -785,6 +914,43 @@ class _OffersScreenState extends State<OffersScreen> {
 
   // Happy Hours table list
   Widget _buildHappyHoursTable(POSController posController) {
+    // Group happy hours by name + start_time + end_time + days_of_week + category_id
+    final grouped = <String, Map<String, dynamic>>{};
+    for (var promo in _happyHours) {
+      final name = promo['name'] ?? 'N/A';
+      final start = promo['start_time'].toString();
+      final end = promo['end_time'].toString();
+      final days = promo['days_of_week'] ?? '';
+      final categoryId = promo['category_id'];
+      final categoryName = promo['category_name'];
+      
+      final key = '${name}_${start}_${end}_${days}_${categoryId ?? ''}';
+      
+      if (!grouped.containsKey(key)) {
+        grouped[key] = {
+          'name': name,
+          'start_time': start,
+          'end_time': end,
+          'days_of_week': days,
+          'category_id': categoryId,
+          'category_name': categoryName,
+          'products': <Map<String, dynamic>>[],
+          'ids': <int>[],
+        };
+      }
+      
+      final productInfo = {
+        'name': promo['product_name'] ?? '',
+        'promo_price': promo['promo_price'],
+        'original_price': promo['original_price'],
+      };
+      
+      (grouped[key]!['products'] as List).add(productInfo);
+      (grouped[key]!['ids'] as List<int>).add(promo['id'] as int);
+    }
+    
+    final groupedList = grouped.values.toList();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -793,9 +959,8 @@ class _OffersScreenState extends State<OffersScreen> {
           padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
           child: Row(
             children: [
-              Expanded(flex: 3, child: _buildTableHeaderText('PRODUCT NAME')),
-              Expanded(flex: 2, child: _buildTableHeaderText('PROMO PRICE')),
-              Expanded(flex: 2, child: _buildTableHeaderText('ORIGINAL PRICE')),
+              Expanded(flex: 3, child: _buildTableHeaderText('PROMOTION NAME')),
+              Expanded(flex: 6, child: _buildTableHeaderText('PRODUCTS & DURATION PRICES')),
               Expanded(flex: 3, child: _buildTableHeaderText('TIME RANGE')),
               Expanded(flex: 3, child: _buildTableHeaderText('PROMO DAYS')),
               Expanded(flex: 2, child: _buildTableHeaderText('ACTION')),
@@ -805,17 +970,18 @@ class _OffersScreenState extends State<OffersScreen> {
         ListView.separated(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          itemCount: _happyHours.length,
+          itemCount: groupedList.length,
           separatorBuilder: (context, index) => const Divider(height: 1, color: Color(0xFFF1F5F9)),
           itemBuilder: (context, index) {
-            final promo = _happyHours[index];
-            final id = promo['id'] as int;
-            final prodName = promo['product_name'] ?? '';
-            final promoPrice = promo['promo_price'];
-            final originalPrice = promo['original_price'];
-            final start = promo['start_time'].toString().substring(0, 5);
-            final end = promo['end_time'].toString().substring(0, 5);
-            final daysStr = promo['days_of_week'] ?? '1,2,3,4,5,6,7';
+            final group = groupedList[index];
+            final promoName = group['name'] ?? 'N/A';
+            final start = group['start_time'].toString().substring(0, 5);
+            final end = group['end_time'].toString().substring(0, 5);
+            final daysStr = group['days_of_week'] ?? '1,2,3,4,5,6,7';
+            final productsList = group['products'] as List;
+            final ids = group['ids'] as List<int>;
+            final categoryId = group['category_id'];
+            final categoryName = group['category_name'];
 
             String daysDesc = 'Every Day';
             if (daysStr == '1,2,3,4,5') {
@@ -827,40 +993,74 @@ class _OffersScreenState extends State<OffersScreen> {
             return Padding(
               padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
                     flex: 3,
-                    child: Text(
-                      prodName,
-                      style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 4.0),
+                      child: Text(
+                        promoName,
+                        style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+                      ),
                     ),
                   ),
                   Expanded(
-                    flex: 2,
-                    child: Text(
-                      'LKR $promoPrice',
-                      style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.accent),
-                    ),
+                    flex: 6,
+                    child: categoryId != null
+                        ? Padding(
+                            padding: const EdgeInsets.only(top: 4.0),
+                            child: RichText(
+                              text: TextSpan(
+                                style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightPrimary),
+                                children: [
+                                  const TextSpan(text: 'Category: ', style: TextStyle(color: Color(0xFF64748B))),
+                                  TextSpan(text: categoryName ?? 'Unknown Category', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                  TextSpan(text: ' (${productsList.length} items)', style: const TextStyle(color: Color(0xFF64748B))),
+                                ],
+                              ),
+                            ),
+                          )
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: productsList.map((p) {
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 6.0),
+                                child: RichText(
+                                  text: TextSpan(
+                                    style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightPrimary),
+                                    children: [
+                                      TextSpan(text: '${p['name']}: ', style: const TextStyle(fontWeight: FontWeight.w600)),
+                                      TextSpan(text: 'LKR ${p['promo_price']} ', style: const TextStyle(color: AppTheme.accent, fontWeight: FontWeight.bold)),
+                                      TextSpan(
+                                        text: '(was LKR ${p['original_price']})',
+                                        style: const TextStyle(color: Color(0xFF94A3B8), decoration: TextDecoration.lineThrough, fontSize: 10),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                          ),
                   ),
                   Expanded(
-                    flex: 2,
-                    child: Text(
-                      'LKR $originalPrice',
-                      style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF94A3B8), decoration: TextDecoration.lineThrough),
+                    flex: 3,
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 4.0),
+                      child: Text(
+                        '${_formatTimeString(start)} to ${_formatTimeString(end)}',
+                        style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF475569)),
+                      ),
                     ),
                   ),
                   Expanded(
                     flex: 3,
-                    child: Text(
-                      '$start - $end',
-                      style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF475569)),
-                    ),
-                  ),
-                  Expanded(
-                    flex: 3,
-                    child: Text(
-                      daysDesc,
-                      style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF475569)),
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 4.0),
+                      child: Text(
+                        daysDesc,
+                        style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF475569)),
+                      ),
                     ),
                   ),
                   Expanded(
@@ -868,7 +1068,7 @@ class _OffersScreenState extends State<OffersScreen> {
                     child: Align(
                       alignment: Alignment.centerLeft,
                       child: GestureDetector(
-                        onTap: () => _deactivateHappyHour(id, posController),
+                        onTap: () => _deactivateHappyHourGroup(ids, posController),
                         child: Container(
                           padding: const EdgeInsets.all(6),
                           decoration: BoxDecoration(color: const Color(0xFFFEF2F2), borderRadius: BorderRadius.circular(6)),
@@ -1129,33 +1329,222 @@ class _OffersScreenState extends State<OffersScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildFieldLabel('SELECT PROMO PRODUCT *'),
+                  _buildFieldLabel('PROMOTION NAME *'),
                   const SizedBox(height: 6),
-                  DropdownButtonFormField<ProductModel>(
-                    value: _selectedPromoProduct,
-                    decoration: const InputDecoration(hintText: 'Select product'),
-                    items: [
-                      ...posController.products.map((p) => DropdownMenuItem(
-                            value: p,
-                            child: Text('${p.name} (LKR ${p.price.toStringAsFixed(0)})', style: const TextStyle(fontSize: 12)),
-                          )),
-                    ],
-                    onChanged: (p) => setState(() => _selectedPromoProduct = p),
+                  TextFormField(
+                    controller: _happyHourNameController,
+                    validator: (val) => val == null || val.isEmpty ? 'Please enter promotion name' : null,
+                    decoration: const InputDecoration(hintText: 'Enter promotion name (e.g. Afternoon tea)'),
+                    style: GoogleFonts.inter(fontSize: 13),
                   ),
                   const SizedBox(height: 20),
 
-                  _buildFieldLabel('PROMO PRICE (LKR) *'),
+                  _buildFieldLabel('SELECTION MODE *'),
+                  const SizedBox(height: 4),
+                  StatefulBuilder(
+                    builder: (context, setStateDrawer) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Radio<String>(
+                                value: 'product',
+                                groupValue: _happyHourSelectionMode,
+                                activeColor: AppTheme.primary,
+                                onChanged: (val) {
+                                  if (val != null) {
+                                    setState(() {
+                                      _happyHourSelectionMode = val;
+                                    });
+                                    setStateDrawer(() {});
+                                  }
+                                },
+                              ),
+                              Text('By Product (One by One)', style: GoogleFonts.inter(fontSize: 12)),
+                              const SizedBox(width: 20),
+                              Radio<String>(
+                                value: 'category',
+                                groupValue: _happyHourSelectionMode,
+                                activeColor: AppTheme.primary,
+                                onChanged: (val) {
+                                  if (val != null) {
+                                    setState(() {
+                                      _happyHourSelectionMode = val;
+                                    });
+                                    setStateDrawer(() {});
+                                  }
+                                },
+                              ),
+                              Text('By Category', style: GoogleFonts.inter(fontSize: 12)),
+                            ],
+                          ),
+                          const SizedBox(height: 20),
+
+                          if (_happyHourSelectionMode == 'product') ...[
+                            _buildFieldLabel('SELECT PROMO PRODUCTS *'),
+                            const SizedBox(height: 6),
+                            Container(
+                              decoration: BoxDecoration(
+                                border: Border.all(color: const Color(0xFFE2E8F0)),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              constraints: const BoxConstraints(maxHeight: 250),
+                              child: Column(
+                                children: [
+                                  Container(
+                                    color: const Color(0xFFF8FAFC),
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text(
+                                          '${_selectedPromoProducts.length} Selected',
+                                          style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold),
+                                        ),
+                                        TextButton(
+                                          onPressed: () {
+                                            final eligible = posController.products.where((p) => p.isHappyHourEligible).toList();
+                                            setState(() {
+                                              if (_selectedPromoProducts.length == eligible.length) {
+                                                _selectedPromoProducts.clear();
+                                              } else {
+                                                _selectedPromoProducts = List.from(eligible);
+                                              }
+                                            });
+                                            setStateDrawer(() {});
+                                          },
+                                          style: TextButton.styleFrom(
+                                            padding: EdgeInsets.zero,
+                                            minimumSize: Size.zero,
+                                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                          ),
+                                          child: Text(
+                                            _selectedPromoProducts.length == posController.products.where((p) => p.isHappyHourEligible).length ? 'Deselect All' : 'Select All',
+                                            style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.primary),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                                  Expanded(
+                                    child: ListView.builder(
+                                      itemCount: posController.products.length,
+                                      itemBuilder: (context, index) {
+                                        final p = posController.products[index];
+                                        final isEligible = p.isHappyHourEligible;
+                                        final isSelected = _selectedPromoProducts.any((sp) => sp.id == p.id);
+                                        return CheckboxListTile(
+                                          value: isSelected,
+                                          title: Text(
+                                            p.name,
+                                            style: GoogleFonts.inter(
+                                              fontSize: 12,
+                                              color: isEligible ? const Color(0xFF1E293B) : const Color(0xFF94A3B8),
+                                              decoration: isEligible ? null : TextDecoration.lineThrough,
+                                            ),
+                                          ),
+                                          subtitle: Text(
+                                            isEligible ? 'LKR ${p.price.toStringAsFixed(0)}' : 'LKR ${p.price.toStringAsFixed(0)} (Not Eligible)',
+                                            style: GoogleFonts.inter(
+                                              fontSize: 10,
+                                              color: isEligible ? const Color(0xFF64748B) : const Color(0xFFEF4444).withOpacity(0.7),
+                                            ),
+                                          ),
+                                          dense: true,
+                                          activeColor: AppTheme.primary,
+                                          controlAffinity: ListTileControlAffinity.leading,
+                                          contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                                          onChanged: isEligible ? (val) {
+                                            setState(() {
+                                              if (val == true) {
+                                                _selectedPromoProducts.add(p);
+                                              } else {
+                                                _selectedPromoProducts.removeWhere((sp) => sp.id == p.id);
+                                              }
+                                            });
+                                            setStateDrawer(() {});
+                                          } : null,
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ] else ...[
+                            _buildFieldLabel('SELECT CATEGORY *'),
+                            const SizedBox(height: 6),
+                            DropdownButtonFormField<int>(
+                              value: _selectedHappyHourCategoryId,
+                              hint: Text('Select Category', style: GoogleFonts.inter(fontSize: 13)),
+                              decoration: const InputDecoration(
+                                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              ),
+                              items: posController.categories.map((c) => DropdownMenuItem<int>(
+                                value: c.id,
+                                child: Text(c.name, style: GoogleFonts.inter(fontSize: 13)),
+                              )).toList(),
+                              onChanged: (val) {
+                                setState(() {
+                                  _selectedHappyHourCategoryId = val;
+                                });
+                                setStateDrawer(() {});
+                              },
+                              validator: (val) => val == null ? 'Please select a category' : null,
+                            ),
+                          ],
+                        ],
+                      );
+                    }
+                  ),
+                  const SizedBox(height: 20),
+
+                  _buildFieldLabel('DISCOUNT TYPE'),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Radio<String>(
+                        value: 'fixed',
+                        groupValue: _happyHourPromoType,
+                        activeColor: AppTheme.primary,
+                        onChanged: (val) {
+                          if (val != null) setState(() => _happyHourPromoType = val);
+                        },
+                      ),
+                      Text('Fixed Price', style: GoogleFonts.inter(fontSize: 12)),
+                      const SizedBox(width: 20),
+                      Radio<String>(
+                        value: 'percent',
+                        groupValue: _happyHourPromoType,
+                        activeColor: AppTheme.primary,
+                        onChanged: (val) {
+                          if (val != null) setState(() => _happyHourPromoType = val);
+                        },
+                      ),
+                      Text('Percentage (%)', style: GoogleFonts.inter(fontSize: 12)),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+
+                  _buildFieldLabel(_happyHourPromoType == 'fixed' ? 'PROMO PRICE (LKR) *' : 'DISCOUNT PERCENTAGE (%) *'),
                   const SizedBox(height: 6),
                   TextFormField(
                     controller: _promoPriceController,
                     validator: (val) {
-                      if (val == null || val.isEmpty) return 'Please enter promotional price';
+                      if (val == null || val.isEmpty) {
+                        return _happyHourPromoType == 'fixed' ? 'Please enter promotional price' : 'Please enter discount percentage';
+                      }
                       final numVal = double.tryParse(val);
-                      if (numVal == null || numVal <= 0) return 'Enter a valid price';
+                      if (numVal == null || numVal <= 0) return 'Enter a valid number';
+                      if (_happyHourPromoType == 'percent' && numVal > 100) return 'Cannot exceed 100%';
                       return null;
                     },
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(hintText: 'Enter promotional price'),
+                    decoration: InputDecoration(
+                      hintText: _happyHourPromoType == 'fixed' ? 'Enter promotional price (e.g. 800)' : 'Enter discount percentage (e.g. 15)',
+                    ),
                     style: GoogleFonts.inter(fontSize: 13),
                   ),
                   const SizedBox(height: 20),
@@ -1164,8 +1553,13 @@ class _OffersScreenState extends State<OffersScreen> {
                   const SizedBox(height: 6),
                   TextFormField(
                     controller: _startTimeController,
+                    readOnly: true,
+                    onTap: () => _selectTime(context, _startTimeController),
                     validator: (val) => val == null || val.isEmpty ? 'Enter start time' : null,
-                    decoration: const InputDecoration(hintText: 'HH:MM:SS (e.g. 17:00:00)'),
+                    decoration: const InputDecoration(
+                      hintText: 'Select Start Time',
+                      suffixIcon: Icon(Icons.access_time_rounded),
+                    ),
                     style: GoogleFonts.inter(fontSize: 13),
                   ),
                   const SizedBox(height: 20),
@@ -1174,8 +1568,13 @@ class _OffersScreenState extends State<OffersScreen> {
                   const SizedBox(height: 6),
                   TextFormField(
                     controller: _endTimeController,
+                    readOnly: true,
+                    onTap: () => _selectTime(context, _endTimeController),
                     validator: (val) => val == null || val.isEmpty ? 'Enter end time' : null,
-                    decoration: const InputDecoration(hintText: 'HH:MM:SS (e.g. 19:00:00)'),
+                    decoration: const InputDecoration(
+                      hintText: 'Select End Time',
+                      suffixIcon: Icon(Icons.access_time_rounded),
+                    ),
                     style: GoogleFonts.inter(fontSize: 13),
                   ),
                   const SizedBox(height: 20),
