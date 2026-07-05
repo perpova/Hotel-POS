@@ -44,7 +44,7 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-
-  # Ensure Sinhala fonts or custom styling fonts can load.
-  # We will use google_fonts to fetch them at runtime, 
-  # but standard system fonts will also display Sinhala correctly.
+  # Custom logo and Sinhala font assets
+  assets:
+    - assets/images/mhb_logo.png
+    - assets/fonts/NotoSansSinhala-Regular.ttf

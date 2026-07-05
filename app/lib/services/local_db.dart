@@ -169,13 +169,15 @@ class LocalDB {
   // ORDER CACHING (OFFLINE SAVING)
   // ----------------------------------------------------
 
-  Future<void> saveOrderOffline(OrderModel order) async {
+  Future<int> saveOrderOffline(OrderModel order) async {
     if (kIsWeb) {
       final orders = await _webGetList('offline_orders');
       final items = await _webGetList('offline_order_items');
       
       final orderJson = order.toJson();
       orderJson['sync_status'] = 'pending';
+      final int generatedId = DateTime.now().millisecondsSinceEpoch % 1000000;
+      orderJson['id'] = generatedId;
       orders.add(orderJson);
       
       for (var item in order.items) {
@@ -186,10 +188,11 @@ class LocalDB {
       
       await _webSaveList('offline_orders', orders);
       await _webSaveList('offline_order_items', items);
+      return generatedId;
     } else {
       final db = await instance.database;
       
-      await db.insert('offline_orders', {
+      final int orderId = await db.insert('offline_orders', {
         'order_number': order.orderNumber,
         'table_id': order.tableId,
         'order_type': order.orderType,
@@ -225,6 +228,7 @@ class LocalDB {
           'is_short_eat': item.isShortEat ? 1 : 0
         });
       }
+      return orderId;
     }
   }
 

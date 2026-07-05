@@ -10,6 +10,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import '../pos_controller.dart';
 import '../theme.dart';
 import '../models.dart';
@@ -707,38 +708,9 @@ class _POSScreenState extends State<POSScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 8),
-
-          // Token Number Input Field
-          Container(
-            height: 44,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
-            ),
-            child: TextFormField(
-              controller: _tokenNoController,
-              keyboardType: TextInputType.number,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold),
-              decoration: InputDecoration(
-                hintText: 'Token No',
-                hintStyle: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF64748B)),
-                border: InputBorder.none,
-                enabledBorder: InputBorder.none,
-                focusedBorder: InputBorder.none,
-                filled: false,
-                contentPadding: const EdgeInsets.symmetric(vertical: 10),
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-
           // Select Order Type Radio Cards
           _buildOrderTypeSelectorCard(controller),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
 
           // Dine-in Table selectors / Delivery platform selectors
           if (controller.orderType == 'dine_in') ...[
@@ -746,7 +718,7 @@ class _POSScreenState extends State<POSScreen> {
               children: [
                 Expanded(
                   child: Container(
-                    height: 36,
+                    height: 44,
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     decoration: BoxDecoration(
                       color: Colors.white,
@@ -756,18 +728,27 @@ class _POSScreenState extends State<POSScreen> {
                     child: DropdownButtonHideUnderline(
                       child: DropdownButtonFormField<DiningTableModel>(
                         value: controller.selectedTable,
-                        hint: Text('Select Table', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B))),
+                        hint: Align(
+                          alignment: Alignment.center,
+                          child: Text('Select Table', style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF64748B))),
+                        ),
+                        alignment: Alignment.center,
                         decoration: const InputDecoration(
                           border: InputBorder.none,
                           enabledBorder: InputBorder.none,
                           focusedBorder: InputBorder.none,
                           filled: false,
-                          contentPadding: EdgeInsets.zero,
+                          contentPadding: EdgeInsets.symmetric(vertical: 4),
                         ),
+                        iconSize: 18,
+                        style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)),
                         items: [
                           ...controller.diningTables.map((t) => DropdownMenuItem(
                                 value: t,
-                                child: Text('${t.tableNumber} (${t.status.toUpperCase()})', style: GoogleFonts.inter(fontSize: 11)),
+                                child: Align(
+                                  alignment: Alignment.center,
+                                  child: Text('${t.tableNumber} (${t.status.toUpperCase()})', style: GoogleFonts.inter(fontSize: 13)),
+                                ),
                               )),
                         ],
                         onChanged: (t) => controller.selectTable(t),
@@ -820,7 +801,7 @@ class _POSScreenState extends State<POSScreen> {
             ),
           ] else if (controller.orderType == 'delivery') ...[
             Container(
-              height: 36,
+              height: 44,
               padding: const EdgeInsets.symmetric(horizontal: 12),
               decoration: BoxDecoration(
                 color: Colors.white,
@@ -830,19 +811,25 @@ class _POSScreenState extends State<POSScreen> {
               child: DropdownButtonHideUnderline(
                 child: DropdownButtonFormField<String>(
                   value: controller.deliveryPlatform,
-                  hint: Text('Delivery Platform', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B))),
+                  hint: Align(
+                    alignment: Alignment.center,
+                    child: Text('Delivery Platform', style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF64748B))),
+                  ),
+                  alignment: Alignment.center,
                   decoration: const InputDecoration(
                     border: InputBorder.none,
                     enabledBorder: InputBorder.none,
                     focusedBorder: InputBorder.none,
                     filled: false,
-                    contentPadding: EdgeInsets.zero,
+                    contentPadding: EdgeInsets.symmetric(vertical: 4),
                   ),
+                  iconSize: 18,
+                  style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)),
                   items: const [
-                    DropdownMenuItem(value: 'uber_eats', child: Text('Uber Eats', style: TextStyle(fontSize: 11))),
-                    DropdownMenuItem(value: 'pickme', child: Text('PickMe Food', style: TextStyle(fontSize: 11))),
-                    DropdownMenuItem(value: 'phone', child: Text('Phone Order', style: TextStyle(fontSize: 11))),
-                    DropdownMenuItem(value: 'direct', child: Text('Direct Delivery', style: TextStyle(fontSize: 11))),
+                    DropdownMenuItem(value: 'uber_eats', child: Align(alignment: Alignment.center, child: Text('Uber Eats', style: TextStyle(fontSize: 13)))),
+                    DropdownMenuItem(value: 'pickme', child: Align(alignment: Alignment.center, child: Text('PickMe Food', style: TextStyle(fontSize: 13)))),
+                    DropdownMenuItem(value: 'phone', child: Align(alignment: Alignment.center, child: Text('Phone Order', style: TextStyle(fontSize: 13)))),
+                    DropdownMenuItem(value: 'direct', child: Align(alignment: Alignment.center, child: Text('Direct Delivery', style: TextStyle(fontSize: 13)))),
                   ],
                   onChanged: (platform) => controller.setDeliveryPlatform(platform),
                 ),
@@ -1045,15 +1032,15 @@ class _POSScreenState extends State<POSScreen> {
       children: [
         Text(
           'Select Order Type',
-          style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF64748B)),
+          style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: const Color(0xFF475569)),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 8),
         Row(
           children: [
             Expanded(child: _buildFoodKingTypeButton('dine_in', 'Dine-In', controller)),
-            const SizedBox(width: 6),
+            const SizedBox(width: 8),
             Expanded(child: _buildFoodKingTypeButton('takeaway', 'Takeaway', controller)),
-            const SizedBox(width: 6),
+            const SizedBox(width: 8),
             Expanded(child: _buildFoodKingTypeButton('delivery', 'Delivery', controller)),
           ],
         ),
@@ -1066,32 +1053,41 @@ class _POSScreenState extends State<POSScreen> {
     return GestureDetector(
       onTap: () => controller.setOrderType(type),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 6),
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
         decoration: BoxDecoration(
           color: isSel ? const Color(0xFFFFF0F5) : Colors.white,
           border: Border.all(
-            color: isSel ? AppTheme.primary : Color(0xFFE2E8F0),
-            width: isSel ? 1.5 : 1,
+            color: isSel ? AppTheme.primary : const Color(0xFFE2E8F0),
+            width: isSel ? 2.0 : 1.0,
           ),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: isSel
+              ? [
+                  BoxShadow(
+                    color: AppTheme.primary.withOpacity(0.08),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  )
+                ]
+              : null,
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
               isSel ? Icons.radio_button_checked : Icons.radio_button_off,
-              color: isSel ? AppTheme.primary : Color(0xFFCBD5E1),
-              size: 12,
+              color: isSel ? AppTheme.primary : const Color(0xFFCBD5E1),
+              size: 16,
             ),
-            const SizedBox(width: 4),
+            const SizedBox(width: 6),
             Expanded(
               child: Text(
                 label,
                 overflow: TextOverflow.ellipsis,
                 style: GoogleFonts.inter(
-                  fontSize: 11,
-                  fontWeight: isSel ? FontWeight.bold : FontWeight.w500,
-                  color: isSel ? AppTheme.primary : Color(0xFF1E293B),
+                  fontSize: 13,
+                  fontWeight: isSel ? FontWeight.bold : FontWeight.w600,
+                  color: isSel ? AppTheme.primary : const Color(0xFF1E293B),
                 ),
               ),
             ),
@@ -2494,7 +2490,6 @@ class _POSScreenState extends State<POSScreen> {
 
                         // Create ReceiptData copy
                         final List<OrderItemModel> itemsCopy = List.from(controller.cart);
-                        final orderNum = 'ORD-${DateTime.now().toIso8601String().substring(0, 10).replaceAll('-', '')}-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}';
                         final double finalSub = controller.cartSubtotal;
                         final double finalDisc = controller.discount;
                         final double finalTot = controller.cartTotal;
@@ -2506,23 +2501,7 @@ class _POSScreenState extends State<POSScreen> {
                         final String? tblName = controller.selectedTable?.tableNumber;
                         final String? custName = paymentMethod == 'credit' ? selectedCreditCustomer!.name : controller.selectedCustomer?.name;
                         final int tknNumber = int.tryParse(_tokenNoController.text) ?? (controller.activeOrders.length + 1);
-
-                        final receiptData = ReceiptData(
-                          orderNumber: orderNum,
-                          paymentMethod: paymentMethod,
-                          items: itemsCopy,
-                          subtotal: finalSub,
-                          discount: finalDisc,
-                          total: finalTot,
-                          orderType: orderTypeLabel,
-                          tableName: tblName,
-                          customerName: custName,
-                          receivedAmount: paymentMethod == 'cash' ? receivedVal : finalTot,
-                          changeAmount: paymentMethod == 'cash' ? changeVal : 0.00,
-                          tokenNumber: tknNumber,
-                          cardLastDigits: paymentMethod == 'card' ? enteredAmount : null,
-                          transactionRef: paymentMethod == 'qr' ? enteredAmount : null,
-                        );
+                        final String cashierUsername = APIService.instance.currentUser?.username ?? 'admin';
 
                         try {
                           if (paymentMethod == 'credit' && selectedCreditCustomer != null) {
@@ -2535,12 +2514,34 @@ class _POSScreenState extends State<POSScreen> {
                           }
 
                           // Place order (triggers clearCart + reloadEnvironment)
-                          await controller.placeOrder(
+                          final orderResult = await controller.placeOrder(
                             printKOT: true,
                             printAck: true,
                             status: 'delivered',
                             paymentStatus: paymentMethod == 'credit' ? 'unpaid' : 'paid',
                             paymentMethod: paymentMethod,
+                          );
+
+                          final int orderId = orderResult['orderId'] ?? 0;
+                          final String orderNum = orderResult['orderNumber'] ?? '';
+
+                          final receiptData = ReceiptData(
+                            orderId: orderId,
+                            orderNumber: orderNum,
+                            paymentMethod: paymentMethod,
+                            items: itemsCopy,
+                            subtotal: finalSub,
+                            discount: finalDisc,
+                            total: finalTot,
+                            orderType: orderTypeLabel,
+                            tableName: tblName,
+                            customerName: custName,
+                            receivedAmount: paymentMethod == 'cash' ? receivedVal : finalTot,
+                            changeAmount: paymentMethod == 'cash' ? changeVal : 0.00,
+                            tokenNumber: tknNumber,
+                            cardLastDigits: paymentMethod == 'card' ? enteredAmount : null,
+                            transactionRef: paymentMethod == 'qr' ? enteredAmount : null,
+                            cashierName: cashierUsername,
                           );
 
                           // TTS voice notification to kitchen
@@ -2689,98 +2690,147 @@ class _POSScreenState extends State<POSScreen> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       backgroundColor: const Color(0xFFF1F5F9),
       child: Builder(
-        builder: (dialogCtx) => Container(
-          width: MediaQuery.of(dialogCtx).size.width * 0.8,
-          constraints: BoxConstraints(
-            maxWidth: 780,
-            maxHeight: MediaQuery.of(dialogCtx).size.height * 0.85,
-          ),
-          child: Column(
-            children: [
-              // Top Action Buttons
-              Container(
-                color: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                child: Row(
-                  children: [
-                    ElevatedButton.icon(
-                      onPressed: () => Navigator.pop(dialogCtx),
-                      icon: const Icon(Icons.close, size: 16),
-                      label: const Text('Close'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFEF4444),
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        builder: (dialogCtx) {
+          final controller = Provider.of<POSController>(dialogCtx, listen: false);
+          return Container(
+            width: MediaQuery.of(dialogCtx).size.width * 0.8,
+            constraints: BoxConstraints(
+              maxWidth: 780,
+              maxHeight: MediaQuery.of(dialogCtx).size.height * 0.85,
+            ),
+            child: Column(
+              children: [
+                // Top Action Buttons
+                Container(
+                  color: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: Row(
+                    children: [
+                      ElevatedButton.icon(
+                        onPressed: () => Navigator.pop(dialogCtx),
+                        icon: const Icon(Icons.close, size: 16),
+                        label: const Text('Close'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFEF4444),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        ),
                       ),
-                    ),
-                    const Spacer(),
-                    // Download KOT PDF
-                    ElevatedButton.icon(
-                      onPressed: () async {
-                        try {
-                          final bytes = await _generateKOTPdfBytes(data);
-                          await _savePdfToFile(bytes, 'KOT_Token_${data.tokenNumber}.pdf');
-                        } catch (e) {
-                          _showErrorSnackBar('Failed to download KOT: $e');
-                        }
-                      },
-                      icon: const Icon(Icons.download_rounded, size: 16),
-                      label: const Text('Download KOT'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF3B82F6),
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      const Spacer(),
+                      // Print KOT
+                      ElevatedButton.icon(
+                        onPressed: () async {
+                          try {
+                            final bytes = await _generateKOTPdfBytes(data, controller);
+                            await Printing.layoutPdf(
+                              onLayout: (format) async => bytes,
+                              name: 'KOT_Token_${data.tokenNumber}',
+                            );
+                          } catch (e) {
+                            _showErrorSnackBar('Failed to print KOT: $e');
+                          }
+                        },
+                        icon: const Icon(Icons.print_rounded, size: 16),
+                        label: const Text('Print KOT'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF4F46E5),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    // Download Invoice PDF
-                    ElevatedButton.icon(
-                      onPressed: () async {
-                        try {
-                          final bytes = await _generateInvoicePdfBytes(data);
-                          await _savePdfToFile(bytes, 'Invoice_Token_${data.tokenNumber}.pdf');
-                        } catch (e) {
-                          _showErrorSnackBar('Failed to download Invoice: $e');
-                        }
-                      },
-                      icon: const Icon(Icons.download_rounded, size: 16),
-                      label: const Text('Download Invoice'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF10B981),
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      const SizedBox(width: 6),
+                      // Download KOT PDF
+                      ElevatedButton.icon(
+                        onPressed: () async {
+                          try {
+                            final bytes = await _generateKOTPdfBytes(data, controller);
+                            await _savePdfToFile(bytes, 'KOT_Token_${data.tokenNumber}.pdf');
+                          } catch (e) {
+                            _showErrorSnackBar('Failed to download KOT: $e');
+                          }
+                        },
+                        icon: const Icon(Icons.download_rounded, size: 16),
+                        label: const Text('Download KOT'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF3B82F6),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 12),
+                      // Print Invoice
+                      ElevatedButton.icon(
+                        onPressed: () async {
+                          try {
+                            final bytes = await _generateInvoicePdfBytes(data, controller);
+                            await Printing.layoutPdf(
+                              onLayout: (format) async => bytes,
+                              name: 'Invoice_Token_${data.tokenNumber}',
+                            );
+                          } catch (e) {
+                            _showErrorSnackBar('Failed to print Invoice: $e');
+                          }
+                        },
+                        icon: const Icon(Icons.print_rounded, size: 16),
+                        label: const Text('Print Invoice'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF059669),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      // Download Invoice PDF
+                      ElevatedButton.icon(
+                        onPressed: () async {
+                          try {
+                            final bytes = await _generateInvoicePdfBytes(data, controller);
+                            await _savePdfToFile(bytes, 'Invoice_Token_${data.tokenNumber}.pdf');
+                          } catch (e) {
+                            _showErrorSnackBar('Failed to download Invoice: $e');
+                          }
+                        },
+                        icon: const Icon(Icons.download_rounded, size: 16),
+                        label: const Text('Download Invoice'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF10B981),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
 
-              // Both slips side-by-side
-              Expanded(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
+                // Both slips side-by-side
+                Expanded(
                   child: SingleChildScrollView(
-                    scrollDirection: Axis.vertical,
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          SizedBox(width: 340, child: _buildKOTSlip(data)),
-                          const SizedBox(width: 20),
-                          SizedBox(width: 340, child: _buildCustomerInvoiceSlip(data)),
-                        ],
+                    scrollDirection: Axis.horizontal,
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.vertical,
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SizedBox(width: 340, child: _buildKOTSlip(data, controller)),
+                            const SizedBox(width: 20),
+                            SizedBox(width: 340, child: _buildCustomerInvoiceSlip(data, controller)),
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            ],
-          ),
-        ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
@@ -2822,42 +2872,51 @@ class _POSScreenState extends State<POSScreen> {
     }
   }
 
-  Future<Uint8List> _generateKOTPdfBytes(ReceiptData data) async {
+  Future<Uint8List> _generateKOTPdfBytes(ReceiptData data, POSController controller) async {
     final pdf = pw.Document();
+    
+    // Load Sinhala Font
+    final fontData = await rootBundle.load('assets/fonts/NotoSansSinhala-Regular.ttf');
+    final sinhalaFont = pw.Font.ttf(fontData);
+    
+    final int totalQty = data.items.fold(0, (sum, item) => sum + item.quantity);
+    
     pdf.addPage(
       pw.Page(
         pageFormat: PdfPageFormat.roll80,
-        margin: const pw.EdgeInsets.all(10),
+        margin: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 3),
         build: (pw.Context context) {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               pw.Center(
-                child: pw.Text('KITCHEN ORDER TICKET', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13)),
+                child: pw.Text(
+                  _getKOTHeader(data, controller),
+                  style: pw.TextStyle(font: sinhalaFont, fontWeight: pw.FontWeight.bold, fontSize: 10),
+                ),
               ),
-              pw.Center(
-                child: pw.Text('(KOT COPY)', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
-              ),
-              pw.SizedBox(height: 8),
-              pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
               pw.SizedBox(height: 5),
-
-              pw.Text('Order #: ${data.orderNumber.substring(data.orderNumber.length - 8)}', style: const pw.TextStyle(fontSize: 9)),
-              pw.Text('Table: ${data.tableName ?? "N/A (Takeaway)"}', style: const pw.TextStyle(fontSize: 9)),
-              pw.Text('Date: ${DateTime.now().day.toString().padLeft(2, '0')}-${DateTime.now().month.toString().padLeft(2, '0')}-${DateTime.now().year} ${DateTime.now().hour.toString().padLeft(2, '0')}:${DateTime.now().minute.toString().padLeft(2, '0')} PM', style: const pw.TextStyle(fontSize: 9)),
-              pw.SizedBox(height: 5),
-              pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
-              pw.SizedBox(height: 5),
+              
+              _buildPdfInfoRow('KOT No:', _getKOTNumber(data), sinhalaFont),
+              _buildPdfInfoRow('Date:', '${DateTime.now().day.toString().padLeft(2, '0')}/${DateTime.now().month.toString().padLeft(2, '0')}/${DateTime.now().year}', sinhalaFont),
+              _buildPdfInfoRow('Time:', _formatTime(DateTime.now(), includeSpace: true), sinhalaFont),
+              if (data.tableName != null && data.tableName!.isNotEmpty)
+                _buildPdfInfoRow('Table:', data.tableName!, sinhalaFont),
+              
+              pw.SizedBox(height: 4),
+              _buildPdfDashedLine(),
+              pw.SizedBox(height: 4),
 
               pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  pw.Expanded(flex: 1, child: pw.Text('Qty', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))),
-                  pw.Expanded(flex: 5, child: pw.Text('Item Name', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))),
+                  pw.Text('Description', style: pw.TextStyle(font: sinhalaFont, fontWeight: pw.FontWeight.bold, fontSize: 8)),
+                  pw.Text('Qty', style: pw.TextStyle(font: sinhalaFont, fontWeight: pw.FontWeight.bold, fontSize: 8)),
                 ],
               ),
               pw.SizedBox(height: 2),
               pw.Divider(thickness: 0.5),
-              pw.SizedBox(height: 4),
+              pw.SizedBox(height: 3),
 
               ...data.items.map((item) {
                 return pw.Padding(
@@ -2867,23 +2926,26 @@ class _POSScreenState extends State<POSScreen> {
                     children: [
                       pw.Row(
                         crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                         children: [
-                          pw.Expanded(flex: 1, child: pw.Text('${item.quantity}', style: const pw.TextStyle(fontSize: 9))),
-                          pw.Expanded(flex: 5, child: pw.Text(item.productName, style: const pw.TextStyle(fontSize: 9))),
+                          pw.Expanded(
+                            child: pw.Text(
+                              item.productSinhalaName ?? item.productName,
+                              style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold),
+                            ),
+                          ),
+                          pw.SizedBox(width: 8),
+                          pw.Text(
+                            '${item.quantity}',
+                            style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold),
+                          ),
                         ],
                       ),
                       if (item.notes != null && item.notes!.isNotEmpty) ...[
                         pw.SizedBox(height: 1),
-                        pw.Row(
-                          children: [
-                            pw.SizedBox(width: 15),
-                            pw.Expanded(
-                              child: pw.Text(
-                                item.notes!,
-                                style: pw.TextStyle(fontSize: 8, fontStyle: pw.FontStyle.italic),
-                              ),
-                            ),
-                          ],
+                        pw.Text(
+                          '  * ${item.notes!}',
+                          style: pw.TextStyle(font: sinhalaFont, fontSize: 7, fontStyle: pw.FontStyle.italic),
                         ),
                       ],
                     ],
@@ -2891,27 +2953,21 @@ class _POSScreenState extends State<POSScreen> {
                 );
               }).toList(),
 
-              pw.SizedBox(height: 4),
-              pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
-              pw.SizedBox(height: 8),
-
-              pw.Center(
-                child: pw.Container(
-                  padding: const pw.EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                  decoration: pw.BoxDecoration(
-                    border: pw.Border.all(color: PdfColors.grey),
-                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+              pw.SizedBox(height: 3),
+              _buildPdfDashedLine(),
+              pw.SizedBox(height: 3),
+              
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.end,
+                children: [
+                  pw.Text(
+                    '$totalQty',
+                    style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold),
                   ),
-                  child: pw.Text(
-                    'Token #${data.tokenNumber}',
-                    style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold),
-                  ),
-                ),
+                ],
               ),
-              pw.SizedBox(height: 8),
-              pw.Center(
-                child: pw.Text('Kitchen Copy', style: const pw.TextStyle(fontSize: 8)),
-              ),
+              pw.SizedBox(height: 3),
+              _buildPdfDashedLine(),
             ],
           );
         },
@@ -2920,48 +2976,113 @@ class _POSScreenState extends State<POSScreen> {
     return pdf.save();
   }
 
-  Future<Uint8List> _generateInvoicePdfBytes(ReceiptData data) async {
+  Future<Uint8List> _generateInvoicePdfBytes(ReceiptData data, POSController controller) async {
     final pdf = pw.Document();
+    
+    // Load Sinhala Font
+    final fontData = await rootBundle.load('assets/fonts/NotoSansSinhala-Regular.ttf');
+    final sinhalaFont = pw.Font.ttf(fontData);
+
+    // Load Logo
+    pw.MemoryImage? logoImage;
+    try {
+      final logoData = await rootBundle.load('assets/images/mhb_logo.png');
+      logoImage = pw.MemoryImage(logoData.buffer.asUint8List());
+    } catch (_) {}
+    
+    final int totalQty = data.items.fold(0, (sum, item) => sum + item.quantity);
+
     pdf.addPage(
       pw.Page(
         pageFormat: PdfPageFormat.roll80,
-        margin: const pw.EdgeInsets.all(10),
+        margin: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 3),
         build: (pw.Context context) {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              pw.Center(
-                child: pw.Text('FoodKing - Restaurant', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13)),
-              ),
-              pw.Center(
-                child: pw.Text('Food Ordering & Delivery App', style: const pw.TextStyle(fontSize: 9)),
-              ),
-              pw.Center(
-                child: pw.Text('House: 25, Road No: 2, Block A, Mirpur-1, Dhaka 1216', style: const pw.TextStyle(fontSize: 8)),
-              ),
-              pw.Center(
-                child: pw.Text('Tel: +536464646464', style: const pw.TextStyle(fontSize: 8)),
+              // Logo & Oval Header Row
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Row(
+                    crossAxisAlignment: pw.CrossAxisAlignment.center,
+                    children: [
+                      if (logoImage != null) ...[
+                        pw.Image(logoImage, width: 28, height: 28),
+                        pw.SizedBox(width: 6),
+                      ],
+                      pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text(
+                            'මාතර හෝටලය',
+                            style: pw.TextStyle(font: sinhalaFont, fontSize: 10, fontWeight: pw.FontWeight.bold),
+                          ),
+                          pw.Text(
+                            'නො: 04 මහා වීදිය, අකුරැස්ස',
+                            style: pw.TextStyle(font: sinhalaFont, fontSize: 7, color: PdfColors.grey700),
+                          ),
+                          pw.Text(
+                            '041 2283857',
+                            style: pw.TextStyle(font: sinhalaFont, fontSize: 7, color: PdfColors.grey700),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  pw.Container(
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                    decoration: pw.BoxDecoration(
+                      border: pw.Border.all(color: PdfColors.black, width: 1),
+                      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(12)),
+                    ),
+                    child: pw.Text(
+                      _getOvalNumber(data),
+                      style: pw.TextStyle(font: sinhalaFont, fontSize: 10, fontWeight: pw.FontWeight.bold),
+                    ),
+                  ),
+                ],
               ),
               pw.SizedBox(height: 8),
-              pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
-              pw.SizedBox(height: 5),
-
+              pw.Center(
+                child: pw.Text(
+                  'INVOICE',
+                  style: pw.TextStyle(font: sinhalaFont, fontSize: 10, fontWeight: pw.FontWeight.bold, decoration: pw.TextDecoration.underline),
+                ),
+              ),
+              pw.SizedBox(height: 4),
+              
+              _buildPdfInfoRow('Receipt No', _getReceiptNumber(data), sinhalaFont),
+              
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  pw.Text('Order #: ${data.orderNumber.substring(data.orderNumber.length - 8)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
-                  pw.Text('${DateTime.now().day.toString().padLeft(2, '0')}-${DateTime.now().month.toString().padLeft(2, '0')}-${DateTime.now().year}', style: const pw.TextStyle(fontSize: 8)),
+                  pw.Text(
+                    'Date  ${DateTime.now().day.toString().padLeft(2, '0')}-${_getMonthName(DateTime.now())}-${DateTime.now().year}',
+                    style: pw.TextStyle(font: sinhalaFont, fontSize: 8),
+                  ),
+                  pw.Text(
+                    _formatTime(DateTime.now(), includeSpace: false),
+                    style: pw.TextStyle(font: sinhalaFont, fontSize: 8),
+                  ),
+                  pw.Text(
+                    data.cashierName,
+                    style: pw.TextStyle(font: sinhalaFont, fontSize: 8),
+                  ),
                 ],
               ),
-              pw.SizedBox(height: 5),
-              pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
-              pw.SizedBox(height: 8),
+              
+              pw.SizedBox(height: 4),
+              _buildPdfDashedLine(),
+              pw.SizedBox(height: 4),
 
               pw.Row(
                 children: [
-                  pw.Expanded(flex: 1, child: pw.Text('Qty', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))),
-                  pw.Expanded(flex: 4, child: pw.Text('Description', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))),
-                  pw.Expanded(flex: 2, child: pw.Align(alignment: pw.Alignment.centerRight, child: pw.Text('Price', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)))),
+                  pw.Expanded(flex: 3, child: pw.Text('Description', style: pw.TextStyle(font: sinhalaFont, fontWeight: pw.FontWeight.bold, fontSize: 8))),
+                  pw.Expanded(flex: 1, child: pw.Align(alignment: pw.Alignment.center, child: pw.Text('Qty', style: pw.TextStyle(font: sinhalaFont, fontWeight: pw.FontWeight.bold, fontSize: 8)))),
+                  pw.Expanded(flex: 2, child: pw.Align(alignment: pw.Alignment.centerRight, child: pw.Text('Price', style: pw.TextStyle(font: sinhalaFont, fontWeight: pw.FontWeight.bold, fontSize: 8)))),
+                  pw.Expanded(flex: 2, child: pw.Align(alignment: pw.Alignment.centerRight, child: pw.Text('Amount', style: pw.TextStyle(font: sinhalaFont, fontWeight: pw.FontWeight.bold, fontSize: 8)))),
                 ],
               ),
               pw.SizedBox(height: 2),
@@ -2977,88 +3098,119 @@ class _POSScreenState extends State<POSScreen> {
                       pw.Row(
                         crossAxisAlignment: pw.CrossAxisAlignment.start,
                         children: [
-                          pw.Expanded(flex: 1, child: pw.Text('${item.quantity}', style: const pw.TextStyle(fontSize: 9))),
-                          pw.Expanded(flex: 4, child: pw.Text(item.productName, style: const pw.TextStyle(fontSize: 9))),
-                          pw.Expanded(flex: 2, child: pw.Align(alignment: pw.Alignment.centerRight, child: pw.Text('LKR ${(item.price * item.quantity).toStringAsFixed(0)}', style: const pw.TextStyle(fontSize: 9)))),
+                          pw.Expanded(
+                            flex: 3,
+                            child: pw.Text(
+                              item.productSinhalaName ?? item.productName,
+                              style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold),
+                            ),
+                          ),
+                          pw.Expanded(
+                            flex: 1,
+                            child: pw.Align(
+                              alignment: pw.Alignment.center,
+                              child: pw.Text('${item.quantity}', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                            ),
+                          ),
+                          pw.Expanded(
+                            flex: 2,
+                            child: pw.Align(
+                              alignment: pw.Alignment.centerRight,
+                              child: pw.Text(item.price.toStringAsFixed(2), style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                            ),
+                          ),
+                          pw.Expanded(
+                            flex: 2,
+                            child: pw.Align(
+                              alignment: pw.Alignment.centerRight,
+                              child: pw.Text((item.price * item.quantity).toStringAsFixed(2), style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                            ),
+                          ),
                         ],
                       ),
                       if (item.notes != null && item.notes!.isNotEmpty) ...[
                         pw.SizedBox(height: 1),
-                        pw.Row(
-                          children: [
-                            pw.SizedBox(width: 15),
-                            pw.Expanded(
-                              child: pw.Text(
-                                item.notes!,
-                                style: pw.TextStyle(fontSize: 8, fontStyle: pw.FontStyle.italic),
-                              ),
-                            ),
-                          ],
+                        pw.Text(
+                          '  * ${item.notes!}',
+                          style: pw.TextStyle(font: sinhalaFont, fontSize: 7, fontStyle: pw.FontStyle.italic),
                         ),
                       ],
                     ],
                   ),
                 );
               }).toList(),
-
+              
+              pw.SizedBox(height: 3),
+              _buildPdfDashedLine(),
               pw.SizedBox(height: 4),
-              pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
-              pw.SizedBox(height: 5),
-
+              
+              // Summary
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  pw.Text('SUBTOTAL:', style: const pw.TextStyle(fontSize: 8)),
-                  pw.Text('LKR ${data.subtotal.toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 8)),
-                ],
-              ),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text('DISCOUNT:', style: const pw.TextStyle(fontSize: 8)),
-                  pw.Text('LKR ${data.discount.toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 8)),
-                ],
-              ),
-              pw.SizedBox(height: 2),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text('TOTAL:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
-                  pw.Text('LKR ${data.total.toStringAsFixed(2)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: PdfColors.red)),
-                ],
-              ),
-              pw.SizedBox(height: 5),
-              pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
-              pw.SizedBox(height: 5),
-
-              pw.Text('Order Type: ${data.orderType}', style: const pw.TextStyle(fontSize: 8)),
-              pw.Text('Payment Type: ${data.paymentMethod.toUpperCase()}', style: const pw.TextStyle(fontSize: 8)),
-              if (data.paymentMethod == 'cash') ...[
-                pw.Text('Cash: LKR ${data.receivedAmount.toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 8)),
-                pw.Text('Change: LKR ${data.changeAmount.toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 8)),
-              ] else if (data.paymentMethod == 'credit') ...[
-                pw.Text('Credit Customer: ${data.customerName ?? "N/A"}', style: const pw.TextStyle(fontSize: 8)),
-              ],
-              pw.SizedBox(height: 6),
-              pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
-              pw.SizedBox(height: 8),
-
-              pw.Center(
-                child: pw.Container(
-                  padding: const pw.EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                  decoration: pw.BoxDecoration(
-                    border: pw.Border.all(color: PdfColors.grey),
-                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                  pw.Row(
+                    children: [
+                      pw.Text('No of Items', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                      pw.SizedBox(width: 10),
+                      pw.Text('$totalQty', style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                    ],
                   ),
-                  child: pw.Text(
-                    'Token #${data.tokenNumber}',
-                    style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold),
+                  pw.Row(
+                    children: [
+                      pw.Text('Total', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                      pw.SizedBox(width: 15),
+                      pw.Text(':', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                      pw.SizedBox(width: 10),
+                      pw.Text(data.total.toStringAsFixed(2), style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                    ],
                   ),
-                ),
+                ],
               ),
-              pw.SizedBox(height: 8),
+              
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.SizedBox.shrink(),
+                  pw.Row(
+                    children: [
+                      pw.Text('Paid Amount', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                      pw.SizedBox(width: 5),
+                      pw.Text(':', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                      pw.SizedBox(width: 10),
+                      pw.Text(data.receivedAmount.toStringAsFixed(2), style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                    ],
+                  ),
+                ],
+              ),
+              
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text(
+                    'PAID BY ${data.paymentMethod.toUpperCase()}',
+                    style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold),
+                  ),
+                  pw.Row(
+                    children: [
+                      pw.Text('Balance', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                      pw.SizedBox(width: 10),
+                      pw.Text(':', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                      pw.SizedBox(width: 10),
+                      pw.Text(data.changeAmount.toStringAsFixed(2), style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                    ],
+                  ),
+                ],
+              ),
+              
+              pw.SizedBox(height: 4),
+              _buildPdfDashedLine(),
+              pw.SizedBox(height: 5),
+              
               pw.Center(
-                child: pw.Text('Thank You - Please Come Again', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                child: pw.Text('Thank you & Come Again', style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold)),
+              ),
+              pw.Center(
+                child: pw.Text('Software by Perpova. 0713555566', style: pw.TextStyle(font: sinhalaFont, fontSize: 7)),
               ),
             ],
           );
@@ -3105,135 +3257,99 @@ class _POSScreenState extends State<POSScreen> {
     );
   }
 
-  Widget _buildKOTSlip(ReceiptData data) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          )
-        ],
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+  String _getKOTNumber(ReceiptData data) {
+    final prefix = data.orderType.toLowerCase().contains('take') 
+        ? 'TK' 
+        : data.orderType.toLowerCase().contains('deli') 
+            ? 'DL' 
+            : 'DI';
+    final paddedId = data.orderId.toString().padLeft(9, '0');
+    return '$prefix$paddedId';
+  }
+
+  String _getReceiptNumber(ReceiptData data) {
+    final paddedId = data.orderId.toString().padLeft(9, '0');
+    return '1$paddedId';
+  }
+
+  String _getOvalNumber(ReceiptData data) {
+    final idStr = data.orderId.toString();
+    if (idStr.length >= 3) {
+      return idStr.substring(idStr.length - 3);
+    }
+    return idStr.padLeft(3, '0');
+  }
+
+  String _getKOTHeader(ReceiptData data, POSController controller) {
+    String orderTypeUpper = data.orderType.toUpperCase();
+    if (orderTypeUpper.contains("DINING")) {
+      orderTypeUpper = "DINE IN";
+    } else if (orderTypeUpper.contains("TAKE")) {
+      orderTypeUpper = "TAKE AWAY";
+    } else if (orderTypeUpper.contains("DELI")) {
+      orderTypeUpper = "DELIVERY";
+    }
+    
+    if (data.items.isNotEmpty) {
+      final firstItem = data.items.first;
+      final product = controller.products.firstWhere(
+        (p) => p.id == firstItem.productId,
+        orElse: () => ProductModel(
+          id: 0, name: '', categoryId: 0, price: 0, cost: 0, activePrice: 0, isHappyHour: false, stockQty: 0, minStockLevel: 0, isShortEat: false
+        ),
+      );
+      if (product.id != 0) {
+        final category = controller.categories.firstWhere(
+          (c) => c.id == product.categoryId,
+          orElse: () => CategoryModel(id: 0, name: ''),
+        );
+        if (category.id != 0) {
+          return "KOT $orderTypeUpper - ${category.name}";
+        }
+      }
+    }
+    return "KOT $orderTypeUpper";
+  }
+
+  pw.Widget _buildPdfInfoRow(String label, String val, pw.Font font) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(vertical: 1.0),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         children: [
-          Center(
-            child: Text(
-              'KITCHEN ORDER TICKET',
-              style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)),
-            ),
-          ),
-          Center(
-            child: Text(
-              '(KOT COPY)',
-              style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.primary),
-            ),
-          ),
-          const SizedBox(height: 12),
-          _buildDashedLine(),
-          const SizedBox(height: 8),
-
-          _buildInfoRow('Order #:', data.orderNumber.substring(data.orderNumber.length - 8)),
-          _buildInfoRow('Table:', data.tableName ?? 'N/A (Takeaway)'),
-          _buildInfoRow('Date:', '${DateTime.now().day.toString().padLeft(2, '0')}-${DateTime.now().month.toString().padLeft(2, '0')}-${DateTime.now().year}'),
-          _buildInfoRow('Time:', '${DateTime.now().hour.toString().padLeft(2, '0')}:${DateTime.now().minute.toString().padLeft(2, '0')} PM'),
-          const SizedBox(height: 8),
-          _buildDashedLine(),
-          const SizedBox(height: 10),
-
-          Row(
-            children: [
-              Expanded(
-                flex: 1,
-                child: Text('Qty', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold)),
-              ),
-              Expanded(
-                flex: 5,
-                child: Text('Item Name', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          const Divider(height: 1, color: Color(0xFFE2E8F0)),
-          const SizedBox(height: 8),
-
-          ...data.items.map((item) {
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 8.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        flex: 1,
-                        child: Text('${item.quantity}', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600)),
-                      ),
-                      Expanded(
-                        flex: 5,
-                        child: Text(item.productName, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600)),
-                      ),
-                    ],
-                  ),
-                  if (item.notes != null && item.notes!.isNotEmpty) ...[
-                    const SizedBox(height: 2),
-                    Row(
-                      children: [
-                        const Expanded(flex: 1, child: SizedBox.shrink()),
-                        Expanded(
-                          flex: 5,
-                          child: Text(
-                            item.notes!,
-                            style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF64748B), fontStyle: FontStyle.italic),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ],
-              ),
-            );
-          }).toList(),
-          const SizedBox(height: 8),
-          _buildDashedLine(),
-          const SizedBox(height: 12),
-
-          Center(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-              decoration: BoxDecoration(
-                border: Border.all(color: const Color(0xFFE2E8F0)),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Text(
-                'Token #${data.tokenNumber}',
-                style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          Center(
-            child: Text(
-              'Kitchen Dispatch Copy\nPowered by Perpova POS',
-              style: GoogleFonts.inter(fontSize: 8, color: const Color(0xFF94A3B8)),
-              textAlign: TextAlign.center,
-            ),
-          ),
+          pw.Text(label, style: pw.TextStyle(font: font, fontSize: 8)),
+          pw.Text(val, style: pw.TextStyle(font: font, fontSize: 8, fontWeight: pw.FontWeight.bold)),
         ],
       ),
     );
   }
 
-  Widget _buildCustomerInvoiceSlip(ReceiptData data) {
+  pw.Widget _buildPdfDashedLine() {
+    return pw.Text(
+      '-' * 45,
+      style: pw.TextStyle(fontSize: 8, color: PdfColors.grey),
+    );
+  }
+
+  String _getMonthName(DateTime date) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return months[date.month - 1];
+  }
+
+  String _formatTime(DateTime dt, {bool includeSpace = true}) {
+    final hour12 = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
+    final period = dt.hour >= 12 ? 'PM' : 'AM';
+    final hourStr = hour12.toString().padLeft(2, '0');
+    final minStr = dt.minute.toString().padLeft(2, '0');
+    final secStr = dt.second.toString().padLeft(2, '0');
+    return '$hourStr:$minStr:$secStr${includeSpace ? " " : ""}$period';
+  }
+
+  Widget _buildKOTSlip(ReceiptData data, POSController controller) {
+    final int totalQty = data.items.fold(0, (sum, item) => sum + item.quantity);
+    
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         boxShadow: [
@@ -3250,78 +3366,202 @@ class _POSScreenState extends State<POSScreen> {
         children: [
           Center(
             child: Text(
-              'FoodKing - Restaurant',
-              style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)),
+              _getKOTHeader(data, controller),
+              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)),
             ),
           ),
-          Center(
-            child: Text(
-              'Food Ordering & Delivery App',
-              style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w500, color: const Color(0xFF64748B)),
-            ),
-          ),
-          const SizedBox(height: 6),
-          Center(
-            child: Text(
-              'House: 25, Road No: 2, Block A, Mirpur-1, Dhaka 1216',
-              style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF64748B)),
-              textAlign: TextAlign.center,
-            ),
-          ),
-          Center(
-            child: Text(
-              'Tel: +536464646464',
-              style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF64748B)),
-            ),
-          ),
-          const SizedBox(height: 12),
-          _buildDashedLine(),
           const SizedBox(height: 8),
+          
+          _buildInfoRow('KOT No:', _getKOTNumber(data)),
+          _buildInfoRow('Date:', '${DateTime.now().day.toString().padLeft(2, '0')}/${DateTime.now().month.toString().padLeft(2, '0')}/${DateTime.now().year}'),
+          _buildInfoRow('Time:', _formatTime(DateTime.now(), includeSpace: true)),
+          if (data.tableName != null && data.tableName!.isNotEmpty)
+            _buildInfoRow('Table:', data.tableName!),
+          
+          const SizedBox(height: 6),
+          _buildDashedLine(),
+          const SizedBox(height: 6),
 
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Order #${data.orderNumber.substring(data.orderNumber.length - 8)}',
-                style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold),
+              Text('Description', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold)),
+              Text('Qty', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          const SizedBox(height: 4),
+          const Divider(height: 1, color: Color(0xFFCBD5E1)),
+          const SizedBox(height: 6),
+
+          ...data.items.map((item) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 6.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          item.productSinhalaName ?? item.productName,
+                          style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        '${item.quantity}',
+                        style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                  if (item.notes != null && item.notes!.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      '  * ${item.notes!}',
+                      style: GoogleFonts.inter(fontSize: 8, color: const Color(0xFF64748B), fontStyle: FontStyle.italic),
+                    ),
+                  ],
+                ],
               ),
+            );
+          }).toList(),
+          
+          const SizedBox(height: 4),
+          _buildDashedLine(),
+          const SizedBox(height: 4),
+          
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
               Text(
-                '${DateTime.now().hour.toString().padLeft(2, '0')}:${DateTime.now().minute.toString().padLeft(2, '0')} PM\n${DateTime.now().day.toString().padLeft(2, '0')}-${DateTime.now().month.toString().padLeft(2, '0')}-${DateTime.now().year}',
-                style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF64748B)),
-                textAlign: TextAlign.right,
+                '$totalQty',
+                style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold),
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
           _buildDashedLine(),
-          const SizedBox(height: 10),
+        ],
+      ),
+    );
+  }
 
+  Widget _buildCustomerInvoiceSlip(ReceiptData data, POSController controller) {
+    final int totalQty = data.items.fold(0, (sum, item) => sum + item.quantity);
+    
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          )
+        ],
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Logo & Oval Header Row
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                flex: 1,
-                child: Text('Qty', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold)),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Image.asset(
+                    'assets/images/mhb_logo.png',
+                    width: 32,
+                    height: 32,
+                    errorBuilder: (context, error, stackTrace) => const Icon(Icons.restaurant_menu, size: 32, color: Color(0xFF1E293B)),
+                  ),
+                  const SizedBox(width: 8),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'මාතර හෝටලය',
+                        style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)),
+                      ),
+                      Text(
+                        'නො: 04 මහා වීදිය, අකුරැස්ස',
+                        style: GoogleFonts.inter(fontSize: 8, color: const Color(0xFF64748B)),
+                      ),
+                      Text(
+                        '041 2283857',
+                        style: GoogleFonts.inter(fontSize: 8, color: const Color(0xFF64748B)),
+                      ),
+                    ],
+                  ),
+                ],
               ),
-              Expanded(
-                flex: 4,
-                child: Text('Item Description', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold)),
-              ),
-              Expanded(
-                flex: 2,
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: Text('Price', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold)),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(
+                  border: Border.all(color: const Color(0xFF1E293B), width: 1),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Text(
+                  _getOvalNumber(data),
+                  style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)),
                 ),
               ),
             ],
           ),
+          const SizedBox(height: 10),
+          Center(
+            child: Text(
+              'INVOICE',
+              style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, decoration: TextDecoration.underline, color: const Color(0xFF1E293B)),
+            ),
+          ),
           const SizedBox(height: 6),
-          const Divider(height: 1, color: Color(0xFFE2E8F0)),
-          const SizedBox(height: 8),
+          
+          _buildInfoRow('Receipt No', _getReceiptNumber(data)),
+          
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Date  ${DateTime.now().day.toString().padLeft(2, '0')}-${_getMonthName(DateTime.now())}-${DateTime.now().year}',
+                style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF334155), fontWeight: FontWeight.w500),
+              ),
+              Text(
+                _formatTime(DateTime.now(), includeSpace: false),
+                style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF334155), fontWeight: FontWeight.w500),
+              ),
+              Text(
+                data.cashierName,
+                style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF334155), fontWeight: FontWeight.w500),
+              ),
+            ],
+          ),
+          
+          const SizedBox(height: 6),
+          _buildDashedLine(),
+          const SizedBox(height: 6),
+
+          Row(
+            children: [
+              Expanded(flex: 3, child: Text('Description', style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold))),
+              Expanded(flex: 1, child: Align(alignment: Alignment.center, child: Text('Qty', style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold)))),
+              Expanded(flex: 2, child: Align(alignment: Alignment.centerRight, child: Text('Price', style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold)))),
+              Expanded(flex: 2, child: Align(alignment: Alignment.centerRight, child: Text('Amount', style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold)))),
+            ],
+          ),
+          const SizedBox(height: 4),
+          const Divider(height: 1, color: Color(0xFFCBD5E1)),
+          const SizedBox(height: 6),
 
           ...data.items.map((item) {
             return Padding(
-              padding: const EdgeInsets.only(bottom: 8.0),
+              padding: const EdgeInsets.only(bottom: 6.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -3329,110 +3569,123 @@ class _POSScreenState extends State<POSScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(
-                        flex: 1,
-                        child: Text('${item.quantity}', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600)),
+                        flex: 3,
+                        child: Text(
+                          item.productSinhalaName ?? item.productName,
+                          style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w600),
+                        ),
                       ),
                       Expanded(
-                        flex: 4,
-                        child: Text(item.productName, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600)),
+                        flex: 1,
+                        child: Align(
+                          alignment: Alignment.center,
+                          child: Text('${item.quantity}', style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w500)),
+                        ),
                       ),
                       Expanded(
                         flex: 2,
                         child: Align(
                           alignment: Alignment.centerRight,
-                          child: Text('LKR ${(item.price * item.quantity).toStringAsFixed(0)}', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600)),
+                          child: Text(item.price.toStringAsFixed(2), style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w500)),
+                        ),
+                      ),
+                      Expanded(
+                        flex: 2,
+                        child: Align(
+                          alignment: Alignment.centerRight,
+                          child: Text((item.price * item.quantity).toStringAsFixed(2), style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w500)),
                         ),
                       ),
                     ],
                   ),
                   if (item.notes != null && item.notes!.isNotEmpty) ...[
                     const SizedBox(height: 2),
-                    Row(
-                      children: [
-                        const Expanded(flex: 1, child: SizedBox.shrink()),
-                        Expanded(
-                          flex: 6,
-                          child: Text(
-                            item.notes!,
-                            style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF64748B), fontStyle: FontStyle.italic),
-                          ),
-                        ),
-                      ],
+                    Text(
+                      '  * ${item.notes!}',
+                      style: GoogleFonts.inter(fontSize: 8, color: const Color(0xFF64748B), fontStyle: FontStyle.italic),
                     ),
                   ],
                 ],
               ),
             );
           }).toList(),
-          const SizedBox(height: 8),
+          
+          const SizedBox(height: 4),
           _buildDashedLine(),
-          const SizedBox(height: 8),
-
-          _buildTotalRow('SUBTOTAL:', 'LKR ${data.subtotal.toStringAsFixed(2)}'),
-          _buildTotalRow('TOTAL TAX:', 'LKR 0.00'),
-          _buildTotalRow('DISCOUNT:', 'LKR ${data.discount.toStringAsFixed(2)}'),
           const SizedBox(height: 6),
+          
+          // Summary rows matching photo
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('TOTAL:', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold)),
-              Text('LKR ${data.total.toStringAsFixed(2)}', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.primary)),
+              Row(
+                children: [
+                  Text('No of Items', style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF475569))),
+                  const SizedBox(width: 14),
+                  Text('$totalQty', style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
+                ],
+              ),
+              Row(
+                children: [
+                  Text('Total', style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF475569))),
+                  const SizedBox(width: 32),
+                  Text(':', style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF475569))),
+                  const SizedBox(width: 14),
+                  Text(data.total.toStringAsFixed(2), style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
+                ],
+              ),
             ],
           ),
-          const SizedBox(height: 8),
+          
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const SizedBox.shrink(),
+              Row(
+                children: [
+                  Text('Paid Amount', style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF475569))),
+                  const SizedBox(width: 8),
+                  Text(':', style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF475569))),
+                  const SizedBox(width: 14),
+                  Text(data.receivedAmount.toStringAsFixed(2), style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
+                ],
+              ),
+            ],
+          ),
+          
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'PAID BY ${data.paymentMethod.toUpperCase()}',
+                style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)),
+              ),
+              Row(
+                children: [
+                  Text('Balance', style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF475569))),
+                  const SizedBox(width: 22),
+                  Text(':', style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF475569))),
+                  const SizedBox(width: 14),
+                  Text(data.changeAmount.toStringAsFixed(2), style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
+                ],
+              ),
+            ],
+          ),
+          
+          const SizedBox(height: 6),
           _buildDashedLine(),
           const SizedBox(height: 8),
-
-          _buildInfoRow('Order Type:', data.orderType),
-          _buildInfoRow('Payment Type:', data.paymentMethod.toUpperCase()),
-          if (data.paymentMethod == 'cash') ...[
-            _buildInfoRow('Cash:', 'LKR ${data.receivedAmount.toStringAsFixed(2)}'),
-            _buildInfoRow('Change:', 'LKR ${data.changeAmount.toStringAsFixed(2)}'),
-          ] else if (data.paymentMethod == 'card') ...[
-            _buildInfoRow('Card No:', '**** **** **** ${data.cardLastDigits ?? "XXXX"}'),
-          ] else if (data.paymentMethod == 'qr') ...[
-            _buildInfoRow('Ref ID:', data.transactionRef ?? 'N/A'),
-          ] else if (data.paymentMethod == 'credit') ...[
-            _buildInfoRow('Credit Customer:', data.customerName ?? 'N/A'),
-            const SizedBox(height: 4),
-            Text(
-              'Outstanding balance updated. Weekly Credit Account.',
-              style: GoogleFonts.inter(fontSize: 8, fontStyle: FontStyle.italic, color: Colors.amber[800]),
-            ),
-          ],
-          const SizedBox(height: 8),
-          _buildDashedLine(),
-          const SizedBox(height: 12),
-
-          Center(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-              decoration: BoxDecoration(
-                border: Border.all(color: const Color(0xFFE2E8F0)),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Text(
-                'Token #${data.tokenNumber}',
-                style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-
+          
           Center(
             child: Text(
-              'Thank You\nPlease Come Again',
-              style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w500, color: const Color(0xFF64748B)),
-              textAlign: TextAlign.center,
+              'Thank you & Come Again',
+              style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w600, color: const Color(0xFF1E293B)),
             ),
           ),
-          const SizedBox(height: 12),
-
           Center(
             child: Text(
-              'Powered by Perpova Hotel POS System',
-              style: GoogleFonts.inter(fontSize: 8, color: const Color(0xFF94A3B8)),
-              textAlign: TextAlign.center,
+              'Software by Perpova. 0713555566',
+              style: GoogleFonts.inter(fontSize: 8, color: const Color(0xFF64748B)),
             ),
           ),
         ],
@@ -3522,6 +3775,7 @@ class _POSScreenState extends State<POSScreen> {
 }
 
 class ReceiptData {
+  final int orderId;
   final String orderNumber;
   final String paymentMethod;
   final List<OrderItemModel> items;
@@ -3536,8 +3790,10 @@ class ReceiptData {
   final int tokenNumber;
   final String? cardLastDigits;
   final String? transactionRef;
+  final String cashierName;
 
   ReceiptData({
+    required this.orderId,
     required this.orderNumber,
     required this.paymentMethod,
     required this.items,
@@ -3552,5 +3808,6 @@ class ReceiptData {
     required this.tokenNumber,
     this.cardLastDigits,
     this.transactionRef,
+    required this.cashierName,
   });
 }

@@ -26,7 +26,7 @@ class POSController extends ChangeNotifier {
   DiningTableModel? selectedTable;
   CustomerModel? selectedCustomer;
   String? stewardName;
-  String orderType = 'dine_in'; // 'dine_in', 'takeaway', 'delivery'
+  String orderType = 'takeaway'; // 'dine_in', 'takeaway', 'delivery'
   String? deliveryPlatform;     // 'uber_eats', 'pickme', 'phone', 'direct'
   
   // Discount States
@@ -523,7 +523,7 @@ class POSController extends ChangeNotifier {
   }
 
   // 2. Place order (Dine-in, Takeaway, Delivery)
-  Future<void> placeOrder({
+  Future<Map<String, dynamic>> placeOrder({
     required bool printKOT,
     required bool printAck,
     required String status, // 'pending', 'preparing'
@@ -561,12 +561,17 @@ class POSController extends ChangeNotifier {
       items: cart,
     );
 
+    int orderId = 0;
+    String orderNum = offlineOrderNum;
+
     if (isOnline) {
       final res = await _api.placeOrderOnline(order);
-      print('Order placed online successfully: ${res['order_number']}');
+      orderId = res['orderId'] ?? 0;
+      orderNum = res['order_number'] ?? offlineOrderNum;
+      print('Order placed online successfully: $orderNum');
     } else {
       // Offline implementation
-      await LocalDB.instance.saveOrderOffline(order);
+      orderId = await LocalDB.instance.saveOrderOffline(order);
       await LocalDB.instance.saveAuditOffline('modify_bill', 'orders', null, 'Offline order created: $offlineOrderNum', _api.currentUser?.id ?? 1);
       
       // Stock adjustment offline mock
@@ -590,12 +595,17 @@ class POSController extends ChangeNotifier {
           );
         }
       }
-      print('Order saved offline successfully: $offlineOrderNum');
+      print('Order saved offline successfully: $orderNum');
     }
     
     // Clear and reload
     clearCart();
     await reloadEnvironment();
+
+    return {
+      'orderId': orderId,
+      'orderNumber': orderNum,
+    };
   }
 
   // 3. Process Card machine charge
