@@ -178,6 +178,7 @@ class ProductModel {
   final bool hasAddons;
   final bool trackStock;
   final bool isHappyHourEligible;
+  final bool isKotItem;
   final List<ProductSize> sizes;
   final List<ProductExtra> extras;
   final List<int> addons;
@@ -208,6 +209,7 @@ class ProductModel {
     this.hasAddons = false,
     this.trackStock = true,
     this.isHappyHourEligible = true,
+    this.isKotItem = false,
     this.sizes = const [],
     this.extras = const [],
     this.addons = const [],
@@ -288,6 +290,7 @@ class ProductModel {
       hasAddons: json['has_addons'] == true || json['has_addons'] == 1,
       trackStock: json['track_stock'] == true || json['track_stock'] == 1 || json['track_stock'] == null,
       isHappyHourEligible: json['is_happy_hour_eligible'] == true || json['is_happy_hour_eligible'] == 1 || json['is_happy_hour_eligible'] == null,
+      isKotItem: json['is_kot_item'] == true || json['is_kot_item'] == 1,
       sizes: sizesList,
       extras: extrasList,
       addons: addonsList,
@@ -320,6 +323,7 @@ class ProductModel {
     'has_addons': hasAddons,
     'track_stock': trackStock ? 1 : 0,
     'is_happy_hour_eligible': isHappyHourEligible ? 1 : 0,
+    'is_kot_item': isKotItem ? 1 : 0,
     'sizes': sizes.map((x) => x.toJson()).toList(),
     'extras': extras.map((x) => x.toJson()).toList(),
     'addons': addons,

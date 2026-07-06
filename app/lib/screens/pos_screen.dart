@@ -2879,7 +2879,15 @@ class _POSScreenState extends State<POSScreen> {
     final fontData = await rootBundle.load('assets/fonts/NotoSansSinhala-Regular.ttf');
     final sinhalaFont = pw.Font.ttf(fontData);
     
-    final int totalQty = data.items.fold(0, (sum, item) => sum + item.quantity);
+    final kotItems = data.items.where((item) {
+      final p = controller.products.firstWhere(
+        (p) => p.id == item.productId,
+        orElse: () => ProductModel(id: 0, name: '', categoryId: 0, price: 0, cost: 0, activePrice: 0, isHappyHour: false, stockQty: 0, minStockLevel: 0, isShortEat: false, isKotItem: false),
+      );
+      return p.id != 0 && p.isKotItem;
+    }).toList();
+
+    final int totalQty = kotItems.fold(0, (sum, item) => sum + item.quantity);
     
     pdf.addPage(
       pw.Page(
@@ -2918,7 +2926,7 @@ class _POSScreenState extends State<POSScreen> {
               pw.Divider(thickness: 0.5),
               pw.SizedBox(height: 3),
 
-              ...data.items.map((item) {
+              ...kotItems.map((item) {
                 return pw.Padding(
                   padding: const pw.EdgeInsets.only(bottom: 4.0),
                   child: pw.Column(
@@ -3346,7 +3354,15 @@ class _POSScreenState extends State<POSScreen> {
   }
 
   Widget _buildKOTSlip(ReceiptData data, POSController controller) {
-    final int totalQty = data.items.fold(0, (sum, item) => sum + item.quantity);
+    final kotItems = data.items.where((item) {
+      final p = controller.products.firstWhere(
+        (p) => p.id == item.productId,
+        orElse: () => ProductModel(id: 0, name: '', categoryId: 0, price: 0, cost: 0, activePrice: 0, isHappyHour: false, stockQty: 0, minStockLevel: 0, isShortEat: false, isKotItem: false),
+      );
+      return p.id != 0 && p.isKotItem;
+    }).toList();
+
+    final int totalQty = kotItems.fold(0, (sum, item) => sum + item.quantity);
     
     return Container(
       padding: const EdgeInsets.all(16),
@@ -3393,7 +3409,7 @@ class _POSScreenState extends State<POSScreen> {
           const Divider(height: 1, color: Color(0xFFCBD5E1)),
           const SizedBox(height: 6),
 
-          ...data.items.map((item) {
+          ...kotItems.map((item) {
             return Padding(
               padding: const EdgeInsets.only(bottom: 6.0),
               child: Column(

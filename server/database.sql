@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS products (
     track_stock BOOLEAN DEFAULT TRUE,
     is_happy_hour_eligible BOOLEAN DEFAULT TRUE,
     ingredients TEXT NULL,
+    is_kot_item BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (category_id) REFERENCES categories(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

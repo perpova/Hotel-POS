@@ -141,6 +141,10 @@ async function initializeDatabase() {
                 console.log("Migration: Added is_happy_hour_eligible to products table.");
             } catch (_) {}
             try {
+                await dbPool.query("ALTER TABLE products ADD COLUMN is_kot_item BOOLEAN DEFAULT FALSE");
+                console.log("Migration: Added is_kot_item to products table.");
+            } catch (_) {}
+            try {
                 await dbPool.query("ALTER TABLE customers ADD COLUMN image_base64 LONGTEXT NULL");
                 console.log("Migration: Added image_base64 to customers table.");
             } catch (_) {}

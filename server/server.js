@@ -236,6 +236,7 @@ app.get('/api/products', async (req, res) => {
                 has_addons: !!p.has_addons,
                 track_stock: p.track_stock === undefined || p.track_stock === null ? true : !!p.track_stock,
                 is_happy_hour_eligible: p.is_happy_hour_eligible === undefined || p.is_happy_hour_eligible === null ? true : !!p.is_happy_hour_eligible,
+                is_kot_item: !!p.is_kot_item,
                 sizes: p.sizes ? JSON.parse(p.sizes) : [],
                 extras: p.extras ? JSON.parse(p.extras) : [],
                 addons: p.addons ? JSON.parse(p.addons) : [],
@@ -393,7 +394,7 @@ app.post('/api/products', authenticateToken, async (req, res) => {
         stock_qty, min_stock_level, is_short_eat, status, image_base64,
         item_type, tax, is_featured, caution,
         has_sizes, has_extras, has_addons, track_stock,
-        sizes, extras, addons, is_happy_hour_eligible, ingredients
+        sizes, extras, addons, is_happy_hour_eligible, ingredients, is_kot_item
     } = req.body;
     
     try {
@@ -403,8 +404,8 @@ app.post('/api/products', authenticateToken, async (req, res) => {
                 stock_qty, min_stock_level, is_short_eat, status, image_base64,
                 item_type, tax, is_featured, caution,
                 has_sizes, has_extras, has_addons, track_stock,
-                sizes, extras, addons, is_happy_hour_eligible, ingredients
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                sizes, extras, addons, is_happy_hour_eligible, ingredients, is_kot_item
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [
             name, sinhala_name || null, description || null, category_id, price, cost || 0.00, barcode || null,
             stock_qty || 0, min_stock_level || 10, is_short_eat ? 1 : 0, status || 'active', image_base64 || null,
@@ -414,7 +415,8 @@ app.post('/api/products', authenticateToken, async (req, res) => {
             extras ? JSON.stringify(extras) : null,
             addons ? JSON.stringify(addons) : null,
             is_happy_hour_eligible !== undefined ? (is_happy_hour_eligible ? 1 : 0) : 1,
-            ingredients ? JSON.stringify(ingredients) : null
+            ingredients ? JSON.stringify(ingredients) : null,
+            is_kot_item ? 1 : 0
         ]);
         
         const newId = result.insertId;
@@ -440,7 +442,7 @@ app.put('/api/products/:id', authenticateToken, async (req, res) => {
         stock_qty, min_stock_level, is_short_eat, status, image_base64,
         item_type, tax, is_featured, caution,
         has_sizes, has_extras, has_addons, track_stock,
-        sizes, extras, addons, is_happy_hour_eligible, ingredients
+        sizes, extras, addons, is_happy_hour_eligible, ingredients, is_kot_item
     } = req.body;
     
     try {
@@ -450,7 +452,7 @@ app.put('/api/products/:id', authenticateToken, async (req, res) => {
                 stock_qty = ?, min_stock_level = ?, is_short_eat = ?, status = ?, image_base64 = ?,
                 item_type = ?, tax = ?, is_featured = ?, caution = ?,
                 has_sizes = ?, has_extras = ?, has_addons = ?, track_stock = ?,
-                sizes = ?, extras = ?, addons = ?, is_happy_hour_eligible = ?, ingredients = ?
+                sizes = ?, extras = ?, addons = ?, is_happy_hour_eligible = ?, ingredients = ?, is_kot_item = ?
             WHERE id = ?
         `, [
             name, sinhala_name || null, description || null, category_id, price, cost || 0.00, barcode || null,
@@ -462,6 +464,7 @@ app.put('/api/products/:id', authenticateToken, async (req, res) => {
             addons ? JSON.stringify(addons) : null,
             is_happy_hour_eligible !== undefined ? (is_happy_hour_eligible ? 1 : 0) : 1,
             ingredients ? JSON.stringify(ingredients) : null,
+            is_kot_item ? 1 : 0,
             id
         ]);
         

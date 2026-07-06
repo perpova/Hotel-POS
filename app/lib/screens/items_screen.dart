@@ -734,6 +734,7 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
   bool _hasAddons = false;
   bool _trackStock = true;
   bool _isHappyHourEligible = true;
+  bool _isKotItem = false;
 
   List<Map<String, dynamic>> _sizesList = [];
   List<Map<String, dynamic>> _extrasList = [];
@@ -764,6 +765,7 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
     _hasAddons = p?.hasAddons ?? false;
     _trackStock = p?.trackStock ?? true;
     _isHappyHourEligible = p?.isHappyHourEligible ?? true;
+    _isKotItem = p?.isKotItem ?? false;
 
     _sizesList = p?.sizes.map<Map<String, dynamic>>((s) => <String, dynamic>{'name': s.name, 'price': s.price}).toList() ?? <Map<String, dynamic>>[];
     _extrasList = p?.extras.map<Map<String, dynamic>>((e) => <String, dynamic>{
@@ -1148,6 +1150,7 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
       'has_addons': _hasAddons ? 1 : 0,
       'track_stock': _trackStock ? 1 : 0,
       'is_happy_hour_eligible': _isHappyHourEligible ? 1 : 0,
+      'is_kot_item': _isKotItem ? 1 : 0,
       'sizes': sizes,
       'extras': extras,
       'addons': _hasAddons ? _selectedAddons : [],
@@ -1475,6 +1478,27 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
     );
   }
 
+  Widget _buildKOTSettings() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildLabel('KOT SETTINGS'),
+        Row(
+          children: [
+            Checkbox(
+              value: _isKotItem,
+              activeColor: AppTheme.primary,
+              onChanged: (val) {
+                setState(() => _isKotItem = val ?? false);
+              },
+            ),
+            Text('Prepare in Kitchen (Show in KOT)', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w500)),
+          ],
+        ),
+      ],
+    );
+  }
+
   Widget _buildItemTypeField() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1654,6 +1678,8 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
                                 const SizedBox(height: 16),
                                 _buildInventorySettings(),
                                 const SizedBox(height: 16),
+                                _buildKOTSettings(),
+                                const SizedBox(height: 16),
                                 _buildHappyHourSettings(),
                                 const SizedBox(height: 16),
                                 _buildCautionField(),
@@ -1682,6 +1708,8 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
                       _buildCustomizationOptions(),
                       const SizedBox(height: 16),
                       _buildInventorySettings(),
+                      const SizedBox(height: 16),
+                      _buildKOTSettings(),
                       const SizedBox(height: 16),
                       _buildHappyHourSettings(),
                       const SizedBox(height: 16),
