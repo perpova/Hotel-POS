@@ -2544,12 +2544,58 @@ class _POSScreenState extends State<POSScreen> {
                             cashierName: cashierUsername,
                           );
 
-                          // TTS voice notification to kitchen
-                          String ttsMsg = "Payment complete. Invoice generated. Kitchen copy printed for table ${tblName ?? 'Takeaway'}. ";
-                          for (var item in itemsCopy) {
-                            ttsMsg += "${item.quantity} ${item.productName}. ";
+                          // TTS voice notification to kitchen (KOT printed items only, in Sinhala)
+                          final kotItems = itemsCopy.where((item) {
+                            final p = controller.products.firstWhere(
+                              (prod) => prod.id == item.productId,
+                              orElse: () => ProductModel(
+                                id: 0,
+                                name: '',
+                                categoryId: 0,
+                                price: 0,
+                                cost: 0,
+                                activePrice: 0,
+                                isHappyHour: false,
+                                stockQty: 0,
+                                minStockLevel: 0,
+                                isShortEat: false,
+                                isKotItem: false,
+                              ),
+                            );
+                            return p.id != 0 && p.isKotItem;
+                          }).toList();
+
+                          if (kotItems.isNotEmpty) {
+                            final String typeText = tblName != null && tblName.isNotEmpty
+                                ? "මේසය $tblName"
+                                : (controller.orderType == 'takeaway' ? "ටේක් අවේ" : "ඩිලිවරි");
+                            String ttsMsg = "ගෙවීම් සම්පූර්ණයි. බිල්පත මුද්‍රණය කරන ලදී. $typeText සඳහා නව ඇණවුම: ";
+                            for (var item in kotItems) {
+                              final p = controller.products.firstWhere(
+                                (prod) => prod.id == item.productId,
+                                orElse: () => ProductModel(
+                                  id: 0,
+                                  name: item.productName,
+                                  sinhalaName: item.productSinhalaName ?? item.productName,
+                                  categoryId: 0,
+                                  price: 0,
+                                  cost: 0,
+                                  activePrice: 0,
+                                  isHappyHour: false,
+                                  stockQty: 0,
+                                  minStockLevel: 0,
+                                  isShortEat: false,
+                                  isKotItem: false,
+                                ),
+                              );
+                              final itemName = p.sinhalaName != null && p.sinhalaName!.isNotEmpty
+                                  ? p.sinhalaName
+                                  : p.name;
+                              final qtyText = controller.getSinhalaQuantityText(item.quantity);
+                              ttsMsg += "$itemName $qtyText. ";
+                            }
+                            controller.speakVoiceMessage(ttsMsg);
                           }
-                          controller.speakVoiceMessage(ttsMsg);
 
                           // Show receipt dialog — State is guaranteed alive because
                           // main_layout no longer replaces the screen during isLoading.

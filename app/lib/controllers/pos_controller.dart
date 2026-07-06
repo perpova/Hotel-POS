@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:http/http.dart' as http;
 import 'package:hotel_pos/models/models.dart';
 import 'package:hotel_pos/services/api_service.dart';
 import 'package:hotel_pos/services/local_db.dart';
@@ -52,16 +54,93 @@ class POSController extends ChangeNotifier {
   }
 
   void _initTts() async {
-    await _tts.setLanguage("en-US");
+    try {
+      final List<dynamic> langs = await _tts.getLanguages;
+      
+      String targetLang = "si-LK";
+      for (var l in langs) {
+        if (l.toString().toLowerCase().startsWith("si")) {
+          targetLang = l.toString();
+          break;
+        }
+      }
+      
+      await _tts.setLanguage(targetLang);
+    } catch (e) {
+      print('TTS Language set error: $e');
+      await _tts.setLanguage("en-US");
+    }
     await _tts.setSpeechRate(0.55);
     await _tts.setVolume(1.0);
   }
 
   Future<void> speakVoiceMessage(String text) async {
+    // Check if Sinhala is supported locally on the OS
+    bool localSinhalaSupported = false;
     try {
-      await _tts.speak(text);
+      final List<dynamic> langs = await _tts.getLanguages;
+      for (var l in langs) {
+        if (l.toString().toLowerCase().startsWith("si")) {
+          localSinhalaSupported = true;
+          break;
+        }
+      }
+    } catch (_) {}
+
+    if (localSinhalaSupported) {
+      try {
+        await _tts.speak(text);
+      } catch (e) {
+        print('TTS Error: $e');
+      }
+    } else {
+      // Fallback: Online Google TTS API played via native Windows MediaPlayer
+      try {
+        final encodedText = Uri.encodeComponent(text);
+        final url = 'https://translate.google.com/translate_tts?ie=UTF-8&tl=si&client=tw-ob&q=$encodedText';
+        final response = await http.get(Uri.parse(url));
+        if (response.statusCode == 200) {
+          final tempDir = Directory.systemTemp;
+          final tempFile = File('${tempDir.path}${Platform.pathSeparator}tts_speech.mp3');
+          await tempFile.writeAsBytes(response.bodyBytes);
+          await _playMp3Windows(tempFile.path);
+        } else {
+          print('Google TTS Request failed: ${response.statusCode}');
+        }
+      } catch (e) {
+        print('Google TTS Fallback Error: $e');
+        // Final fallback: try standard TTS anyway
+        try {
+          await _tts.speak(text);
+        } catch (_) {}
+      }
+    }
+  }
+
+  Future<void> _playMp3Windows(String filePath) async {
+    try {
+      // Escape backslashes for PowerShell double quotes
+      final escapedPath = filePath.replaceAll(r'\', r'\\');
+      final script = 'Add-Type -AssemblyName presentationCore; \$m = New-Object System.Windows.Media.MediaPlayer; \$m.Open("$escapedPath"); \$m.Play(); Start-Sleep -s 12';
+      await Process.run('powershell', ['-c', script]);
     } catch (e) {
-      print('TTS Error: $e');
+      print('Error playing audio via PowerShell: $e');
+    }
+  }
+
+  String getSinhalaQuantityText(int qty) {
+    switch (qty) {
+      case 1: return "එකක්";
+      case 2: return "දෙකක්";
+      case 3: return "තුනක්";
+      case 4: return "හතරක්";
+      case 5: return "පහක්";
+      case 6: return "හයක්";
+      case 7: return "හතක්";
+      case 8: return "අටක්";
+      case 9: return "නමයක්";
+      case 10: return "දහයක්";
+      default: return "$qty ක්";
     }
   }
 
@@ -172,26 +251,57 @@ class POSController extends ChangeNotifier {
           final data = event['data'];
           final items = data['items'] as List;
           
-          // Separate items by Kottu vs Rice
-          final kottuItems = items.where((i) => i['product_name'].toString().toLowerCase().contains('kottu')).toList();
-          final riceItems = items.where((i) => i['product_name'].toString().toLowerCase().contains('rice')).toList();
+          // Filter items by checking if the product is a KOT item
+          final kotItems = items.where((i) {
+            final productId = i['product_id'];
+            final p = products.firstWhere(
+              (prod) => prod.id == productId,
+              orElse: () => ProductModel(
+                id: 0,
+                name: '',
+                categoryId: 0,
+                price: 0,
+                cost: 0,
+                activePrice: 0,
+                isHappyHour: false,
+                stockQty: 0,
+                minStockLevel: 0,
+                isShortEat: false,
+                isKotItem: false,
+              ),
+            );
+            return p.id != 0 && p.isKotItem;
+          }).toList();
           
-          if (kottuItems.isNotEmpty) {
-            String msg = "New Kottu order: ";
-            for (var k in kottuItems) {
-              msg += "${k['quantity']} ${k['product_name']}. ";
+          if (kotItems.isNotEmpty) {
+            String msg = "නව මුළුතැන්ගෙයි ඇණවුම: ";
+            for (var k in kotItems) {
+              final productId = k['product_id'];
+              final p = products.firstWhere(
+                (prod) => prod.id == productId,
+                orElse: () => ProductModel(
+                  id: 0,
+                  name: k['product_name'] ?? '',
+                  sinhalaName: k['product_sinhala_name'] ?? k['product_name'] ?? '',
+                  categoryId: 0,
+                  price: 0,
+                  cost: 0,
+                  activePrice: 0,
+                  isHappyHour: false,
+                  stockQty: 0,
+                  minStockLevel: 0,
+                  isShortEat: false,
+                  isKotItem: false,
+                ),
+              );
+              final itemName = p.sinhalaName != null && p.sinhalaName!.isNotEmpty
+                  ? p.sinhalaName
+                  : p.name;
+              final qtyVal = int.tryParse(k['quantity'].toString()) ?? 1;
+              final qtyText = getSinhalaQuantityText(qtyVal);
+              msg += "$itemName $qtyText. ";
             }
             speakVoiceMessage(msg);
-          }
-          if (riceItems.isNotEmpty) {
-            // Delay voice slightly to prevent overlap
-            Future.delayed(const Duration(seconds: 4), () {
-              String msg = "New Rice order: ";
-              for (var r in riceItems) {
-                msg += "${r['quantity']} ${r['product_name']}. ";
-              }
-              speakVoiceMessage(msg);
-            });
           }
           break;
         case 'order_created':
