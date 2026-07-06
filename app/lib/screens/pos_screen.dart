@@ -17,6 +17,7 @@ import '../models.dart';
 import '../api_service.dart';
 import '../widgets/image_helper.dart';
 import '../controllers/app_settings_controller.dart';
+import '../controllers/dashboard_controller.dart';
 
 class POSScreen extends StatefulWidget {
   const POSScreen({Key? key}) : super(key: key);
@@ -2920,6 +2921,8 @@ class _POSScreenState extends State<POSScreen> {
 
   Future<Uint8List> _generateKOTPdfBytes(ReceiptData data, POSController controller) async {
     final pdf = pw.Document();
+    final lang = Provider.of<DashboardController>(this.context, listen: false).selectedLanguage;
+    final bool isSinhala = lang == 'Sinhala';
     
     // Load Sinhala Font
     final fontData = await rootBundle.load('assets/fonts/NotoSansSinhala-Regular.ttf');
@@ -2984,7 +2987,7 @@ class _POSScreenState extends State<POSScreen> {
                         children: [
                           pw.Expanded(
                             child: pw.Text(
-                              item.productSinhalaName ?? item.productName,
+                              isSinhala ? (item.productSinhalaName ?? item.productName) : item.productName,
                               style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold),
                             ),
                           ),
@@ -3032,6 +3035,8 @@ class _POSScreenState extends State<POSScreen> {
 
   Future<Uint8List> _generateInvoicePdfBytes(ReceiptData data, POSController controller) async {
     final pdf = pw.Document();
+    final lang = Provider.of<DashboardController>(this.context, listen: false).selectedLanguage;
+    final bool isSinhala = lang == 'Sinhala';
     
     // Load Sinhala Font
     final fontData = await rootBundle.load('assets/fonts/NotoSansSinhala-Regular.ttf');
@@ -3155,7 +3160,7 @@ class _POSScreenState extends State<POSScreen> {
                           pw.Expanded(
                             flex: 3,
                             child: pw.Text(
-                              item.productSinhalaName ?? item.productName,
+                              isSinhala ? (item.productSinhalaName ?? item.productName) : item.productName,
                               style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold),
                             ),
                           ),
@@ -3400,6 +3405,9 @@ class _POSScreenState extends State<POSScreen> {
   }
 
   Widget _buildKOTSlip(ReceiptData data, POSController controller) {
+    final lang = Provider.of<DashboardController>(context, listen: true).selectedLanguage;
+    final bool isSinhala = lang == 'Sinhala';
+
     final kotItems = data.items.where((item) {
       final p = controller.products.firstWhere(
         (p) => p.id == item.productId,
@@ -3467,7 +3475,7 @@ class _POSScreenState extends State<POSScreen> {
                     children: [
                       Expanded(
                         child: Text(
-                          item.productSinhalaName ?? item.productName,
+                          isSinhala ? (item.productSinhalaName ?? item.productName) : item.productName,
                           style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600),
                         ),
                       ),
@@ -3511,6 +3519,9 @@ class _POSScreenState extends State<POSScreen> {
   }
 
   Widget _buildCustomerInvoiceSlip(ReceiptData data, POSController controller) {
+    final lang = Provider.of<DashboardController>(context, listen: true).selectedLanguage;
+    final bool isSinhala = lang == 'Sinhala';
+
     final int totalQty = data.items.fold(0, (sum, item) => sum + item.quantity);
     
     return Container(
@@ -3633,7 +3644,7 @@ class _POSScreenState extends State<POSScreen> {
                       Expanded(
                         flex: 3,
                         child: Text(
-                          item.productSinhalaName ?? item.productName,
+                          isSinhala ? (item.productSinhalaName ?? item.productName) : item.productName,
                           style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w600),
                         ),
                       ),
