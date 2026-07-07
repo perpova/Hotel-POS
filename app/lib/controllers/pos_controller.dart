@@ -47,6 +47,70 @@ class POSController extends ChangeNotifier {
   
   // KDS & Orders status lists
   List<OrderModel> activeOrders = [];
+  String voiceLanguage = 'English';
+
+  // Table persistent orders state
+  Map<int, List<OrderItemModel>> tableCarts = {};
+  Map<int, String> tableStatuses = {};
+  Map<int, String?> tableStewards = {};
+
+  void setVoiceLanguage(String lang) {
+    if (voiceLanguage != lang) {
+      voiceLanguage = lang;
+      notifyListeners();
+    }
+  }
+
+  String getTableStatus(DiningTableModel table) {
+    if (tableCarts.containsKey(table.id) && tableCarts[table.id]!.isNotEmpty) {
+      return tableStatuses[table.id] ?? 'seated';
+    }
+    return table.status;
+  }
+
+  void setTableStatus(int tableId, String status) async {
+    tableStatuses[tableId] = status;
+    if (isOnline) {
+      try {
+        await _api.updateTableStatus(tableId, status, stewardName: stewardName);
+      } catch (_) {}
+    }
+    notifyListeners();
+  }
+
+  void markKotItemsAsSent() {
+    for (int i = 0; i < cart.length; i++) {
+      if (cart[i].status == 'pending') {
+        final old = cart[i];
+        cart[i] = OrderItemModel(
+          id: old.id,
+          orderId: old.orderId,
+          productId: old.productId,
+          productName: old.productName,
+          productSinhalaName: old.productSinhalaName,
+          quantity: old.quantity,
+          price: old.price,
+          notes: old.notes,
+          status: 'preparing',
+          isShortEat: old.isShortEat,
+          extras: old.extras,
+        );
+      }
+    }
+    // Save updated cart to the table
+    if (selectedTable != null) {
+      final tid = selectedTable!.id;
+      tableCarts[tid] = List.from(cart);
+      tableStewards[tid] = stewardName;
+      if (tableStatuses[tid] != 'billing') {
+        tableStatuses[tid] = 'seated';
+      }
+      if (isOnline) {
+        _api.updateTableStatus(tid, tableStatuses[tid]!, stewardName: stewardName);
+      }
+    }
+    notifyListeners();
+  }
   
   // Constructor
   POSController() {
@@ -74,45 +138,59 @@ class POSController extends ChangeNotifier {
     await _tts.setVolume(1.0);
   }
 
-  Future<void> speakVoiceMessage(String text) async {
-    // Check if Sinhala is supported locally on the OS
-    bool localSinhalaSupported = false;
-    try {
-      final List<dynamic> langs = await _tts.getLanguages;
-      for (var l in langs) {
-        if (l.toString().toLowerCase().startsWith("si")) {
-          localSinhalaSupported = true;
-          break;
-        }
-      }
-    } catch (_) {}
+  Future<void> speakVoiceMessage(String text, {String? language}) async {
+    final activeLang = language ?? voiceLanguage;
+    final bool isSinhala = activeLang == 'Sinhala';
 
-    if (localSinhalaSupported) {
+    if (isSinhala) {
+      // Check if Sinhala is supported locally on the OS
+      bool localSinhalaSupported = false;
       try {
-        await _tts.speak(text);
-      } catch (e) {
-        print('TTS Error: $e');
+        final List<dynamic> langs = await _tts.getLanguages;
+        for (var l in langs) {
+          if (l.toString().toLowerCase().startsWith("si")) {
+            localSinhalaSupported = true;
+            break;
+          }
+        }
+      } catch (_) {}
+
+      if (localSinhalaSupported) {
+        try {
+          await _tts.setLanguage("si-LK");
+          await _tts.speak(text);
+        } catch (e) {
+          print('TTS Error: $e');
+        }
+      } else {
+        // Fallback: Online Google TTS API played via native Windows MediaPlayer
+        try {
+          final encodedText = Uri.encodeComponent(text);
+          final url = 'https://translate.google.com/translate_tts?ie=UTF-8&tl=si&client=tw-ob&q=$encodedText';
+          final response = await http.get(Uri.parse(url));
+          if (response.statusCode == 200) {
+            final tempDir = Directory.systemTemp;
+            final tempFile = File('${tempDir.path}${Platform.pathSeparator}tts_speech.mp3');
+            await tempFile.writeAsBytes(response.bodyBytes);
+            await _playMp3Windows(tempFile.path);
+          } else {
+            print('Google TTS Request failed: ${response.statusCode}');
+          }
+        } catch (e) {
+          print('Google TTS Fallback Error: $e');
+          // Final fallback: try standard TTS anyway
+          try {
+            await _tts.speak(text);
+          } catch (_) {}
+        }
       }
     } else {
-      // Fallback: Online Google TTS API played via native Windows MediaPlayer
+      // English TTS voice
       try {
-        final encodedText = Uri.encodeComponent(text);
-        final url = 'https://translate.google.com/translate_tts?ie=UTF-8&tl=si&client=tw-ob&q=$encodedText';
-        final response = await http.get(Uri.parse(url));
-        if (response.statusCode == 200) {
-          final tempDir = Directory.systemTemp;
-          final tempFile = File('${tempDir.path}${Platform.pathSeparator}tts_speech.mp3');
-          await tempFile.writeAsBytes(response.bodyBytes);
-          await _playMp3Windows(tempFile.path);
-        } else {
-          print('Google TTS Request failed: ${response.statusCode}');
-        }
+        await _tts.setLanguage("en-US");
+        await _tts.speak(text);
       } catch (e) {
-        print('Google TTS Fallback Error: $e');
-        // Final fallback: try standard TTS anyway
-        try {
-          await _tts.speak(text);
-        } catch (_) {}
+        print('English TTS Error: $e');
       }
     }
   }
@@ -392,10 +470,34 @@ class POSController extends ChangeNotifier {
   }
 
   void setOrderType(String type) {
+    if (orderType == 'dine_in' && selectedTable != null) {
+      final oldTid = selectedTable!.id;
+      if (cart.isNotEmpty) {
+        tableCarts[oldTid] = List.from(cart);
+        tableStewards[oldTid] = stewardName;
+        if (tableStatuses[oldTid] != 'billing') {
+          tableStatuses[oldTid] = 'seated';
+        }
+        if (isOnline) {
+          _api.updateTableStatus(oldTid, tableStatuses[oldTid]!, stewardName: stewardName);
+        }
+      } else {
+        tableCarts.remove(oldTid);
+        tableStewards.remove(oldTid);
+        tableStatuses[oldTid] = 'empty';
+        if (isOnline) {
+          _api.updateTableStatus(oldTid, 'empty');
+        }
+      }
+    }
+
     orderType = type;
     if (type != 'dine_in') {
       selectedTable = null;
       stewardName = null;
+      cart = [];
+    } else {
+      cart = [];
     }
     notifyListeners();
   }
@@ -406,7 +508,42 @@ class POSController extends ChangeNotifier {
   }
 
   void selectTable(DiningTableModel? table) {
+    if (orderType == 'dine_in' && selectedTable != null) {
+      final oldTid = selectedTable!.id;
+      if (cart.isNotEmpty) {
+        tableCarts[oldTid] = List.from(cart);
+        tableStewards[oldTid] = stewardName;
+        if (tableStatuses[oldTid] != 'billing') {
+          tableStatuses[oldTid] = 'seated';
+        }
+        if (isOnline) {
+          _api.updateTableStatus(oldTid, tableStatuses[oldTid]!, stewardName: stewardName);
+        }
+      } else {
+        tableCarts.remove(oldTid);
+        tableStewards.remove(oldTid);
+        tableStatuses[oldTid] = 'empty';
+        if (isOnline) {
+          _api.updateTableStatus(oldTid, 'empty');
+        }
+      }
+    }
+
     selectedTable = table;
+
+    if (table != null) {
+      cart = List.from(tableCarts[table.id] ?? []);
+      stewardName = tableStewards[table.id] ?? table.stewardName;
+      if (cart.isEmpty) {
+        rawDiscountValue = 0.00;
+        discountType = 'percent';
+      } else {
+        autoApplyActiveOffer();
+      }
+    } else {
+      cart = [];
+      stewardName = null;
+    }
     notifyListeners();
   }
 
@@ -499,20 +636,23 @@ class POSController extends ChangeNotifier {
     final currentPrice = customPrice ?? getProductActivePrice(product);
     final wasEmpty = cart.isEmpty;
     
-    // Check if product is already in the cart
-    final index = cart.indexWhere((item) => item.productId == product.id && item.notes == notes);
+    // Check if product is already in the cart with status 'pending'
+    final index = cart.indexWhere((item) => item.productId == product.id && item.notes == notes && item.status == 'pending');
     
     if (index != -1) {
       final oldItem = cart[index];
       cart[index] = OrderItemModel(
+        id: oldItem.id,
+        orderId: oldItem.orderId,
         productId: oldItem.productId,
         productName: oldItem.productName,
         productSinhalaName: oldItem.productSinhalaName,
         quantity: oldItem.quantity + quantity,
         price: currentPrice,
         notes: oldItem.notes,
+        status: 'pending',
         isShortEat: oldItem.isShortEat,
-        extras: oldItem.extras,
+        extras: oldItem.extras.isNotEmpty ? oldItem.extras : extras,
       );
     } else {
       cart.add(OrderItemModel(
@@ -522,6 +662,7 @@ class POSController extends ChangeNotifier {
         quantity: quantity,
         price: currentPrice,
         notes: notes,
+        status: 'pending',
         isShortEat: product.isShortEat,
         extras: extras,
       ));
@@ -544,13 +685,17 @@ class POSController extends ChangeNotifier {
     } else {
       final old = cart[index];
       cart[index] = OrderItemModel(
+        id: old.id,
+        orderId: old.orderId,
         productId: old.productId,
         productName: old.productName,
         productSinhalaName: old.productSinhalaName,
         quantity: quantity,
         price: old.price,
         notes: old.notes,
+        status: old.status,
         isShortEat: old.isShortEat,
+        extras: old.extras,
       );
     }
     notifyListeners();
@@ -559,18 +704,31 @@ class POSController extends ChangeNotifier {
   void updateCartNotes(int index, String? notes) {
     final old = cart[index];
     cart[index] = OrderItemModel(
+      id: old.id,
+      orderId: old.orderId,
       productId: old.productId,
       productName: old.productName,
       productSinhalaName: old.productSinhalaName,
       quantity: old.quantity,
       price: old.price,
       notes: notes,
+      status: old.status,
       isShortEat: old.isShortEat,
+      extras: old.extras,
     );
     notifyListeners();
   }
 
   void clearCart() {
+    if (selectedTable != null) {
+      final tid = selectedTable!.id;
+      tableCarts.remove(tid);
+      tableStewards.remove(tid);
+      tableStatuses[tid] = 'empty';
+      if (isOnline) {
+        _api.updateTableStatus(tid, 'empty');
+      }
+    }
     cart.clear();
     selectedTable = null;
     selectedCustomer = null;
@@ -630,6 +788,53 @@ class POSController extends ChangeNotifier {
     }
     activeShift = null;
     notifyListeners();
+  }
+
+  Future<double> getShiftCashSales() async {
+    if (activeShift == null) return 0.0;
+    try {
+      final ords = await _api.getOrders();
+      final shiftOrders = ords.where((o) => 
+          o.shiftId == activeShift!.id && 
+          o.paymentStatus == 'paid' && 
+          o.paymentMethod == 'cash'
+      );
+      return shiftOrders.fold<double>(0.0, (sum, o) => sum + o.total);
+    } catch (_) {
+      return 0.0;
+    }
+  }
+
+  Future<double> getExpectedDrawerBalance() async {
+    if (activeShift == null) return 0.0;
+    double balance = activeShift!.openingBalance;
+    
+    // 1. Fetch cash sales
+    try {
+      final ords = await _api.getOrders();
+      final shiftOrders = ords.where((o) => 
+          o.shiftId == activeShift!.id && 
+          o.paymentStatus == 'paid' && 
+          o.paymentMethod == 'cash'
+      );
+      final cashSales = shiftOrders.fold<double>(0.0, (sum, o) => sum + o.total);
+      balance += cashSales;
+    } catch (_) {}
+
+    // 2. Fetch adjustments
+    try {
+      final logs = await _api.getDrawerLogs(activeShift!.id);
+      for (var log in logs) {
+        final double amt = double.tryParse(log['amount']?.toString() ?? '0') ?? 0.0;
+        if (log['type'] == 'cash_in') {
+          balance += amt;
+        } else if (log['type'] == 'cash_out') {
+          balance -= amt;
+        }
+      }
+    } catch (_) {}
+    
+    return balance;
   }
 
   // 2. Place order (Dine-in, Takeaway, Delivery)

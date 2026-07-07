@@ -23,6 +23,26 @@ class _ShiftScreenState extends State<ShiftScreen> {
   List<dynamic> _drawerLogs = [];
   bool _loadingLogs = false;
   int? _lastShiftId;
+  double _cashSales = 0.0;
+  double _expectedDrawerBalance = 0.0;
+  bool _loadingShiftData = false;
+
+  Future<void> _loadShiftData(POSController controller) async {
+    if (controller.activeShift == null) return;
+    setState(() => _loadingShiftData = true);
+    try {
+      final sales = await controller.getShiftCashSales();
+      final expected = await controller.getExpectedDrawerBalance();
+      setState(() {
+        _cashSales = sales;
+        _expectedDrawerBalance = expected;
+        _loadingShiftData = false;
+      });
+    } catch (e) {
+      setState(() => _loadingShiftData = false);
+      print('Error loading shift data: $e');
+    }
+  }
 
   @override
   void dispose() {
@@ -58,6 +78,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
       _lastShiftId = controller.activeShift!.id;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _fetchDrawerLogs(controller.activeShift!.id);
+        _loadShiftData(controller);
       });
     }
 
@@ -221,8 +242,8 @@ class _ShiftScreenState extends State<ShiftScreen> {
   // ----------------------------------------------------
   Widget _buildShiftDetailsArea(POSController controller) {
     final starting = controller.activeShift?.openingBalance ?? 0.00;
-    final cashSalesVal = 12450.00; 
-    final expectedTotal = starting + cashSalesVal;
+    final cashSalesVal = _cashSales; 
+    final expectedTotal = _expectedDrawerBalance;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -477,9 +498,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
   // LAYOUT: SHIFT CLOSE & RECONCILIATION
   // ----------------------------------------------------
   Widget _buildShiftCloseArea(POSController controller) {
-    final starting = controller.activeShift?.openingBalance ?? 0.00;
-    final cashSalesVal = 12450.00;
-    final expectedTotal = starting + cashSalesVal;
+    final expectedTotal = _expectedDrawerBalance;
 
     return Card(
       elevation: 0,
@@ -590,6 +609,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
       
       _cashInOutAmountController.clear();
       _cashInOutReasonController.clear();
+      _loadShiftData(controller);
       _showSnackBar('Cash Drawer Log recorded successfully.');
     } catch (e) {
       _showSnackBar(e.toString());

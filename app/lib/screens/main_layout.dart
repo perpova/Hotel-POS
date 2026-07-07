@@ -130,10 +130,15 @@ class _MainLayoutState extends State<MainLayout> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       final controller = Provider.of<POSController>(context, listen: false);
-      controller.reloadEnvironment();
+      await controller.reloadEnvironment();
       controller.setupEventSubscription();
+      if (controller.activeShift == null) {
+        setState(() {
+          _selectedIndex = 5;
+        });
+      }
     });
   }
 
@@ -183,6 +188,138 @@ class _MainLayoutState extends State<MainLayout> {
           ),
         ),
       ],
+    );
+  }
+
+  void _showCloseShiftDialog(BuildContext context, POSController posController) async {
+    // Show a loading dialog first while we compute the expected drawer balance
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Center(
+        child: CircularProgressIndicator(color: AppTheme.primary),
+      ),
+    );
+
+    final expectedBalance = await posController.getExpectedDrawerBalance();
+    
+    if (mounted) {
+      Navigator.pop(context); // Dismiss loading dialog
+    }
+
+    final TextEditingController actualCashController = TextEditingController();
+    final GlobalKey<FormState> formKey = GlobalKey<FormState>();
+
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogCtx) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text(
+            'Close Shift & Logout'.tr(dialogCtx),
+            style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 18),
+          ),
+          content: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Please enter the actual cash counted in the drawer to close your shift before logging out.'.tr(dialogCtx),
+                  style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF64748B)),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Opening Cash:'.tr(dialogCtx), style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w500)),
+                    Text('LKR ${posController.activeShift!.openingBalance.toStringAsFixed(2)}', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Expected Cash:'.tr(dialogCtx), style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w500)),
+                    Text('LKR ${expectedBalance.toStringAsFixed(2)}', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.primary)),
+                  ],
+                ),
+                const Divider(height: 24, color: Color(0xFFE2E8F0)),
+                TextFormField(
+                  controller: actualCashController,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: InputDecoration(
+                    labelText: 'Actual Cash Counted (LKR) *'.tr(dialogCtx),
+                    hintText: '0.00',
+                  ),
+                  style: GoogleFonts.inter(fontSize: 13),
+                  validator: (val) {
+                    if (val == null || val.trim().isEmpty) {
+                      return 'Please enter actual cash counted';
+                    }
+                    if (double.tryParse(val.trim()) == null) {
+                      return 'Please enter a valid amount';
+                    }
+                    return null;
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogCtx),
+              child: Text('Cancel'.tr(dialogCtx), style: GoogleFonts.inter(color: const Color(0xFF64748B))),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (!formKey.currentState!.validate()) return;
+                final actual = double.tryParse(actualCashController.text.trim()) ?? 0.0;
+                
+                try {
+                  // Show loading
+                  showDialog(
+                    context: dialogCtx,
+                    barrierDismissible: false,
+                    builder: (context) => Center(child: CircularProgressIndicator(color: AppTheme.primary)),
+                  );
+
+                  // Close shift
+                  await posController.closeActiveShift(expectedBalance, actual);
+                  
+                  // Logout
+                  await APIService.instance.logout();
+                  
+                  if (mounted) {
+                    // Navigate to Login Screen
+                    Navigator.of(dialogCtx).pop(); // Dismiss loading
+                    Navigator.of(dialogCtx).pop(); // Dismiss dialog
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(builder: (context) => const LoginScreen()),
+                    );
+                  }
+                } catch (e) {
+                  Navigator.pop(dialogCtx); // Dismiss loading
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Failed to close shift: $e'), backgroundColor: Colors.red),
+                  );
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.danger,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              child: Text('Close Shift & Logout'.tr(dialogCtx), style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -426,6 +563,15 @@ class _MainLayoutState extends State<MainLayout> {
                               ),
                             ),
                             onTap: () {
+                              if (posController.activeShift == null && item.screenIndex != 5) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Please start your daily shift first by setting the opening cash drawer balance.'),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                                return;
+                              }
                               setState(() {
                                 _selectedIndex = item.screenIndex;
                                 if (item.screenIndex == 1) {
@@ -503,12 +649,16 @@ class _MainLayoutState extends State<MainLayout> {
                   const SizedBox(height: 12),
                   TextButton.icon(
                     onPressed: () async {
-                      await APIService.instance.logout();
-                      if (mounted) {
-                        Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(builder: (context) => const LoginScreen()),
-                        );
+                      if (posController.activeShift != null) {
+                        _showCloseShiftDialog(context, posController);
+                      } else {
+                        await APIService.instance.logout();
+                        if (mounted) {
+                          Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(builder: (context) => const LoginScreen()),
+                          );
+                        }
                       }
                     },
                     icon: const Icon(Icons.logout, size: 14),

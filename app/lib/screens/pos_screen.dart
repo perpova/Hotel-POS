@@ -718,41 +718,34 @@ class _POSScreenState extends State<POSScreen> {
             Row(
               children: [
                 Expanded(
-                  child: Container(
-                    height: 44,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFFE2E8F0)),
-                    ),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButtonFormField<DiningTableModel>(
-                        value: controller.selectedTable,
-                        hint: Align(
-                          alignment: Alignment.center,
-                          child: Text('Select Table', style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF64748B))),
-                        ),
-                        alignment: Alignment.center,
-                        decoration: const InputDecoration(
-                          border: InputBorder.none,
-                          enabledBorder: InputBorder.none,
-                          focusedBorder: InputBorder.none,
-                          filled: false,
-                          contentPadding: EdgeInsets.symmetric(vertical: 4),
-                        ),
-                        iconSize: 18,
-                        style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)),
-                        items: [
-                          ...controller.diningTables.map((t) => DropdownMenuItem(
-                                value: t,
-                                child: Align(
-                                  alignment: Alignment.center,
-                                  child: Text('${t.tableNumber} (${t.status.toUpperCase()})', style: GoogleFonts.inter(fontSize: 13)),
-                                ),
-                              )),
+                  child: InkWell(
+                    onTap: () => _showTableGridDialog(context, controller),
+                    child: Container(
+                      height: 44,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              controller.selectedTable == null
+                                  ? 'Select Table'
+                                  : 'Table: ${controller.selectedTable!.tableNumber}',
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                fontWeight: controller.selectedTable == null ? FontWeight.normal : FontWeight.bold,
+                                color: controller.selectedTable == null ? const Color(0xFF64748B) : const Color(0xFF1E293B),
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const Icon(Icons.grid_view, size: 16, color: Color(0xFF64748B)),
                         ],
-                        onChanged: (t) => controller.selectTable(t),
                       ),
                     ),
                   ),
@@ -991,6 +984,7 @@ class _POSScreenState extends State<POSScreen> {
               Row(
                 children: [
                   Expanded(
+                    flex: 2,
                     child: ElevatedButton(
                       onPressed: controller.cart.isEmpty ? null : () {
                         controller.clearCart();
@@ -1002,11 +996,30 @@ class _POSScreenState extends State<POSScreen> {
                         minimumSize: const Size(double.infinity, 48),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
-                      child: Text('Cancel', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold)),
+                      child: Text('Cancel', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold)),
                     ),
                   ),
+                  if (controller.orderType == 'dine_in' && controller.selectedTable != null) ...[
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 3,
+                      child: ElevatedButton(
+                        onPressed: !controller.cart.any((item) => item.status == 'pending')
+                            ? null
+                            : () => _handleDineInPrintKOT(controller),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue,
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size(double.infinity, 48),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        child: Text('Print KOT', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ],
                   const SizedBox(width: 8),
                   Expanded(
+                    flex: 3,
                     child: ElevatedButton(
                       onPressed: controller.cart.isEmpty ? null : () => _showOrderPaymentDialog(controller),
                       style: ElevatedButton.styleFrom(
@@ -1015,7 +1028,10 @@ class _POSScreenState extends State<POSScreen> {
                         minimumSize: const Size(double.infinity, 48),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
-                      child: Text('Order', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold)),
+                      child: Text(
+                        controller.orderType == 'dine_in' && controller.selectedTable != null ? 'Pay Bill' : 'Order',
+                        style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold),
+                      ),
                     ),
                   ),
                 ],
@@ -1215,21 +1231,92 @@ class _POSScreenState extends State<POSScreen> {
     }
   }
 
-  void _handlePrintAcknowledgementFlow(POSController controller) async {
-    try {
-      await controller.placeOrder(
-        printKOT: false,
-        printAck: true,
-        status: 'pending',
-        paymentStatus: 'unpaid',
+  void _handleDineInPrintKOT(POSController controller) async {
+    final newKotItems = controller.cart.where((item) {
+      final p = controller.products.firstWhere(
+        (prod) => prod.id == item.productId,
+        orElse: () => ProductModel(id: 0, name: '', categoryId: 0, price: 0, cost: 0, activePrice: 0, isHappyHour: false, stockQty: 0, minStockLevel: 0, isShortEat: false, isKotItem: false),
       );
+      return p.id != 0 && p.isKotItem && item.status == 'pending';
+    }).toList();
+
+    if (newKotItems.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No new KOT items to print'), backgroundColor: Color(0xFFEF4444)),
+      );
+      return;
+    }
+
+    try {
+      final receiptData = ReceiptData(
+        orderId: DateTime.now().millisecondsSinceEpoch,
+        orderNumber: 'KOT-TEMP',
+        paymentMethod: 'unpaid',
+        items: newKotItems,
+        subtotal: 0,
+        discount: 0,
+        total: 0,
+        orderType: 'dine_in',
+        tableName: controller.selectedTable?.tableNumber,
+        receivedAmount: 0,
+        changeAmount: 0,
+        tokenNumber: 0,
+        cashierName: APIService.instance.currentUser?.name ?? 'Admin',
+      );
+
+      final lang = Provider.of<DashboardController>(context, listen: false).selectedLanguage;
+      final bool isSinhala = lang == 'Sinhala';
+      String speakText = isSinhala ? "නව මුළුතැන්ගෙයි ඇණවුම: " : "New kitchen order: ";
+      speakText += _buildKOTVoiceMessage(newKotItems, isSinhala, controller);
+      controller.speakVoiceMessage(speakText, language: lang);
+
+      controller.markKotItemsAsSent();
+
       if (mounted) {
+        _showReceiptDialog(receiptData, showKOT: true, showInvoice: false);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Acknowledgement bill printed with Barcode. Dining Table status set to BILLING.')),
+          const SnackBar(content: Text('Chef notified via voice. Previewing KOT.'), backgroundColor: Color(0xFF10B981)),
         );
       }
     } catch (e) {
-      _showErrorSnackBar(e.toString());
+      _showErrorSnackBar('Failed to print KOT: $e');
+    }
+  }
+
+  void _handlePrintAcknowledgementFlow(POSController controller) async {
+    if (controller.selectedTable == null) {
+      _showErrorSnackBar('Please select a table first');
+      return;
+    }
+    try {
+      final receiptData = ReceiptData(
+        orderId: DateTime.now().millisecondsSinceEpoch,
+        orderNumber: 'PRE-BILL',
+        paymentMethod: 'cash',
+        items: controller.cart,
+        subtotal: controller.cartSubtotal,
+        discount: controller.discount,
+        total: controller.cartTotal,
+        orderType: 'dine_in',
+        tableName: controller.selectedTable?.tableNumber,
+        receivedAmount: 0,
+        changeAmount: 0,
+        tokenNumber: 0,
+        cashierName: APIService.instance.currentUser?.name ?? 'Admin',
+      );
+
+      final pdfBytes = await _generateInvoicePdfBytes(receiptData, controller);
+      await Printing.layoutPdf(onLayout: (format) => pdfBytes, name: 'Bill_Preview_${controller.selectedTable!.tableNumber}');
+
+      controller.setTableStatus(controller.selectedTable!.id, 'billing');
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Bill preview printed. Table status set to Processing Bill.'), backgroundColor: Color(0xFF10B981)),
+        );
+      }
+    } catch (e) {
+      _showErrorSnackBar('Failed to print bill preview: $e');
     }
   }
 
@@ -1964,6 +2051,142 @@ class _POSScreenState extends State<POSScreen> {
     );
   }
 
+  void _showTableGridDialog(BuildContext context, POSController controller) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Select Dining Table',
+                style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 18),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close, size: 20),
+                onPressed: () => Navigator.pop(context),
+              )
+            ],
+          ),
+          content: SizedBox(
+            width: 500,
+            height: 400,
+            child: Consumer<POSController>(
+              builder: (context, ctrl, _) {
+                if (ctrl.diningTables.isEmpty) {
+                  return const Center(child: Text('No tables configured'));
+                }
+                return GridView.builder(
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 3,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                    childAspectRatio: 1.1,
+                  ),
+                  itemCount: ctrl.diningTables.length,
+                  itemBuilder: (context, index) {
+                    final table = ctrl.diningTables[index];
+                    final status = ctrl.getTableStatus(table);
+                    
+                    Color bg;
+                    Color border;
+                    Color text;
+                    String statusLabel;
+                    
+                    if (status == 'seated') {
+                      bg = const Color(0xFFFEE2E2); // Light red
+                      border = const Color(0xFFEF4444); // Red
+                      text = const Color(0xFF991B1B);
+                      statusLabel = 'Customer Seated';
+                    } else if (status == 'billing') {
+                      bg = const Color(0xFFFEF9C3); // Light yellow
+                      border = const Color(0xFFEAB308); // Yellow
+                      text = const Color(0xFF854D0E);
+                      statusLabel = 'Processing Bill';
+                    } else {
+                      bg = const Color(0xFFDCFCE7); // Light green
+                      border = const Color(0xFF22C55E); // Green
+                      text = const Color(0xFF166534);
+                      statusLabel = 'Empty';
+                    }
+                    
+                    final isSelected = ctrl.selectedTable?.id == table.id;
+                    
+                    return InkWell(
+                      onTap: () {
+                        ctrl.selectTable(table);
+                        Navigator.pop(context);
+                      },
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: bg,
+                          border: Border.all(
+                            color: isSelected ? Colors.blue.shade700 : border,
+                            width: isSelected ? 3.0 : 1.5,
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.04),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        padding: const EdgeInsets.all(8),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              table.tableNumber,
+                              style: GoogleFonts.outfit(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: text,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Seats: ${table.capacity}',
+                              style: GoogleFonts.inter(
+                                fontSize: 11,
+                                color: text.withOpacity(0.8),
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.6),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                statusLabel,
+                                style: GoogleFonts.inter(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold,
+                                  color: text,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   void _showBarcodeScanDialog(POSController controller) {
     _barcodeInputController.clear();
     showDialog(
@@ -2567,41 +2790,32 @@ class _POSScreenState extends State<POSScreen> {
                           }).toList();
 
                           if (kotItems.isNotEmpty) {
-                            final String typeText = tblName != null && tblName.isNotEmpty
-                                ? "මේසය $tblName"
-                                : (controller.orderType == 'takeaway' ? "ටේක් අවේ" : "ඩිලිවරි");
-                            String ttsMsg = "ගෙවීම් සම්පූර්ණයි. බිල්පත මුද්‍රණය කරන ලදී. $typeText සඳහා නව ඇණවුම: ";
-                            for (var item in kotItems) {
-                              final p = controller.products.firstWhere(
-                                (prod) => prod.id == item.productId,
-                                orElse: () => ProductModel(
-                                  id: 0,
-                                  name: item.productName,
-                                  sinhalaName: item.productSinhalaName ?? item.productName,
-                                  categoryId: 0,
-                                  price: 0,
-                                  cost: 0,
-                                  activePrice: 0,
-                                  isHappyHour: false,
-                                  stockQty: 0,
-                                  minStockLevel: 0,
-                                  isShortEat: false,
-                                  isKotItem: false,
-                                ),
-                              );
-                              final itemName = p.sinhalaName != null && p.sinhalaName!.isNotEmpty
-                                  ? p.sinhalaName
-                                  : p.name;
-                              final qtyText = controller.getSinhalaQuantityText(item.quantity);
-                              ttsMsg += "$itemName $qtyText. ";
+                            final lang = Provider.of<DashboardController>(this.context, listen: false).selectedLanguage;
+                            final bool isSinhala = lang == 'Sinhala';
+                            
+                            String ttsMsg = '';
+                            if (isSinhala) {
+                              final String typeText = tblName != null && tblName.isNotEmpty
+                                  ? "මේසය $tblName"
+                                  : (controller.orderType == 'takeaway' ? "ටේක් අවේ" : "ඩිලිවරි");
+                              ttsMsg = "ගෙවීම් සම්පූර්ණයි. බිල්පත මුද්‍රණය කරන ලදී. $typeText සඳහා නව ඇණවුම: ";
+                            } else {
+                              final String typeText = tblName != null && tblName.isNotEmpty
+                                  ? "Table $tblName"
+                                  : (controller.orderType == 'takeaway' ? "Takeaway" : "Delivery");
+                              ttsMsg = "Payment complete. Bill printed. New order for $typeText: ";
                             }
-                            controller.speakVoiceMessage(ttsMsg);
+                            
+                            ttsMsg += _buildKOTVoiceMessage(kotItems, isSinhala, controller);
+                            controller.speakVoiceMessage(ttsMsg, language: lang);
                           }
 
-                          // Show receipt dialog — State is guaranteed alive because
-                          // main_layout no longer replaces the screen during isLoading.
-                          // Use this.context (State's context, never shadowed here).
-                          _showReceiptDialog(receiptData);
+                          final isDineIn = controller.orderType == 'dine_in';
+                          _showReceiptDialog(
+                            receiptData,
+                            showKOT: !isDineIn,
+                            showInvoice: true,
+                          );
                           _tokenNoController.clear();
 
                         } catch (e) {
@@ -2722,27 +2936,29 @@ class _POSScreenState extends State<POSScreen> {
     );
   }
 
-  void _showReceiptDialog(ReceiptData data) {
+  void _showReceiptDialog(ReceiptData data, {bool showKOT = true, bool showInvoice = true}) {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => _buildReceiptDialogWidget(data),
+      builder: (_) => _buildReceiptDialogWidget(data, showKOT: showKOT, showInvoice: showInvoice),
     );
   }
 
-  /// Builds the receipt dialog widget (KOT + Invoice side-by-side).
+  /// Builds the receipt dialog widget (KOT + Invoice side-by-side or individually).
   /// Extracted so it can be passed to showDialog from any context.
-  Widget _buildReceiptDialogWidget(ReceiptData data) {
+  Widget _buildReceiptDialogWidget(ReceiptData data, {bool showKOT = true, bool showInvoice = true}) {
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       backgroundColor: const Color(0xFFF1F5F9),
       child: Builder(
         builder: (dialogCtx) {
           final controller = Provider.of<POSController>(dialogCtx, listen: false);
+          final double dialogWidth = (showKOT && showInvoice) ? MediaQuery.of(dialogCtx).size.width * 0.8 : 480;
+          final double maxDialogWidth = (showKOT && showInvoice) ? 780 : 480;
           return Container(
-            width: MediaQuery.of(dialogCtx).size.width * 0.8,
+            width: dialogWidth,
             constraints: BoxConstraints(
-              maxWidth: 780,
+              maxWidth: maxDialogWidth,
               maxHeight: MediaQuery.of(dialogCtx).size.height * 0.85,
             ),
             child: Column(
@@ -2765,96 +2981,100 @@ class _POSScreenState extends State<POSScreen> {
                         ),
                       ),
                       const Spacer(),
-                      // Print KOT
-                      ElevatedButton.icon(
-                        onPressed: () async {
-                          try {
-                            final bytes = await _generateKOTPdfBytes(data, controller);
-                            await Printing.layoutPdf(
-                              onLayout: (format) async => bytes,
-                              name: 'KOT_Token_${data.tokenNumber}',
-                            );
-                          } catch (e) {
-                            _showErrorSnackBar('Failed to print KOT: $e');
-                          }
-                        },
-                        icon: const Icon(Icons.print_rounded, size: 16),
-                        label: const Text('Print KOT'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF4F46E5),
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      if (showKOT) ...[
+                        // Print KOT
+                        ElevatedButton.icon(
+                          onPressed: () async {
+                            try {
+                              final bytes = await _generateKOTPdfBytes(data, controller);
+                              await Printing.layoutPdf(
+                                onLayout: (format) async => bytes,
+                                name: 'KOT_Token_${data.tokenNumber}',
+                              );
+                            } catch (e) {
+                              _showErrorSnackBar('Failed to print KOT: $e');
+                            }
+                          },
+                          icon: const Icon(Icons.print_rounded, size: 16),
+                          label: const Text('Print KOT'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF4F46E5),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 6),
-                      // Download KOT PDF
-                      ElevatedButton.icon(
-                        onPressed: () async {
-                          try {
-                            final bytes = await _generateKOTPdfBytes(data, controller);
-                            await _savePdfToFile(bytes, 'KOT_Token_${data.tokenNumber}.pdf');
-                          } catch (e) {
-                            _showErrorSnackBar('Failed to download KOT: $e');
-                          }
-                        },
-                        icon: const Icon(Icons.download_rounded, size: 16),
-                        label: const Text('Download KOT'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF3B82F6),
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        const SizedBox(width: 6),
+                        // Download KOT PDF
+                        ElevatedButton.icon(
+                          onPressed: () async {
+                            try {
+                              final bytes = await _generateKOTPdfBytes(data, controller);
+                              await _savePdfToFile(bytes, 'KOT_Token_${data.tokenNumber}.pdf');
+                            } catch (e) {
+                              _showErrorSnackBar('Failed to download KOT: $e');
+                            }
+                          },
+                          icon: const Icon(Icons.download_rounded, size: 16),
+                          label: const Text('Download KOT'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF3B82F6),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      // Print Invoice
-                      ElevatedButton.icon(
-                        onPressed: () async {
-                          try {
-                            final bytes = await _generateInvoicePdfBytes(data, controller);
-                            await Printing.layoutPdf(
-                              onLayout: (format) async => bytes,
-                              name: 'Invoice_Token_${data.tokenNumber}',
-                            );
-                          } catch (e) {
-                            _showErrorSnackBar('Failed to print Invoice: $e');
-                          }
-                        },
-                        icon: const Icon(Icons.print_rounded, size: 16),
-                        label: const Text('Print Invoice'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF059669),
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      ],
+                      if (showInvoice) ...[
+                        if (showKOT) const SizedBox(width: 12),
+                        // Print Invoice
+                        ElevatedButton.icon(
+                          onPressed: () async {
+                            try {
+                              final bytes = await _generateInvoicePdfBytes(data, controller);
+                              await Printing.layoutPdf(
+                                onLayout: (format) async => bytes,
+                                name: 'Invoice_Token_${data.tokenNumber}',
+                              );
+                            } catch (e) {
+                              _showErrorSnackBar('Failed to print Invoice: $e');
+                            }
+                          },
+                          icon: const Icon(Icons.print_rounded, size: 16),
+                          label: const Text('Print Invoice'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF059669),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 6),
-                      // Download Invoice PDF
-                      ElevatedButton.icon(
-                        onPressed: () async {
-                          try {
-                            final bytes = await _generateInvoicePdfBytes(data, controller);
-                            await _savePdfToFile(bytes, 'Invoice_Token_${data.tokenNumber}.pdf');
-                          } catch (e) {
-                            _showErrorSnackBar('Failed to download Invoice: $e');
-                          }
-                        },
-                        icon: const Icon(Icons.download_rounded, size: 16),
-                        label: const Text('Download Invoice'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF10B981),
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        const SizedBox(width: 6),
+                        // Download Invoice PDF
+                        ElevatedButton.icon(
+                          onPressed: () async {
+                            try {
+                              final bytes = await _generateInvoicePdfBytes(data, controller);
+                              await _savePdfToFile(bytes, 'Invoice_Token_${data.tokenNumber}.pdf');
+                            } catch (e) {
+                              _showErrorSnackBar('Failed to download Invoice: $e');
+                            }
+                          },
+                          icon: const Icon(Icons.download_rounded, size: 16),
+                          label: const Text('Download Invoice'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF10B981),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 ),
 
-                // Both slips side-by-side
+                // Slips side-by-side or individually based on filters
                 Expanded(
                   child: SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
@@ -2865,9 +3085,9 @@ class _POSScreenState extends State<POSScreen> {
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            SizedBox(width: 340, child: _buildKOTSlip(data, controller)),
-                            const SizedBox(width: 20),
-                            SizedBox(width: 340, child: _buildCustomerInvoiceSlip(data, controller)),
+                            if (showKOT) SizedBox(width: 340, child: _buildKOTSlip(data, controller)),
+                            if (showKOT && showInvoice) const SizedBox(width: 20),
+                            if (showInvoice) SizedBox(width: 340, child: _buildCustomerInvoiceSlip(data, controller)),
                           ],
                         ),
                       ),
@@ -2916,6 +3136,103 @@ class _POSScreenState extends State<POSScreen> {
     } catch (_) {
       // Fallback: use printing package share sheet (opens save/print dialog)
       await Printing.sharePdf(bytes: bytes, filename: suggestedName);
+    }
+  }
+
+  List<OrderItemModel> _groupDuplicateOrderItems(List<OrderItemModel> items) {
+    final Map<String, OrderItemModel> grouped = {};
+    for (var item in items) {
+      final key = "${item.productId}_${item.price}_${item.notes ?? ''}";
+      if (grouped.containsKey(key)) {
+        final existing = grouped[key]!;
+        grouped[key] = OrderItemModel(
+          id: existing.id,
+          orderId: existing.orderId,
+          productId: existing.productId,
+          productName: existing.productName,
+          productSinhalaName: existing.productSinhalaName,
+          quantity: existing.quantity + item.quantity,
+          price: existing.price,
+          notes: existing.notes,
+          status: existing.status,
+          isShortEat: existing.isShortEat,
+          extras: existing.extras,
+        );
+      } else {
+        grouped[key] = item;
+      }
+    }
+    return grouped.values.toList();
+  }
+
+  String _buildKOTVoiceMessage(List<OrderItemModel> items, bool isSinhala, POSController controller) {
+    String msg = '';
+    for (var item in items) {
+      final itemName = isSinhala ? (item.productSinhalaName ?? item.productName) : item.productName;
+      String itemDetails = '';
+      
+      if (item.notes != null && item.notes!.isNotEmpty) {
+        final parts = item.notes!.split(' | ');
+        final List<String> detailsList = [];
+        for (var part in parts) {
+          if (part.startsWith('Size: ')) {
+            final sizeVal = part.replaceFirst('Size: ', '');
+            detailsList.add("$sizeVal size");
+          } else if (part.startsWith('Extras: ')) {
+            final extrasVal = part.replaceFirst('Extras: ', '');
+            // Parse name and quantity from extras (e.g. egg (x1) or egg (x2))
+            final regex = RegExp(r"^(.*?)\s*\(x(\d+)\)$");
+            final match = regex.firstMatch(extrasVal);
+            if (match != null) {
+              final extraName = match.group(1);
+              final qtyVal = int.tryParse(match.group(2) ?? '1') ?? 1;
+              if (isSinhala) {
+                final qtySinhala = controller.getSinhalaQuantityText(qtyVal);
+                detailsList.add("extra $extraName $qtySinhala");
+              } else {
+                final qtyEng = _getEnglishQuantityText(qtyVal);
+                detailsList.add("$qtyEng extra $extraName");
+              }
+            } else {
+              if (isSinhala) {
+                detailsList.add("extra $extrasVal");
+              } else {
+                detailsList.add("with extra $extrasVal");
+              }
+            }
+          } else if (part.startsWith('Instructions: ')) {
+            final instVal = part.replaceFirst('Instructions: ', '');
+            detailsList.add(instVal);
+          }
+        }
+        if (detailsList.isNotEmpty) {
+          itemDetails = " (${detailsList.join(', ')})";
+        }
+      }
+
+      if (isSinhala) {
+        final qtyText = controller.getSinhalaQuantityText(item.quantity);
+        msg += "$itemName $qtyText$itemDetails, ";
+      } else {
+        msg += "${item.quantity} $itemName$itemDetails, ";
+      }
+    }
+    return msg;
+  }
+
+  String _getEnglishQuantityText(int qty) {
+    switch (qty) {
+      case 1: return "one";
+      case 2: return "two";
+      case 3: return "three";
+      case 4: return "four";
+      case 5: return "five";
+      case 6: return "six";
+      case 7: return "seven";
+      case 8: return "eight";
+      case 9: return "nine";
+      case 10: return "ten";
+      default: return "$qty";
     }
   }
 
@@ -3148,7 +3465,7 @@ class _POSScreenState extends State<POSScreen> {
               pw.Divider(thickness: 0.5),
               pw.SizedBox(height: 4),
 
-              ...data.items.map((item) {
+              ..._groupDuplicateOrderItems(data.items).map((item) {
                 return pw.Padding(
                   padding: const pw.EdgeInsets.only(bottom: 4.0),
                   child: pw.Column(
@@ -3632,7 +3949,7 @@ class _POSScreenState extends State<POSScreen> {
           const Divider(height: 1, color: Color(0xFFCBD5E1)),
           const SizedBox(height: 6),
 
-          ...data.items.map((item) {
+          ..._groupDuplicateOrderItems(data.items).map((item) {
             return Padding(
               padding: const EdgeInsets.only(bottom: 6.0),
               child: Column(
