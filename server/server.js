@@ -1571,6 +1571,25 @@ app.get('/api/orders', authenticateToken, async (req, res) => {
     }
 });
 
+app.get('/api/orders/by-number/:orderNumber', authenticateToken, async (req, res) => {
+    const { orderNumber } = req.params;
+    try {
+        const orders = await db.query('SELECT * FROM orders WHERE order_number = ? LIMIT 1', [orderNumber]);
+        if (orders.length === 0) return res.status(404).json({ error: 'Order not found' });
+        const order = orders[0];
+        const items = await db.query(`
+            SELECT oi.*, p.name as product_name, p.sinhala_name as product_sinhala_name, p.is_short_eat
+            FROM order_items oi
+            JOIN products p ON oi.product_id = p.id
+            WHERE oi.order_id = ?
+        `, [order.id]);
+        order.items = items;
+        res.json(order);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 app.get('/api/orders/:id/items', authenticateToken, async (req, res) => {
     const { id } = req.params;
     try {

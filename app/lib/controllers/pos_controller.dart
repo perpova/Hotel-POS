@@ -53,6 +53,7 @@ class POSController extends ChangeNotifier {
   Map<int, List<OrderItemModel>> tableCarts = {};
   Map<int, String> tableStatuses = {};
   Map<int, String?> tableStewards = {};
+  Map<int, int> tableActiveOrderIds = {};
 
   void setVoiceLanguage(String lang) {
     if (voiceLanguage != lang) {
@@ -401,6 +402,19 @@ class POSController extends ChangeNotifier {
         final ords = await _api.getOrders();
         // filter orders from today / active shifts
         activeOrders = ords.where((o) => o.status != 'delivered' && o.status != 'cancelled').toList();
+        
+        // Restore Dine-In tables state from active unpaid orders (e.g. after a power cut or restart)
+        final activeDineInOrders = activeOrders.where((o) => o.orderType == 'dine_in' && o.tableId != null).toList();
+        for (var o in activeDineInOrders) {
+          final tid = o.tableId!;
+          if (!tableCarts.containsKey(tid) || tableCarts[tid]!.isEmpty) {
+            final items = await _api.getOrderItems(o.id!);
+            tableCarts[tid] = items;
+            tableActiveOrderIds[tid] = o.id!;
+            tableStewards[tid] = o.stewardName;
+            tableStatuses[tid] = o.ackPrinted ? 'billing' : 'seated';
+          }
+        }
         notifyListeners();
       } catch (_) {}
     }
@@ -846,6 +860,7 @@ class POSController extends ChangeNotifier {
     String? paymentMethod,
     double receivedAmount = 0.00,
     double changeAmount = 0.00,
+    bool clearCartAfter = true,
   }) async {
     if (cart.isEmpty) throw Exception('Cart is empty');
     if (activeShift == null) throw Exception('No active shift. Please open a shift.');
@@ -918,7 +933,9 @@ class POSController extends ChangeNotifier {
     }
     
     // Clear and reload
-    clearCart();
+    if (clearCartAfter) {
+      clearCart();
+    }
     await reloadEnvironment();
 
     return {

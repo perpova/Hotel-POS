@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:barcode_widget/barcode_widget.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../pos_controller.dart';
@@ -38,6 +40,7 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
     _fullPageController = PageController(initialPage: 0);
     _startPromoSlideTimer();
     _startCycleTimer();
+    HardwareKeyboard.instance.addHandler(_handleKeyEvent);
   }
 
   @override
@@ -46,6 +49,7 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
     _promoSlideTimer?.cancel();
     _bottomPageController?.dispose();
     _fullPageController?.dispose();
+    HardwareKeyboard.instance.removeHandler(_handleKeyEvent);
     super.dispose();
   }
 
@@ -384,8 +388,8 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
                                 itemCount: preparingOrders.length,
                                 itemBuilder: (context, index) {
                                   final o = preparingOrders[index];
-                                  final shortNum = o.orderNumber.substring(o.orderNumber.length - 4);
-                                  return _buildQueueToken(shortNum, false);
+                                  final tokenNum = _getQueueTokenNumber(o);
+                                  return _buildQueueToken(tokenNum, false);
                                 },
                               ),
                       ),
@@ -448,8 +452,8 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
                                 itemCount: readyOrders.length,
                                 itemBuilder: (context, index) {
                                   final o = readyOrders[index];
-                                  final shortNum = o.orderNumber.substring(o.orderNumber.length - 4);
-                                  return _buildQueueToken(shortNum, true);
+                                  final tokenNum = _getQueueTokenNumber(o);
+                                  return _buildQueueToken(tokenNum, true);
                                 },
                               ),
                       ),
@@ -1355,5 +1359,268 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
         ),
       ),
     );
+  }
+
+  // =========================================================================
+  // BARCODE SCANNING & TRANSITIONS (QUEUE SCREEN GLOBAL LISTENER)
+  // =========================================================================
+  String _barcodeBuffer = '';
+  DateTime? _lastKeyPressTime;
+
+  bool _handleKeyEvent(KeyEvent event) {
+    if (event is KeyDownEvent) {
+      final now = DateTime.now();
+      if (_lastKeyPressTime != null && now.difference(_lastKeyPressTime!).inMilliseconds > 200) {
+        _barcodeBuffer = '';
+      }
+      _lastKeyPressTime = now;
+
+      final logicalKey = event.logicalKey;
+      if (logicalKey == LogicalKeyboardKey.enter) {
+        if (_barcodeBuffer.isNotEmpty) {
+          _processScannedBarcode(_barcodeBuffer.trim());
+          _barcodeBuffer = '';
+        }
+        return true;
+      }
+
+      final char = event.character;
+      if (char != null && char.isNotEmpty) {
+        _barcodeBuffer += char;
+      }
+    }
+    return false;
+  }
+
+  Future<void> _processScannedBarcode(String barcode) async {
+    String cleanBarcode = barcode;
+    bool isKot = false;
+    bool isInv = false;
+
+    if (barcode.toUpperCase().startsWith('KOT-')) {
+      cleanBarcode = barcode.substring(4);
+      isKot = true;
+    } else if (barcode.toUpperCase().startsWith('INV-')) {
+      cleanBarcode = barcode.substring(4);
+      isInv = true;
+    } else {
+      cleanBarcode = barcode;
+    }
+
+    try {
+      final api = APIService.instance;
+      final order = await api.getOrderByNumber(cleanBarcode);
+      
+      String newStatus = order.status;
+      bool statusChanged = false;
+
+      if (isKot || (!isKot && !isInv)) {
+        if (order.status == 'pending') {
+          newStatus = 'preparing';
+          statusChanged = true;
+        } else if (order.status == 'preparing' && order.orderType == 'dine_in') {
+          newStatus = 'prepared';
+          statusChanged = true;
+        }
+      }
+
+      if (isInv || (!isKot && !isInv)) {
+        if (order.orderType != 'dine_in') {
+          if (order.status == 'preparing') {
+            newStatus = 'prepared';
+            statusChanged = true;
+          } else if (order.status == 'prepared') {
+            newStatus = 'delivered';
+            statusChanged = true;
+          }
+        }
+      }
+
+      if (statusChanged) {
+        await api.updateOrderOnline(order.id!, {'status': newStatus});
+        
+        if (mounted) {
+          final posController = Provider.of<POSController>(context, listen: false);
+          await posController.reloadEnvironment();
+          _showScanSuccessDialog(order.orderNumber, order.status, newStatus);
+        }
+      } else {
+        _showOrderStatusDialog(order);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Barcode Scan Error: $e'),
+            backgroundColor: AppTheme.danger,
+          ),
+        );
+      }
+    }
+  }
+
+  void _showScanSuccessDialog(String orderNumber, String oldStatus, String newStatus) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          backgroundColor: const Color(0xFF1E293B),
+          title: Row(
+            children: [
+              const Icon(Icons.check_circle_rounded, color: Color(0xFF10B981), size: 28),
+              const SizedBox(width: 12),
+              Text(
+                'Status Updated',
+                style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.white),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Order $orderNumber status changed successfully:',
+                style: GoogleFonts.inter(color: const Color(0xFF94A3B8), fontSize: 13),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _buildStatusBadge(oldStatus),
+                  const SizedBox(width: 12),
+                  const Icon(Icons.arrow_forward_rounded, color: Colors.white54, size: 20),
+                  const SizedBox(width: 12),
+                  _buildStatusBadge(newStatus),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primary,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              child: const Text('OK'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showOrderStatusDialog(OrderModel order) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          backgroundColor: const Color(0xFF1E293B),
+          title: Row(
+            children: [
+              const Icon(Icons.info_rounded, color: Color(0xFF3B82F6), size: 28),
+              const SizedBox(width: 12),
+              Text(
+                'Order Info',
+                style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.white),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Order Number: ${order.orderNumber}',
+                style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Type: ${order.orderType.toUpperCase().replaceAll('_', ' ')}',
+                style: GoogleFonts.inter(color: const Color(0xFF94A3B8), fontSize: 13),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Total: LKR ${order.total.toStringAsFixed(2)}',
+                style: GoogleFonts.inter(color: const Color(0xFF94A3B8), fontSize: 13),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    'Current Status: ',
+                    style: GoogleFonts.inter(color: const Color(0xFF94A3B8), fontSize: 13),
+                  ),
+                  _buildStatusBadge(order.status),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primary,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildStatusBadge(String status) {
+    Color bg = Colors.grey.withOpacity(0.2);
+    Color txt = Colors.grey;
+    String label = status.toUpperCase();
+
+    if (status == 'pending') {
+      bg = AppTheme.warning.withOpacity(0.2);
+      txt = AppTheme.warning;
+      label = 'ACCEPT';
+    } else if (status == 'preparing') {
+      bg = Colors.orange.withOpacity(0.2);
+      txt = Colors.orange;
+      label = 'PREPARING';
+    } else if (status == 'prepared') {
+      bg = AppTheme.accent.withOpacity(0.2);
+      txt = AppTheme.accent;
+      label = 'PREPARED';
+    } else if (status == 'delivered') {
+      bg = const Color(0xFF10B981).withOpacity(0.2);
+      txt = const Color(0xFF10B981);
+      label = 'DELIVERED';
+    } else if (status == 'cancelled') {
+      bg = Colors.red.withOpacity(0.2);
+      txt = Colors.red;
+      label = 'CANCELLED';
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        label,
+        style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: txt),
+      ),
+    );
+  }
+
+  String _getQueueTokenNumber(OrderModel order) {
+    if (order.id == null) return '000';
+    final idStr = order.id.toString();
+    if (idStr.length >= 3) {
+      return idStr.substring(idStr.length - 3);
+    }
+    return idStr.padLeft(3, '0');
   }
 }

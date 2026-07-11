@@ -711,6 +711,15 @@ class APIService {
     throw Exception('Failed to load orders');
   }
 
+  Future<OrderModel> getOrderByNumber(String orderNumber) async {
+    final response = await http.get(Uri.parse('$_baseUrl/api/orders/by-number/$orderNumber'), headers: _getHeaders());
+    if (response.statusCode == 200) {
+      return OrderModel.fromJson(jsonDecode(response.body));
+    }
+    final errorMsg = jsonDecode(response.body)['error'] ?? 'Order not found';
+    throw Exception(errorMsg);
+  }
+
   Future<List<OrderItemModel>> getOrderItems(int orderId) async {
     final response = await http.get(Uri.parse('$_baseUrl/api/orders/$orderId/items'), headers: _getHeaders());
     if (response.statusCode == 200) {

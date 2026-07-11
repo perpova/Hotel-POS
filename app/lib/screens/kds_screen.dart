@@ -126,10 +126,10 @@ class _KDSScreenState extends State<KDSScreen> {
               children: [
                 Expanded(
                   child: Text(
-                    order.orderNumber.substring(order.orderNumber.length - 8), // short form
+                    _getQueueTokenNumber(order),
                     style: GoogleFonts.outfit(
                       color: Colors.white,
-                      fontSize: 15,
+                      fontSize: 18,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -153,7 +153,9 @@ class _KDSScreenState extends State<KDSScreen> {
             ),
             const SizedBox(height: 6),
             Text(
-              order.orderType == 'dine_in' ? 'TABLE: ${order.stewardName ?? "Steward"}' : order.orderType.toUpperCase(),
+              order.orderType == 'dine_in'
+                  ? 'TABLE: ${_getTableName(order.tableId, controller.diningTables)} | STEWARD: ${order.stewardName ?? "Steward"}'
+                  : order.orderType.toUpperCase(),
               style: GoogleFonts.inter(
                 color: Colors.cyan,
                 fontSize: 11,
@@ -267,5 +269,24 @@ class _KDSScreenState extends State<KDSScreen> {
         ),
       ),
     );
+  }
+
+  String _getQueueTokenNumber(OrderModel order) {
+    if (order.id == null) return '000';
+    final idStr = order.id.toString();
+    if (idStr.length >= 3) {
+      return idStr.substring(idStr.length - 3);
+    }
+    return idStr.padLeft(3, '0');
+  }
+
+  String _getTableName(int? tableId, List<DiningTableModel> tables) {
+    if (tableId == null) return 'N/A';
+    try {
+      final table = tables.firstWhere((t) => t.id == tableId);
+      return table.tableNumber;
+    } catch (_) {
+      return 'Table $tableId';
+    }
   }
 }

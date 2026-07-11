@@ -1248,9 +1248,25 @@ class _POSScreenState extends State<POSScreen> {
     }
 
     try {
+      final orderResult = await controller.placeOrder(
+        printKOT: true,
+        printAck: false,
+        status: 'pending',
+        paymentStatus: 'unpaid',
+        paymentMethod: 'cash',
+        clearCartAfter: false,
+      );
+      
+      final int orderId = orderResult['orderId'] ?? 0;
+      final String orderNum = orderResult['orderNumber'] ?? '';
+
+      if (controller.selectedTable != null) {
+        controller.tableActiveOrderIds[controller.selectedTable!.id] = orderId;
+      }
+
       final receiptData = ReceiptData(
-        orderId: DateTime.now().millisecondsSinceEpoch,
-        orderNumber: 'KOT-TEMP',
+        orderId: orderId,
+        orderNumber: orderNum,
         paymentMethod: 'unpaid',
         items: newKotItems,
         subtotal: 0,
@@ -2737,19 +2753,47 @@ class _POSScreenState extends State<POSScreen> {
                             Navigator.of(context).pop();
                           }
 
-                          // Place order (triggers clearCart + reloadEnvironment)
-                          final orderResult = await controller.placeOrder(
-                            printKOT: true,
-                            printAck: true,
-                            status: 'delivered',
-                            paymentStatus: paymentMethod == 'credit' ? 'unpaid' : 'paid',
-                            paymentMethod: paymentMethod,
-                            receivedAmount: paymentMethod == 'cash' ? receivedVal : finalTot,
-                            changeAmount: paymentMethod == 'cash' ? changeVal : 0.00,
-                          );
+                          int orderId = 0;
+                          String orderNum = '';
 
-                          final int orderId = orderResult['orderId'] ?? 0;
-                          final String orderNum = orderResult['orderNumber'] ?? '';
+                          if (controller.orderType == 'dine_in' &&
+                              controller.selectedTable != null &&
+                              controller.tableActiveOrderIds[controller.selectedTable!.id] != null) {
+                            final activeOrderId = controller.tableActiveOrderIds[controller.selectedTable!.id]!;
+                            
+                            try {
+                              orderNum = controller.activeOrders
+                                  .firstWhere((o) => o.id == activeOrderId)
+                                  .orderNumber;
+                            } catch (_) {
+                              orderNum = 'ORD-$activeOrderId';
+                            }
+                            
+                            await APIService.instance.updateOrderOnline(activeOrderId, {
+                              'payment_status': paymentMethod == 'credit' ? 'unpaid' : 'paid',
+                              'payment_method': paymentMethod,
+                              'status': 'delivered',
+                              'received_amount': paymentMethod == 'cash' ? receivedVal : finalTot,
+                              'change_amount': paymentMethod == 'cash' ? changeVal : 0.00,
+                            });
+                            
+                            orderId = activeOrderId;
+                            controller.tableActiveOrderIds.remove(controller.selectedTable!.id);
+                            controller.clearCart();
+                            await controller.reloadEnvironment();
+                          } else {
+                            final orderResult = await controller.placeOrder(
+                              printKOT: true,
+                              printAck: true,
+                              status: 'pending',
+                              paymentStatus: paymentMethod == 'credit' ? 'unpaid' : 'paid',
+                              paymentMethod: paymentMethod,
+                              receivedAmount: paymentMethod == 'cash' ? receivedVal : finalTot,
+                              changeAmount: paymentMethod == 'cash' ? changeVal : 0.00,
+                            );
+                            orderId = orderResult['orderId'] ?? 0;
+                            orderNum = orderResult['orderNumber'] ?? '';
+                          }
 
                           final receiptData = ReceiptData(
                             orderId: orderId,
@@ -3344,6 +3388,23 @@ class _POSScreenState extends State<POSScreen> {
               ),
               pw.SizedBox(height: 3),
               _buildPdfDashedLine(),
+              pw.SizedBox(height: 6),
+              pw.Center(
+                child: pw.BarcodeWidget(
+                  barcode: pw.Barcode.code128(),
+                  data: 'KOT-${data.orderNumber}',
+                  width: 150,
+                  height: 30,
+                  drawText: false,
+                ),
+              ),
+              pw.SizedBox(height: 2),
+              pw.Center(
+                child: pw.Text(
+                  'KOT-${data.orderNumber}',
+                  style: pw.TextStyle(font: sinhalaFont, fontSize: 6, color: PdfColors.grey700),
+                ),
+              ),
             ],
           );
         },
@@ -3580,6 +3641,25 @@ class _POSScreenState extends State<POSScreen> {
                 ],
               ),
               
+              pw.SizedBox(height: 4),
+              _buildPdfDashedLine(),
+              pw.SizedBox(height: 6),
+              pw.Center(
+                child: pw.BarcodeWidget(
+                  barcode: pw.Barcode.code128(),
+                  data: 'INV-${data.orderNumber}',
+                  width: 150,
+                  height: 30,
+                  drawText: false,
+                ),
+              ),
+              pw.SizedBox(height: 2),
+              pw.Center(
+                child: pw.Text(
+                  'INV-${data.orderNumber}',
+                  style: pw.TextStyle(font: sinhalaFont, fontSize: 6, color: PdfColors.grey700),
+                ),
+              ),
               pw.SizedBox(height: 4),
               _buildPdfDashedLine(),
               pw.SizedBox(height: 5),
@@ -3832,6 +3912,23 @@ class _POSScreenState extends State<POSScreen> {
           ),
           const SizedBox(height: 4),
           _buildDashedLine(),
+          const SizedBox(height: 8),
+          Center(
+            child: BarcodeWidget(
+              barcode: Barcode.code128(),
+              data: 'KOT-${data.orderNumber}',
+              width: 180,
+              height: 40,
+              drawText: false,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Center(
+            child: Text(
+              'KOT-${data.orderNumber}',
+              style: GoogleFonts.inter(fontSize: 8, color: const Color(0xFF64748B)),
+            ),
+          ),
         ],
       ),
     );
@@ -4067,7 +4164,23 @@ class _POSScreenState extends State<POSScreen> {
           const SizedBox(height: 6),
           _buildDashedLine(),
           const SizedBox(height: 8),
-          
+          Center(
+            child: BarcodeWidget(
+              barcode: Barcode.code128(),
+              data: 'INV-${data.orderNumber}',
+              width: 180,
+              height: 40,
+              drawText: false,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Center(
+            child: Text(
+              'INV-${data.orderNumber}',
+              style: GoogleFonts.inter(fontSize: 8, color: const Color(0xFF64748B)),
+            ),
+          ),
+          const SizedBox(height: 6),
           Center(
             child: Text(
               'Thank you & Come Again',

@@ -10,6 +10,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import 'package:barcode_widget/barcode_widget.dart';
 import '../controllers/pos_controller.dart';
 import '../controllers/dashboard_controller.dart';
 import '../theme.dart';
@@ -1727,6 +1728,25 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
               
               pw.SizedBox(height: 4),
               _buildPdfDashedLine(),
+              pw.SizedBox(height: 6),
+              pw.Center(
+                child: pw.BarcodeWidget(
+                  barcode: pw.Barcode.code128(),
+                  data: 'INV-${data.orderNumber}',
+                  width: 150,
+                  height: 30,
+                  drawText: false,
+                ),
+              ),
+              pw.SizedBox(height: 2),
+              pw.Center(
+                child: pw.Text(
+                  'INV-${data.orderNumber}',
+                  style: pw.TextStyle(font: sinhalaFont, fontSize: 6, color: PdfColors.grey700),
+                ),
+              ),
+              pw.SizedBox(height: 4),
+              _buildPdfDashedLine(),
               pw.SizedBox(height: 5),
               
               pw.Center(
@@ -2009,6 +2029,23 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
           _buildDashedLine(),
           const SizedBox(height: 8),
           
+          Center(
+            child: BarcodeWidget(
+              barcode: Barcode.code128(),
+              data: 'INV-${data.orderNumber}',
+              width: 180,
+              height: 40,
+              drawText: false,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Center(
+            child: Text(
+              'INV-${data.orderNumber}',
+              style: GoogleFonts.inter(fontSize: 8, color: const Color(0xFF64748B)),
+            ),
+          ),
+          const SizedBox(height: 6),
           Center(
             child: Text(
               'Thank you & Come Again',
