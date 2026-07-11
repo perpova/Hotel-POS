@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../services/translation_service.dart';
+import 'custom_date_range_picker.dart';
 
 class OrderStatistics extends StatelessWidget {
   final List<dynamic>? statuses;
@@ -65,11 +66,11 @@ class OrderStatistics extends StatelessWidget {
             // Date Picker Button
             InkWell(
               onTap: () async {
-                final picked = await showDateRangePicker(
+                final picked = await showDialog<DateTimeRange>(
                   context: context,
-                  firstDate: DateTime(2025),
-                  lastDate: DateTime(2030),
-                  initialDateRange: dateRange,
+                  builder: (context) => CustomDateRangePickerDialog(
+                    initialDateRange: dateRange,
+                  ),
                 );
                 if (picked != null) {
                   onDateRangeChanged(picked);

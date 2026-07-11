@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../api_service.dart';
 
 class DashboardController extends ChangeNotifier {
@@ -9,23 +10,23 @@ class DashboardController extends ChangeNotifier {
 
   // Date ranges for individual panels
   DateTimeRange _salesDateRange = DateTimeRange(
-    start: DateTime(2026, 6, 1),
-    end: DateTime(2026, 6, 30),
+    start: DateTime(2026, 7, 1),
+    end: DateTime(2026, 7, 31),
   );
 
   DateTimeRange _ordersDateRange = DateTimeRange(
-    start: DateTime(2026, 6, 1),
-    end: DateTime(2026, 6, 30),
+    start: DateTime(2026, 7, 1),
+    end: DateTime(2026, 7, 31),
   );
 
   DateTimeRange _customerDateRange = DateTimeRange(
-    start: DateTime(2026, 6, 1),
-    end: DateTime(2026, 6, 30),
+    start: DateTime(2026, 7, 1),
+    end: DateTime(2026, 7, 31),
   );
 
   DateTimeRange _statsDateRange = DateTimeRange(
-    start: DateTime(2026, 6, 18),
-    end: DateTime(2026, 6, 18),
+    start: DateTime(2026, 7, 11),
+    end: DateTime(2026, 7, 11),
   );
 
   // Getters
@@ -56,29 +57,34 @@ class DashboardController extends ChangeNotifier {
   void setSalesDateRange(DateTimeRange range) {
     _salesDateRange = range;
     notifyListeners();
-    // In a real application, you might trigger an API fetch here with the date range
+    loadDashboardData(range: range);
   }
 
   void setOrdersDateRange(DateTimeRange range) {
     _ordersDateRange = range;
     notifyListeners();
+    loadDashboardData(range: range);
   }
 
   void setCustomerDateRange(DateTimeRange range) {
     _customerDateRange = range;
     notifyListeners();
+    loadDashboardData(range: range);
   }
 
   void setStatsDateRange(DateTimeRange range) {
     _statsDateRange = range;
     notifyListeners();
+    loadDashboardData(range: range);
   }
 
-  Future<void> loadDashboardData() async {
+  Future<void> loadDashboardData({DateTimeRange? range}) async {
     _isLoading = true;
     notifyListeners();
     try {
-      final data = await APIService.instance.getDashboardReport();
+      final startStr = DateFormat('yyyy-MM-dd').format(range?.start ?? _salesDateRange.start);
+      final endStr = DateFormat('yyyy-MM-dd').format(range?.end ?? _salesDateRange.end);
+      final data = await APIService.instance.getDashboardReport(startDate: startStr, endDate: endStr);
       _reportData = data;
     } catch (e) {
       debugPrint('Error loading dashboard stats in DashboardController: $e');

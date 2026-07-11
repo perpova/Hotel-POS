@@ -202,6 +202,51 @@ class _POSStockScreenState extends State<POSStockScreen> {
     }
   }
 
+  Widget _buildWarningBanner(List<ProductModel> lowStock) {
+    if (lowStock.isEmpty) return const SizedBox.shrink();
+    final names = lowStock.map((p) => '${p.name} (${p.stockQty})').take(5).join(', ');
+    final suffix = lowStock.length > 5 ? ' and ${lowStock.length - 5} more' : '';
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      margin: const EdgeInsets.only(bottom: 24),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFEE2E2),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFFCA5A5)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626), size: 24),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'POS Low Stock / Depleted Warning!',
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF991B1B),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'The following POS items are running low or depleted: $names$suffix. Please replenish stock immediately.',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    color: const Color(0xFFB91C1C),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final controller = Provider.of<POSController>(context);
@@ -219,6 +264,7 @@ class _POSStockScreenState extends State<POSStockScreen> {
     }).toList();
 
     final displayLogs = _filteredLogs.take(_entriesLimit).toList();
+    final lowStockProducts = controller.products.where((p) => p.trackStock && p.stockQty <= p.minStockLevel).toList();
 
     return Scaffold(
       backgroundColor: AppTheme.bgLight,
@@ -343,6 +389,9 @@ class _POSStockScreenState extends State<POSStockScreen> {
               ],
             ),
             const SizedBox(height: 24),
+
+            // Warning Banner for low stock
+            _buildWarningBanner(lowStockProducts),
 
             // Collapsible filters
             if (_isFilterExpanded) ...[

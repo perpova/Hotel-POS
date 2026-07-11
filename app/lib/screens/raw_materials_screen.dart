@@ -208,6 +208,50 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
     }
   }
 
+  Widget _buildWarningBanner(List<IngredientModel> lowStock) {
+    if (lowStock.isEmpty) return const SizedBox.shrink();
+    final names = lowStock.map((i) => '${i.name} (${i.stockQty.toStringAsFixed(1)} ${i.unit})').join(', ');
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      margin: const EdgeInsets.only(bottom: 24),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFEE2E2),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFFCA5A5)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626), size: 24),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Depleted / Negative Stock Warning!',
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF991B1B),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'The following ingredients are out of stock or negative: $names. Please update stock level immediately to prevent recipe deduction errors.',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    color: const Color(0xFFB91C1C),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
@@ -217,6 +261,7 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
     final hasSeniorAccess = userRole == 'admin' || userRole == 'owner';
 
     final displayLogs = _filteredLogs.take(_entriesLimit).toList();
+    final lowStockIngredients = _ingredients.where((i) => i.stockQty <= 0).toList();
 
     return Scaffold(
       backgroundColor: AppTheme.bgLight,
@@ -342,6 +387,9 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
             ),
             const SizedBox(height: 24),
 
+            // Warning Banner for low stock
+            _buildWarningBanner(lowStockIngredients),
+
             // Top overview circles/row
             _buildOverviewRow(),
             const SizedBox(height: 24),
@@ -432,15 +480,16 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
               cardColor = AppTheme.primary;
               icon = Icons.shopping_basket_outlined;
           }
-  
+   
+          final isDepleted = i.stockQty <= 0;
           return Container(
             width: 180,
             margin: const EdgeInsets.only(right: 12),
             child: Card(
               elevation: 0,
-              color: Colors.white,
+              color: isDepleted ? const Color(0xFFFEF2F2) : Colors.white,
               shape: RoundedRectangleBorder(
-                side: const BorderSide(color: Color(0xFFE2E8F0)),
+                side: BorderSide(color: isDepleted ? const Color(0xFFFCA5A5) : const Color(0xFFE2E8F0), width: isDepleted ? 1.5 : 1.0),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Padding(
@@ -465,7 +514,11 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
                           const SizedBox(height: 6),
                           Text(
                             '${i.stockQty.toStringAsFixed(1)} ${i.unit}',
-                            style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+                            style: GoogleFonts.outfit(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              color: isDepleted ? const Color(0xFFDC2626) : AppTheme.textLightPrimary,
+                            ),
                           ),
                         ],
                       ),

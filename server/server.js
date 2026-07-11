@@ -864,6 +864,9 @@ app.post('/api/customers', authenticateToken, async (req, res) => {
 app.post('/api/credit/settle', authenticateToken, async (req, res) => {
     const { customer_id, amount, payment_method } = req.body;
     try {
+        const [customer] = await db.query('SELECT * FROM customers WHERE id = ?', [customer_id]);
+        if (!customer) return res.status(404).json({ error: 'Customer not found' });
+
         // Deduct from outstanding balance
         await db.query(
             'UPDATE customers SET outstanding_balance = outstanding_balance - ? WHERE id = ?',
@@ -875,11 +878,144 @@ app.post('/api/credit/settle', authenticateToken, async (req, res) => {
             [customer_id, amount, payment_method, req.user.id]
         );
         
-        const [customer] = await db.query('SELECT * FROM customers WHERE id = ?', [customer_id]);
+        // If paid via Cash, record to cash drawer logs under active shift
+        if (payment_method === 'cash') {
+            const openShifts = await db.query('SELECT * FROM shifts WHERE status = "open" LIMIT 1');
+            if (openShifts.length > 0) {
+                const shiftId = openShifts[0].id;
+                await db.query(
+                    'INSERT INTO cash_drawer_logs (shift_id, type, amount, reason) VALUES (?, "cash_in", ?, ?)',
+                    [shiftId, amount, `Credit Settlement: ${customer.name}`]
+                );
+            }
+        }
+
+        const [updatedCustomer] = await db.query('SELECT * FROM customers WHERE id = ?', [customer_id]);
         
-        await logAudit('modify_bill', 'customers', customer_id, `Settled LKR ${amount} credit balance via ${payment_method}`, req.user.id);
+        await logAudit('modify_bill', 'customers', customer_id, `Settled LKR ${amount} credit balance via ${payment_method.toUpperCase()}`, req.user.id);
         
-        res.json({ success: true, customer });
+        // Broadcast updates
+        broadcast({ type: 'customer_updated', data: updatedCustomer });
+        broadcast({ type: 'shift_updated' });
+        
+        res.json({ success: true, customer: updatedCustomer });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.put('/api/credit/settle/:id', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    const { amount, payment_method } = req.body;
+    try {
+        const settlements = await db.query('SELECT * FROM credit_settlements WHERE id = ?', [id]);
+        if (settlements.length === 0) return res.status(404).json({ error: 'Credit settlement not found' });
+        const settlement = settlements[0];
+        
+        const [customer] = await db.query('SELECT * FROM customers WHERE id = ?', [settlement.customer_id]);
+        if (!customer) return res.status(404).json({ error: 'Customer not found' });
+
+        const oldAmount = Number(settlement.amount);
+        const newAmount = Number(amount);
+        const oldPaymentMethod = settlement.payment_method.toLowerCase();
+        const newPaymentMethod = payment_method.toLowerCase();
+
+        const diff = newAmount - oldAmount;
+
+        // 1. Update credit settlement entry
+        await db.query(
+            'UPDATE credit_settlements SET amount = ?, payment_method = ? WHERE id = ?',
+            [newAmount, newPaymentMethod, id]
+        );
+
+        // 2. Adjust customer outstanding balance
+        await db.query(
+            'UPDATE customers SET outstanding_balance = outstanding_balance - ? WHERE id = ?',
+            [diff, settlement.customer_id]
+        );
+
+        // 3. Adjust cash drawer logs
+        const reasonStr = `Credit Settlement: ${customer.name}`;
+        if (oldPaymentMethod === 'cash') {
+            // Find old drawer log
+            const logs = await db.query(
+                'SELECT * FROM cash_drawer_logs WHERE type = "cash_in" AND amount = ? AND reason = ? ORDER BY timestamp DESC LIMIT 1',
+                [oldAmount, reasonStr]
+            );
+            if (logs.length > 0) {
+                const logId = logs[0].id;
+                if (newPaymentMethod === 'cash') {
+                    await db.query('UPDATE cash_drawer_logs SET amount = ? WHERE id = ?', [newAmount, logId]);
+                } else {
+                    await db.query('DELETE FROM cash_drawer_logs WHERE id = ?', [logId]);
+                }
+            }
+        } else if (newPaymentMethod === 'cash') {
+            // Insert new cash log if changed from card/qr to cash
+            const openShifts = await db.query('SELECT * FROM shifts WHERE status = "open" LIMIT 1');
+            if (openShifts.length > 0) {
+                await db.query(
+                    'INSERT INTO cash_drawer_logs (shift_id, type, amount, reason) VALUES (?, "cash_in", ?, ?)',
+                    [openShifts[0].id, newAmount, reasonStr]
+                );
+            }
+        }
+
+        const [updatedCustomer] = await db.query('SELECT * FROM customers WHERE id = ?', [settlement.customer_id]);
+
+        await logAudit('modify_bill', 'customers', settlement.customer_id, `Edited credit settlement (ID: ${id}) from LKR ${oldAmount} to LKR ${newAmount} (${newPaymentMethod.toUpperCase()})`, req.user.id);
+
+        broadcast({ type: 'customer_updated', data: updatedCustomer });
+        broadcast({ type: 'shift_updated' });
+
+        res.json({ success: true, customer: updatedCustomer });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.delete('/api/credit/settle/:id', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    try {
+        const settlements = await db.query('SELECT * FROM credit_settlements WHERE id = ?', [id]);
+        if (settlements.length === 0) return res.status(404).json({ error: 'Credit settlement not found' });
+        const settlement = settlements[0];
+        
+        const [customer] = await db.query('SELECT * FROM customers WHERE id = ?', [settlement.customer_id]);
+        if (!customer) return res.status(404).json({ error: 'Customer not found' });
+
+        const oldAmount = Number(settlement.amount);
+        const oldPaymentMethod = settlement.payment_method.toLowerCase();
+
+        // 1. Delete credit settlement entry
+        await db.query('DELETE FROM credit_settlements WHERE id = ?', [id]);
+
+        // 2. Restore customer outstanding balance
+        await db.query(
+            'UPDATE customers SET outstanding_balance = outstanding_balance + ? WHERE id = ?',
+            [oldAmount, settlement.customer_id]
+        );
+
+        // 3. Remove cash drawer log if it was cash
+        if (oldPaymentMethod === 'cash') {
+            const reasonStr = `Credit Settlement: ${customer.name}`;
+            const logs = await db.query(
+                'SELECT * FROM cash_drawer_logs WHERE type = "cash_in" AND amount = ? AND reason = ? ORDER BY timestamp DESC LIMIT 1',
+                [oldAmount, reasonStr]
+            );
+            if (logs.length > 0) {
+                await db.query('DELETE FROM cash_drawer_logs WHERE id = ?', [logs[0].id]);
+            }
+        }
+
+        const [updatedCustomer] = await db.query('SELECT * FROM customers WHERE id = ?', [settlement.customer_id]);
+
+        await logAudit('modify_bill', 'customers', settlement.customer_id, `Voided/Deleted credit settlement (ID: ${id}) of LKR ${oldAmount}`, req.user.id);
+
+        broadcast({ type: 'customer_updated', data: updatedCustomer });
+        broadcast({ type: 'shift_updated' });
+
+        res.json({ success: true, customer: updatedCustomer });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -1283,6 +1419,72 @@ app.delete('/api/customers/:id', authenticateToken, async (req, res) => {
         await logAudit('modify_bill', 'customers', id, `Customer ${customer.name} deleted.`, req.user.id);
         broadcast({ type: 'customer_deleted', data: { id } });
         res.json({ success: true, message: 'Customer deleted successfully' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.get('/api/customers/:id/ledger', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    try {
+        const [customer] = await db.query('SELECT outstanding_balance, created_at FROM customers WHERE id = ?', [id]);
+        if (!customer) return res.status(404).json({ error: 'Customer not found' });
+
+        const currentOutstanding = Number(customer.outstanding_balance);
+
+        // Fetch all credit purchases (orders)
+        const purchases = await db.query(`
+            SELECT id, order_number AS description, total AS debit, 0.00 AS credit, created_at AS date, 'purchase' AS type
+            FROM orders
+            WHERE customer_id = ? AND payment_method = 'credit'
+        `, [id]);
+
+        // Fetch all credit settlements
+        const payments = await db.query(`
+            SELECT id, CONCAT('Settle Payment: ', UPPER(payment_method)) AS description, 0.00 AS debit, amount AS credit, date_paid AS date, 'payment' AS type
+            FROM credit_settlements
+            WHERE customer_id = ?
+        `, [id]);
+
+        // Back-calculate initial outstanding balance
+        let totalDebit = 0;
+        let totalCredit = 0;
+        purchases.forEach(p => totalDebit += Number(p.debit));
+        payments.forEach(p => totalCredit += Number(p.credit));
+
+        const initialBalance = currentOutstanding - totalDebit + totalCredit;
+
+        const combined = [...purchases, ...payments];
+        combined.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+        const ledger = [];
+        if (initialBalance !== 0) {
+            ledger.push({
+                id: 0,
+                description: 'Starting Outstanding Balance',
+                debit: initialBalance > 0 ? initialBalance : 0.00,
+                credit: initialBalance < 0 ? -initialBalance : 0.00,
+                date: customer.created_at,
+                type: 'starting',
+                running_balance: initialBalance
+            });
+        }
+
+        let balance = initialBalance;
+        combined.forEach(item => {
+            balance += (Number(item.debit) - Number(item.credit));
+            ledger.push({
+                id: item.id,
+                description: item.description,
+                debit: Number(item.debit),
+                credit: Number(item.credit),
+                date: item.date,
+                type: item.type,
+                running_balance: balance
+            });
+        });
+
+        res.json(ledger);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -2048,13 +2250,26 @@ app.post('/api/sync', authenticateToken, async (req, res) => {
 
 app.get('/api/reports/dashboard', authenticateToken, async (req, res) => {
     try {
-        const [{ total_sales }] = await db.query('SELECT COALESCE(SUM(total), 0) as total_sales FROM orders WHERE payment_status = "paid" AND DATE(created_at) = CURDATE()');
-        const [{ total_orders }] = await db.query('SELECT COUNT(*) as total_orders FROM orders WHERE DATE(created_at) = CURDATE()');
+        const { start_date, end_date } = req.query;
+        
+        let start = start_date;
+        let end = end_date;
+        if (!start || !end) {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            start = `${year}-${month}-01`;
+            const lastDay = new Date(year, now.getMonth() + 1, 0).getDate();
+            end = `${year}-${month}-${String(lastDay).padStart(2, '0')}`;
+        }
+
+        const [{ total_sales }] = await db.query('SELECT COALESCE(SUM(total), 0) as total_sales FROM orders WHERE payment_status = "paid" AND DATE(created_at) BETWEEN ? AND ?', [start, end]);
+        const [{ total_orders }] = await db.query('SELECT COUNT(*) as total_orders FROM orders WHERE DATE(created_at) BETWEEN ? AND ?', [start, end]);
         const [{ total_customers }] = await db.query('SELECT COUNT(*) as total_customers FROM customers');
         const [{ total_menu_items }] = await db.query('SELECT COUNT(*) as total_menu_items FROM products WHERE status = "active"');
         
         // Status counts
-        const orderStatuses = await db.query('SELECT status, COUNT(*) as count FROM orders WHERE DATE(created_at) = CURDATE() GROUP BY status');
+        const orderStatuses = await db.query('SELECT status, COUNT(*) as count FROM orders WHERE DATE(created_at) BETWEEN ? AND ? GROUP BY status', [start, end]);
         
         // Top selling products
         const topSelling = await db.query(`
@@ -2062,28 +2277,28 @@ app.get('/api/reports/dashboard', authenticateToken, async (req, res) => {
             FROM order_items oi
             JOIN products p ON oi.product_id = p.id
             JOIN orders o ON oi.order_id = o.id
-            WHERE o.payment_status = "paid" AND DATE(o.created_at) = CURDATE()
+            WHERE o.payment_status = "paid" AND DATE(o.created_at) BETWEEN ? AND ?
             GROUP BY p.id
             ORDER BY qty DESC
             LIMIT 5
-        `);
+        `, [start, end]);
         
         // Hourly Sales (dashboard graph)
         const hourlySales = await db.query(`
             SELECT HOUR(created_at) as hour, SUM(total) as sales
             FROM orders
-            WHERE payment_status = "paid" AND DATE(created_at) = CURDATE()
+            WHERE payment_status = "paid" AND DATE(created_at) BETWEEN ? AND ?
             GROUP BY HOUR(created_at)
             ORDER BY hour
-        `);
+        `, [start, end]);
         
         // Payment method breakdown
         const payments = await db.query(`
             SELECT payment_method, SUM(total) as amount, COUNT(*) as count
             FROM orders
-            WHERE payment_status = "paid" AND DATE(created_at) = CURDATE()
+            WHERE payment_status = "paid" AND DATE(created_at) BETWEEN ? AND ?
             GROUP BY payment_method
-        `);
+        `, [start, end]);
         
         const formattedTopSelling = topSelling.map(item => ({
             name: item.name,
@@ -2101,6 +2316,43 @@ app.get('/api/reports/dashboard', authenticateToken, async (req, res) => {
             amount: Number(item.amount),
             count: Number(item.count)
         }));
+
+        // Top Customers (who ordered the most)
+        const topCustomers = await db.query(`
+            SELECT COALESCE(c.name, 'Walking Customer') as name, COUNT(o.id) as orders_count
+            FROM orders o
+            LEFT JOIN customers c ON o.customer_id = c.id
+            WHERE DATE(o.created_at) BETWEEN ? AND ?
+            GROUP BY o.customer_id, c.name
+            ORDER BY orders_count DESC
+            LIMIT 5
+        `, [start, end]);
+
+        // Customer Stats (hourly unique customer count / check-ins)
+        const customerStats = await db.query(`
+            SELECT HOUR(created_at) as hour, COUNT(DISTINCT COALESCE(customer_id, 0)) as count
+            FROM orders
+            WHERE DATE(created_at) BETWEEN ? AND ?
+            GROUP BY HOUR(created_at)
+            ORDER BY hour
+        `, [start, end]);
+
+        const hourlyMap = {};
+        for (let h = 6; h <= 23; h++) {
+            const label = `${String(h).padStart(2, '0')}:00`;
+            hourlyMap[label] = 0;
+        }
+        customerStats.forEach(row => {
+            const h = row.hour;
+            if (h >= 6 && h <= 23) {
+                const label = `${String(h).padStart(2, '0')}:00`;
+                hourlyMap[label] = Number(row.count);
+            }
+        });
+        const formattedCustomerStats = Object.keys(hourlyMap).map(hour => ({
+            hour,
+            count: hourlyMap[hour]
+        }));
         
         res.json({
             summary: { 
@@ -2112,7 +2364,12 @@ app.get('/api/reports/dashboard', authenticateToken, async (req, res) => {
             statuses: orderStatuses.map(s => ({ status: s.status, count: Number(s.count) })),
             top_selling: formattedTopSelling,
             hourly_sales: formattedHourlySales,
-            payment_methods: formattedPayments
+            payment_methods: formattedPayments,
+            top_customers: topCustomers.map(tc => ({
+                name: tc.name,
+                orders_count: Number(tc.orders_count)
+            })),
+            customer_stats: formattedCustomerStats
         });
     } catch (err) {
         res.status(500).json({ error: err.message });

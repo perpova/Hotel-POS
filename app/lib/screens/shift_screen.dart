@@ -24,12 +24,15 @@ class _ShiftScreenState extends State<ShiftScreen> {
   final TextEditingController _cashInOutAmountController = TextEditingController();
   final TextEditingController _cashInOutReasonController = TextEditingController();
 
-  List<dynamic> _drawerLogs = [];
-  bool _loadingLogs = false;
   int? _lastShiftId;
   double _cashSales = 0.0;
   double _expectedDrawerBalance = 0.0;
   bool _loadingShiftData = false;
+  List<OrderModel> _shiftOrders = [];
+  double _cardSales = 0.0;
+  double _qrSales = 0.0;
+  double _creditSales = 0.0;
+  int _totalOrdersCount = 0;
 
   List<SupplierModel> _suppliers = [];
   SupplierModel? _selectedSupplier;
@@ -79,19 +82,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
     super.dispose();
   }
 
-  Future<void> _fetchDrawerLogs(int shiftId) async {
-    setState(() => _loadingLogs = true);
-    try {
-      final logs = await APIService.instance.getDrawerLogs(shiftId);
-      setState(() {
-        _drawerLogs = logs;
-        _loadingLogs = false;
-      });
-    } catch (e) {
-      setState(() => _loadingLogs = false);
-      print('Error fetching drawer logs: $e');
-    }
-  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -103,7 +94,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
     if (controller.activeShift != null && controller.activeShift!.id != _lastShiftId) {
       _lastShiftId = controller.activeShift!.id;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _fetchDrawerLogs(controller.activeShift!.id);
+        controller.fetchDrawerLogs();
         _loadShiftData(controller);
       });
     }
@@ -271,6 +262,23 @@ class _ShiftScreenState extends State<ShiftScreen> {
     final cashSalesVal = _cashSales; 
     final expectedTotal = _expectedDrawerBalance;
 
+    double creditSettlementsReceived = 0.0;
+    double otherCashIn = 0.0;
+    double cashOutAdjustments = 0.0;
+
+    for (var log in controller.drawerLogs) {
+      final double amt = double.tryParse(log['amount']?.toString() ?? '0') ?? 0.0;
+      if (log['type'] == 'cash_in') {
+        if (log['reason']?.toString().contains('Credit Settlement:') ?? false) {
+          creditSettlementsReceived += amt;
+        } else {
+          otherCashIn += amt;
+        }
+      } else if (log['type'] == 'cash_out') {
+        cashOutAdjustments += amt;
+      }
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -296,6 +304,18 @@ class _ShiftScreenState extends State<ShiftScreen> {
                 const Divider(height: 24, color: Color(0xFFF1F5F9)),
                 _buildCashDetailRow('Today\'s Cash Sales', cashSalesVal, Icons.point_of_sale_outlined, const Color(0xFFE6F4EA), const Color(0xFF137333)),
                 const Divider(height: 24, color: Color(0xFFF1F5F9)),
+                if (creditSettlementsReceived > 0) ...[
+                  _buildCashDetailRow('Credit Settlements (Cash)', creditSettlementsReceived, Icons.assignment_returned_outlined, const Color(0xFFE0F2FE), const Color(0xFF0369A1)),
+                  const Divider(height: 24, color: Color(0xFFF1F5F9)),
+                ],
+                if (otherCashIn > 0) ...[
+                  _buildCashDetailRow('Other Cash In', otherCashIn, Icons.add_circle_outline, const Color(0xFFDCFCE7), const Color(0xFF15803D)),
+                  const Divider(height: 24, color: Color(0xFFF1F5F9)),
+                ],
+                if (cashOutAdjustments > 0) ...[
+                  _buildCashDetailRow('Cash Out Adjustments', cashOutAdjustments, Icons.remove_circle_outline, const Color(0xFFFEE2E2), const Color(0xFFB91C1C)),
+                  const Divider(height: 24, color: Color(0xFFF1F5F9)),
+                ],
                 _buildCashDetailRow('Expected Cash in Drawer', expectedTotal, Icons.wallet_outlined, Color(0xFFFFF0F5), AppTheme.primary, isTotal: true),
               ],
             ),
@@ -432,7 +452,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
                   'Drawer Transaction Logs',
                   style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
                 ),
-                if (_drawerLogs.isNotEmpty)
+                if (controller.drawerLogs.isNotEmpty)
                   ElevatedButton.icon(
                     onPressed: () => _printDrawerLogs(controller),
                     icon: const Icon(Icons.print, size: 14),
@@ -451,12 +471,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
             ),
             const SizedBox(height: 16),
 
-            if (_loadingLogs)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 40.0),
-                child: Center(child: CircularProgressIndicator(color: AppTheme.primary)),
-              )
-            else if (_drawerLogs.isEmpty)
+            if (controller.drawerLogs.isEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 40.0),
                 child: Center(
@@ -486,10 +501,10 @@ class _ShiftScreenState extends State<ShiftScreen> {
                   ListView.separated(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
-                    itemCount: _drawerLogs.length,
+                    itemCount: controller.drawerLogs.length,
                     separatorBuilder: (context, index) => const Divider(height: 1, color: Color(0xFFF1F5F9)),
                     itemBuilder: (context, index) {
-                      final log = _drawerLogs[index];
+                      final log = controller.drawerLogs[index];
                       final isCashIn = log['type'] == 'cash_in';
                       final timeFormatted = DateFormat('hh:mm a').format((DateTime.tryParse(log['timestamp']) ?? DateTime.now()).toLocal());
                       
@@ -572,7 +587,32 @@ class _ShiftScreenState extends State<ShiftScreen> {
   // LAYOUT: SHIFT CLOSE & RECONCILIATION
   // ----------------------------------------------------
   Widget _buildShiftCloseArea(POSController controller) {
+    final starting = controller.activeShift?.openingBalance ?? 0.00;
     final expectedTotal = _expectedDrawerBalance;
+
+    double creditSettlements = 0.0;
+    double otherCashIn = 0.0;
+    double supplierPayments = 0.0;
+    double otherCashOut = 0.0;
+
+    for (var log in controller.drawerLogs) {
+      final double amt = double.tryParse(log['amount']?.toString() ?? '0') ?? 0.0;
+      if (log['type'] == 'cash_in') {
+        if (log['reason']?.toString().contains('Credit Settlement:') ?? false) {
+          creditSettlements += amt;
+        } else {
+          otherCashIn += amt;
+        }
+      } else if (log['type'] == 'cash_out') {
+        if (log['reason']?.toString().contains('Supplier Payment:') ?? false) {
+          supplierPayments += amt;
+        } else {
+          otherCashOut += amt;
+        }
+      }
+    }
+
+    final double totalSales = _cashSales + _cardSales + _qrSales + _creditSales;
 
     return Card(
       elevation: 0,
@@ -587,48 +627,253 @@ class _ShiftScreenState extends State<ShiftScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'End Shift / Reconciliation',
+              'Shift Close Reconciliation Report',
               style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             Text(
-              'Count the total physical cash in your drawer at the end of the shift and enter below to close shift:',
-              style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightSecondary),
+              'Count drawer cash and compare with expected balances. Closing shift prints a final Z-Report.',
+              style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary),
             ),
-            const SizedBox(height: 24),
-            TextField(
-              controller: _actualCashController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Actual Cash Counted (LKR) *',
+            const Divider(height: 16, color: Color(0xFFF1F5F9)),
+
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Cash Reconciliation Details
+                    Text('CASH DRAWER RECONCILIATION', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: const Color(0xFF64748B))),
+                    const SizedBox(height: 8),
+                    _buildMiniReconcileRow('Starting Cash Balance', starting),
+                    _buildMiniReconcileRow('Cash Sales (+)', _cashSales, color: const Color(0xFF16A34A)),
+                    _buildMiniReconcileRow('Credit Settlements (+)', creditSettlements, color: const Color(0xFF16A34A)),
+                    _buildMiniReconcileRow('Other Cash In (+)', otherCashIn, color: const Color(0xFF16A34A)),
+                    _buildMiniReconcileRow('Supplier Payments (-)', -supplierPayments, color: const Color(0xFFEF4444)),
+                    _buildMiniReconcileRow('Other Cash Out (-)', -otherCashOut, color: const Color(0xFFEF4444)),
+                    const Divider(height: 12, color: Color(0xFFF1F5F9)),
+                    _buildMiniReconcileRow('EXPECTED CASH IN DRAWER', expectedTotal, isBold: true),
+                    const Divider(height: 16, color: Color(0xFFF1F5F9)),
+
+                    // Other Payment Methods
+                    Text('NON-CASH SALES SUMMARY', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: const Color(0xFF64748B))),
+                    const SizedBox(height: 8),
+                    _buildMiniReconcileRow('Card Payments', _cardSales),
+                    _buildMiniReconcileRow('LankaQR Payments', _qrSales),
+                    _buildMiniReconcileRow('Credit Sales (Outstanding Added)', _creditSales),
+                    const Divider(height: 12, color: Color(0xFFF1F5F9)),
+                    _buildMiniReconcileRow('TOTAL SHIFT SALES', totalSales, isBold: true, color: AppTheme.primary),
+                    const Divider(height: 16, color: Color(0xFFF1F5F9)),
+
+                    // Input Actual Cash Counted
+                    Text('ACTUAL DRAWER CASH COUNT', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: const Color(0xFF64748B))),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _actualCashController,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(
+                        labelText: 'Actual Cash Counted (LKR) *',
+                        hintText: 'Enter total cash counted',
+                        prefixText: 'LKR ',
+                      ),
+                      style: GoogleFonts.inter(fontSize: 13),
+                    ),
+                    const SizedBox(height: 24),
+
+                    ElevatedButton.icon(
+                      onPressed: () async {
+                        final actual = double.tryParse(_actualCashController.text) ?? 0.00;
+                        try {
+                          // Generate and print Shift Z-Report PDF before closing
+                          await _printShiftZReport(
+                            controller,
+                            starting,
+                            _cashSales,
+                            creditSettlements,
+                            otherCashIn,
+                            supplierPayments,
+                            otherCashOut,
+                            expectedTotal,
+                            _cardSales,
+                            _qrSales,
+                            _creditSales,
+                            totalSales,
+                            actual,
+                          );
+
+                          // Close the shift in backend
+                          await controller.closeActiveShift(expectedTotal, actual);
+                          await controller.reloadEnvironment();
+                          _actualCashController.clear();
+                          if (mounted) {
+                            _showSnackBar('Shift closed successfully. Z-Report printed.');
+                          }
+                        } catch (e) {
+                          _showSnackBar(e.toString());
+                        }
+                      },
+                      icon: const Icon(Icons.lock_clock, size: 16),
+                      label: const Text('Close Shift & Print Z-Report', style: TextStyle(fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.danger,
+                        foregroundColor: Colors.white,
+                        minimumSize: const Size.fromHeight(48),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              style: GoogleFonts.inter(fontSize: 13),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: () async {
-                final actual = double.tryParse(_actualCashController.text) ?? 0.00;
-                try {
-                  await controller.closeActiveShift(expectedTotal, actual);
-                  await controller.reloadEnvironment();
-                  _actualCashController.clear();
-                  if (mounted) {
-                    _showSnackBar('Shift Closed successfully. Reconciliation log written to Audit Trail.');
-                  }
-                } catch (e) {
-                  _showSnackBar(e.toString());
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.danger,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                padding: const EdgeInsets.symmetric(vertical: 14),
-              ),
-              child: Text('Close Shift & Print Summary', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildMiniReconcileRow(String label, double val, {bool isBold = false, Color? color}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: GoogleFonts.inter(
+              fontSize: 12,
+              fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+              color: isBold ? AppTheme.textLightPrimary : AppTheme.textLightSecondary,
+            ),
+          ),
+          Text(
+            'LKR ${val.toStringAsFixed(2)}',
+            style: GoogleFonts.inter(
+              fontSize: 12,
+              fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
+              color: color ?? (isBold ? AppTheme.textLightPrimary : AppTheme.textLightPrimary),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _printShiftZReport(
+    POSController controller,
+    double starting,
+    double cashSales,
+    double creditSettlements,
+    double otherCashIn,
+    double supplierPayments,
+    double otherCashOut,
+    double expectedCash,
+    double cardSales,
+    double qrSales,
+    double creditSales,
+    double totalSales,
+    double actualCash,
+  ) async {
+    try {
+      final doc = pw.Document();
+      final font = await PdfGoogleFonts.interRegular();
+      final fontBold = await PdfGoogleFonts.interBold();
+
+      final activeShift = controller.activeShift;
+      final shiftIdStr = activeShift?.id.toString() ?? 'N/A';
+      final openedAtStr = activeShift?.startTime != null 
+          ? DateFormat('yyyy-MM-dd HH:mm').format(DateTime.parse(activeShift!.startTime).toLocal())
+          : 'N/A';
+      final closedAtStr = DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now());
+      final cashierName = APIService.instance.currentUser?.name ?? 'Admin';
+      final variance = actualCash - expectedCash;
+
+      doc.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat.roll80,
+          margin: const pw.EdgeInsets.all(10),
+          build: (pw.Context context) {
+            return pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Center(
+                  child: pw.Text('MATARA HOTEL', style: pw.TextStyle(font: fontBold, fontSize: 12)),
+                ),
+                pw.Center(
+                  child: pw.Text('SHIFT Z-REPORT (RECONCILIATION)', style: pw.TextStyle(font: fontBold, fontSize: 8)),
+                ),
+                pw.SizedBox(height: 10),
+                pw.Text('Shift ID: #$shiftIdStr', style: pw.TextStyle(font: font, fontSize: 8)),
+                pw.Text('Cashier: $cashierName', style: pw.TextStyle(font: font, fontSize: 8)),
+                pw.Text('Opened: $openedAtStr', style: pw.TextStyle(font: font, fontSize: 8)),
+                pw.Text('Closed: $closedAtStr', style: pw.TextStyle(font: font, fontSize: 8)),
+                pw.SizedBox(height: 6),
+                pw.Text('-' * 45, style: pw.TextStyle(fontSize: 8, color: PdfColors.grey)),
+                pw.SizedBox(height: 6),
+
+                pw.Text('CASH DRAWER RECONCILIATION', style: pw.TextStyle(font: fontBold, fontSize: 9)),
+                pw.SizedBox(height: 4),
+                _buildPdfMiniRow('Opening Drawer Cash', starting, font),
+                _buildPdfMiniRow('Cash Sales (+)', cashSales, font),
+                _buildPdfMiniRow('Credit Settlements (+)', creditSettlements, font),
+                _buildPdfMiniRow('Other Cash In (+)', otherCashIn, font),
+                _buildPdfMiniRow('Supplier Payments (-)', -supplierPayments, font),
+                _buildPdfMiniRow('Other Cash Out (-)', -otherCashOut, font),
+                pw.SizedBox(height: 2),
+                _buildPdfMiniRow('EXPECTED CASH', expectedCash, fontBold),
+                _buildPdfMiniRow('ACTUAL CASH COUNTED', actualCash, fontBold),
+                _buildPdfMiniRow('VARIANCE (DIFF)', variance, fontBold, color: variance >= 0 ? PdfColors.green700 : PdfColors.red700),
+                
+                pw.SizedBox(height: 6),
+                pw.Text('-' * 45, style: pw.TextStyle(fontSize: 8, color: PdfColors.grey)),
+                pw.SizedBox(height: 6),
+
+                pw.Text('NON-CASH SALES SUMMARY', style: pw.TextStyle(font: fontBold, fontSize: 9)),
+                pw.SizedBox(height: 4),
+                _buildPdfMiniRow('Card Sales', cardSales, font),
+                _buildPdfMiniRow('LankaQR Sales', qrSales, font),
+                _buildPdfMiniRow('Credit Outstanding Added', creditSales, font),
+                
+                pw.SizedBox(height: 6),
+                pw.Text('-' * 45, style: pw.TextStyle(fontSize: 8, color: PdfColors.grey)),
+                pw.SizedBox(height: 6),
+
+                _buildPdfMiniRow('TOTAL SHIFT SALES', totalSales, fontBold),
+                _buildPdfMiniRow('TOTAL ORDERS COUNT', _totalOrdersCount.toDouble(), font, isDecimal: false),
+                
+                pw.SizedBox(height: 12),
+                pw.Center(
+                  child: pw.Text('End of Shift Report', style: pw.TextStyle(font: font, fontSize: 8)),
+                ),
+                pw.Center(
+                  child: pw.Text('Software by Perpova. 0713555566', style: pw.TextStyle(font: font, fontSize: 7, color: PdfColors.grey700)),
+                ),
+              ],
+            );
+          },
+        ),
+      );
+
+      await Printing.layoutPdf(
+        onLayout: (PdfPageFormat format) async => doc.save(),
+        name: 'Shift_ZReport_Shift$shiftIdStr',
+      );
+    } catch (e) {
+      if (mounted) {
+        _showSnackBar('Failed to print Z-Report: $e');
+      }
+    }
+  }
+
+  pw.Widget _buildPdfMiniRow(String label, double val, pw.Font font, {PdfColor? color, bool isDecimal = true}) {
+    final valStr = isDecimal ? 'LKR ${val.toStringAsFixed(2)}' : val.toStringAsFixed(0);
+    return pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(vertical: 1.0),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          pw.Text(label, style: pw.TextStyle(font: font, fontSize: 8)),
+          pw.Text(valStr, style: pw.TextStyle(font: font, fontSize: 8, color: color ?? PdfColors.black, fontWeight: pw.FontWeight.bold)),
+        ],
       ),
     );
   }
@@ -685,7 +930,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
         } else {
           await APIService.instance.logDrawerCash(controller.activeShift!.id, type, amt, reason);
         }
-        _fetchDrawerLogs(controller.activeShift!.id);
+        controller.fetchDrawerLogs();
         _fetchSuppliers();
       } else {
         print('Offline Log Drawer Cash: Shift ID ${controller.activeShift!.id}, Type $type, Amount $amt');
@@ -709,7 +954,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
       
       final headers = ['Type', 'Amount', 'Reason / Remarks', 'Time'];
       
-      final data = _drawerLogs.map((log) {
+      final data = controller.drawerLogs.map((log) {
         final isCashIn = log['type'] == 'cash_in';
         final timeFormatted = DateFormat('hh:mm a').format((DateTime.tryParse(log['timestamp']) ?? DateTime.now()).toLocal());
         return [

@@ -143,7 +143,7 @@ class PopularItemsList extends StatelessWidget {
                       const SizedBox(width: 8),
                       // Price
                       Text(
-                        '\$${price.toStringAsFixed(2)}',
+                        'LKR ${price.toStringAsFixed(2)}',
                         style: GoogleFonts.outfit(
                           fontSize: 13,
                           fontWeight: FontWeight.bold,

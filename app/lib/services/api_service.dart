@@ -395,11 +395,35 @@ class APIService {
       body: jsonEncode({
         'customer_id': customerId,
         'amount': amount,
-        'payment_method': paymentMethod,
+        'payment_method': paymentMethod.toLowerCase(),
       }),
     );
     if (response.statusCode != 200) {
-      throw Exception('Failed to settle credit');
+      throw Exception(jsonDecode(response.body)['error'] ?? 'Failed to settle credit balance');
+    }
+  }
+
+  Future<void> editCreditSettlement(int settlementId, double newAmount, String newPaymentMethod) async {
+    final response = await http.put(
+      Uri.parse('$_baseUrl/api/credit/settle/$settlementId'),
+      headers: _getHeaders(),
+      body: jsonEncode({
+        'amount': newAmount,
+        'payment_method': newPaymentMethod.toLowerCase(),
+      }),
+    );
+    if (response.statusCode != 200) {
+      throw Exception(jsonDecode(response.body)['error'] ?? 'Failed to update credit settlement');
+    }
+  }
+
+  Future<void> deleteCreditSettlement(int settlementId) async {
+    final response = await http.delete(
+      Uri.parse('$_baseUrl/api/credit/settle/$settlementId'),
+      headers: _getHeaders(),
+    );
+    if (response.statusCode != 200) {
+      throw Exception(jsonDecode(response.body)['error'] ?? 'Failed to delete credit settlement');
     }
   }
 
@@ -855,6 +879,17 @@ class APIService {
     }
   }
 
+  Future<List<dynamic>> getCustomerLedger(int customerId) async {
+    final response = await http.get(
+      Uri.parse('$_baseUrl/api/customers/$customerId/ledger'),
+      headers: _getHeaders(),
+    );
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    }
+    throw Exception('Failed to load customer ledger');
+  }
+
   // Address Management APIs
   Future<List<AddressModel>> getAddresses(int id, {required bool isCustomer}) async {
     final typePath = isCustomer ? 'customers' : 'users';
@@ -944,8 +979,12 @@ class APIService {
   }
 
   // Dashboard & Reports Data
-  Future<Map<String, dynamic>> getDashboardReport() async {
-    final response = await http.get(Uri.parse('$_baseUrl/api/reports/dashboard'), headers: _getHeaders());
+  Future<Map<String, dynamic>> getDashboardReport({String? startDate, String? endDate}) async {
+    String url = '$_baseUrl/api/reports/dashboard';
+    if (startDate != null && endDate != null) {
+      url += '?start_date=$startDate&end_date=$endDate';
+    }
+    final response = await http.get(Uri.parse(url), headers: _getHeaders());
     if (response.statusCode == 200) {
       return jsonDecode(response.body);
     }

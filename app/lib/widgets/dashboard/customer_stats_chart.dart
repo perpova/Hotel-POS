@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' hide TextDirection;
+import 'custom_date_range_picker.dart';
 
 class CustomerStatsChart extends StatelessWidget {
+  final List<dynamic>? stats;
   final DateTimeRange dateRange;
   final Function(DateTimeRange) onDateRangeChanged;
 
   const CustomerStatsChart({
     Key? key,
+    this.stats,
     required this.dateRange,
     required this.onDateRangeChanged,
   }) : super(key: key);
@@ -16,26 +19,25 @@ class CustomerStatsChart extends StatelessWidget {
   Widget build(BuildContext context) {
     final dateStr = '${DateFormat('MM/dd/yyyy').format(dateRange.start)} - ${DateFormat('MM/dd/yyyy').format(dateRange.end)}';
 
-    // Mock hourly customer checkins for display
-    final data = [
-      {'hour': '06:00', 'count': 2},
-      {'hour': '07:00', 'count': 4},
-      {'hour': '08:00', 'count': 12},
-      {'hour': '09:00', 'count': 8},
-      {'hour': '10:00', 'count': 5},
-      {'hour': '11:00', 'count': 9},
-      {'hour': '12:00', 'count': 22},
-      {'hour': '13:00', 'count': 18},
-      {'hour': '14:00', 'count': 10},
-      {'hour': '15:00', 'count': 6},
-      {'hour': '16:00', 'count': 8},
-      {'hour': '17:00', 'count': 14},
-      {'hour': '18:00', 'count': 25},
-      {'hour': '19:00', 'count': 30},
-      {'hour': '20:00', 'count': 20},
-      {'hour': '21:00', 'count': 12},
-      {'hour': '22:00', 'count': 5},
-      {'hour': '23:00', 'count': 2},
+    // Map database customer stats
+    final List<Map<String, dynamic>> chartData = (stats ?? []).map<Map<String, dynamic>>((s) {
+      return {
+        'hour': s['hour']?.toString() ?? '',
+        'count': s['count']?.toInt() ?? 0,
+      };
+    }).toList();
+
+    // Fallback/Default placeholder map if database has no records for selected dates
+    final displayData = chartData.isNotEmpty ? chartData : [
+      {'hour': '06:00', 'count': 0},
+      {'hour': '08:00', 'count': 0},
+      {'hour': '10:00', 'count': 0},
+      {'hour': '12:00', 'count': 0},
+      {'hour': '14:00', 'count': 0},
+      {'hour': '16:00', 'count': 0},
+      {'hour': '18:00', 'count': 0},
+      {'hour': '20:00', 'count': 0},
+      {'hour': '22:00', 'count': 0},
     ];
 
     return Card(
@@ -64,11 +66,11 @@ class CustomerStatsChart extends StatelessWidget {
                 ),
                 InkWell(
                   onTap: () async {
-                    final picked = await showDateRangePicker(
+                    final picked = await showDialog<DateTimeRange>(
                       context: context,
-                      firstDate: DateTime(2025),
-                      lastDate: DateTime(2030),
-                      initialDateRange: dateRange,
+                      builder: (context) => CustomDateRangePickerDialog(
+                        initialDateRange: dateRange,
+                      ),
                     );
                     if (picked != null) {
                       onDateRangeChanged(picked);
@@ -110,7 +112,7 @@ class CustomerStatsChart extends StatelessWidget {
               height: 200,
               child: CustomPaint(
                 size: Size.infinite,
-                painter: CustomerBarChartPainter(data),
+                painter: CustomerBarChartPainter(displayData),
               ),
             ),
           ],

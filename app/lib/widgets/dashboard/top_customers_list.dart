@@ -2,14 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class TopCustomersList extends StatelessWidget {
-  const TopCustomersList({Key? key}) : super(key: key);
+  final List<dynamic>? customers;
+
+  const TopCustomersList({Key? key, this.customers}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    // Top customers list mock data to match FoodKing screenshots
-    final customers = [
-      _CustomerInfo('Will Smith', 10),
-      _CustomerInfo('Walking Customer', 2),
+    final List<_CustomerInfo> customerList = (customers ?? []).map<_CustomerInfo>((c) {
+      return _CustomerInfo(
+        c['name']?.toString() ?? 'Walking Customer',
+        c['orders_count']?.toInt() ?? 0,
+      );
+    }).toList();
+
+    // Fallback default list if no customers found
+    final displayCustomers = customerList.isNotEmpty ? customerList : [
+      _CustomerInfo('Walking Customer', 0),
     ];
 
     return Card(
@@ -34,7 +42,7 @@ class TopCustomersList extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             Row(
-              children: customers.map((c) {
+              children: displayCustomers.map((c) {
                 return Expanded(
                   child: Container(
                     margin: const EdgeInsets.only(right: 8, left: 8),

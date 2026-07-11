@@ -54,6 +54,7 @@ class POSController extends ChangeNotifier {
   Map<int, String> tableStatuses = {};
   Map<int, String?> tableStewards = {};
   Map<int, int> tableActiveOrderIds = {};
+  List<dynamic> drawerLogs = [];
 
   void setVoiceLanguage(String lang) {
     if (voiceLanguage != lang) {
@@ -249,6 +250,7 @@ class POSController extends ChangeNotifier {
         offers = await _api.getOffers();
         happyHours = await _api.getHappyHours();
         await _fetchActiveOrders();
+        await fetchDrawerLogs();
       } else {
         // Fallback: If completely offline in LAN-first mode,
         // we can fetch last cached settings from SharedPreferences
@@ -272,6 +274,7 @@ class POSController extends ChangeNotifier {
         case 'table_status_changed':
         case 'happy_hour_updated':
         case 'database_synchronized':
+        case 'shift_updated':
           reloadEnvironment();
           break;
         case 'stock_updated':
@@ -804,6 +807,15 @@ class POSController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> fetchDrawerLogs() async {
+    if (activeShift != null) {
+      try {
+        drawerLogs = await _api.getDrawerLogs(activeShift!.id);
+        notifyListeners();
+      } catch (_) {}
+    }
+  }
+
   Future<double> getShiftCashSales() async {
     if (activeShift == null) return 0.0;
     try {
@@ -849,6 +861,97 @@ class POSController extends ChangeNotifier {
     } catch (_) {}
     
     return balance;
+  }
+
+  Future<Map<String, double>> getShiftStatistics() async {
+    if (activeShift == null) {
+      return {
+        'cash_sales': 0.0,
+        'card_sales': 0.0,
+        'qr_sales': 0.0,
+        'credit_sales': 0.0,
+        'credit_settlements': 0.0,
+        'other_cash_in': 0.0,
+        'supplier_payments': 0.0,
+        'other_cash_out': 0.0,
+        'expected_cash': 0.0,
+        'total_sales': 0.0,
+      };
+    }
+
+    try {
+      final ords = await _api.getOrders();
+      final shiftOrders = ords.where((o) => o.shiftId == activeShift!.id && o.paymentStatus == 'paid');
+
+      double cashSales = 0.0;
+      double cardSales = 0.0;
+      double qrSales = 0.0;
+      double creditSales = 0.0;
+
+      for (var o in shiftOrders) {
+        if (o.paymentMethod == 'cash') {
+          cashSales += o.total;
+        } else if (o.paymentMethod == 'card') {
+          cardSales += o.total;
+        } else if (o.paymentMethod == 'qr' || o.paymentMethod == 'lankaqr') {
+          qrSales += o.total;
+        } else if (o.paymentMethod == 'credit') {
+          creditSales += o.total;
+        }
+      }
+
+      double creditSettlements = 0.0;
+      double otherCashIn = 0.0;
+      double supplierPayments = 0.0;
+      double otherCashOut = 0.0;
+
+      final logs = await _api.getDrawerLogs(activeShift!.id);
+      for (var log in logs) {
+        final double amt = double.tryParse(log['amount']?.toString() ?? '0') ?? 0.0;
+        if (log['type'] == 'cash_in') {
+          if (log['reason']?.toString().contains('Credit Settlement:') ?? false) {
+            creditSettlements += amt;
+          } else {
+            otherCashIn += amt;
+          }
+        } else if (log['type'] == 'cash_out') {
+          if (log['reason']?.toString().contains('Supplier Payment:') ?? false) {
+            supplierPayments += amt;
+          } else {
+            otherCashOut += amt;
+          }
+        }
+      }
+
+      final expectedCash = activeShift!.openingBalance + cashSales + creditSettlements + otherCashIn - supplierPayments - otherCashOut;
+      final totalSales = cashSales + cardSales + qrSales + creditSales;
+
+      return {
+        'cash_sales': cashSales,
+        'card_sales': cardSales,
+        'qr_sales': qrSales,
+        'credit_sales': creditSales,
+        'credit_settlements': creditSettlements,
+        'other_cash_in': otherCashIn,
+        'supplier_payments': supplierPayments,
+        'other_cash_out': otherCashOut,
+        'expected_cash': expectedCash,
+        'total_sales': totalSales,
+      };
+    } catch (_) {
+      return {
+        'cash_sales': 0.0,
+        'card_sales': 0.0,
+        'qr_sales': 0.0,
+        'credit_sales': 0.0,
+        'credit_settlements': 0.0,
+        'other_cash_in': 0.0,
+        'supplier_payments': 0.0,
+        'other_cash_out': 0.0,
+        'expected_cash': activeShift!.openingBalance,
+        'total_sales': 0.0,
+      };
+    }
   }
 
   // 2. Place order (Dine-in, Takeaway, Delivery)

@@ -9,10 +9,10 @@ class OverviewCards extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final double sales = summary?['total_sales']?.toDouble() ?? 230.87;
-    final int orders = summary?['total_orders']?.toInt() ?? 7;
-    final int customers = summary?['total_customers']?.toInt() ?? 2;
-    final int menuItems = summary?['total_menu_items']?.toInt() ?? 55;
+      final double sales = summary?['total_sales']?.toDouble() ?? 0.00;
+    final int orders = summary?['total_orders']?.toInt() ?? 0;
+    final int customers = summary?['total_customers']?.toInt() ?? 0;
+    final int menuItems = summary?['total_menu_items']?.toInt() ?? 0;
 
     final size = MediaQuery.of(context).size;
     final isDesktop = size.width > 950;
@@ -28,8 +28,8 @@ class OverviewCards extends StatelessWidget {
         _buildGradientCard(
           context: context,
           label: 'Total Sales',
-          value: '\$${sales.toStringAsFixed(2)}',
-          icon: Icons.attach_money,
+          value: 'LKR ${sales.toStringAsFixed(2)}',
+          icon: Icons.payments,
           colors: [const Color(0xFFE91E63), const Color(0xFFFF6090)], // Pink/Red
         ),
         _buildGradientCard(

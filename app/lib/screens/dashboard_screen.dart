@@ -114,14 +114,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           Expanded(
                             flex: 3,
                             child: CustomerStatsChart(
+                              stats: controller.reportData?['customer_stats'],
                               dateRange: controller.customerDateRange,
                               onDateRangeChanged: controller.setCustomerDateRange,
                             ),
                           ),
                           const SizedBox(width: 16),
-                          const Expanded(
+                          Expanded(
                             flex: 2,
-                            child: TopCustomersList(),
+                            child: TopCustomersList(
+                              customers: controller.reportData?['top_customers'],
+                            ),
                           ),
                         ],
                       )
@@ -129,11 +132,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       Column(
                         children: [
                           CustomerStatsChart(
+                            stats: controller.reportData?['customer_stats'],
                             dateRange: controller.customerDateRange,
                             onDateRangeChanged: controller.setCustomerDateRange,
                           ),
                           const SizedBox(height: 16),
-                          const TopCustomersList(),
+                          TopCustomersList(
+                            customers: controller.reportData?['top_customers'],
+                          ),
                         ],
                       ),
                     const SizedBox(height: 24),

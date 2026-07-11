@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 import '../pos_controller.dart';
 import '../controllers/dashboard_controller.dart';
 import '../controllers/app_settings_controller.dart';
@@ -201,7 +202,7 @@ class _MainLayoutState extends State<MainLayout> {
       ),
     );
 
-    final expectedBalance = await posController.getExpectedDrawerBalance();
+    final stats = await posController.getShiftStatistics();
     
     if (mounted) {
       Navigator.pop(context); // Dismiss loading dialog
@@ -212,114 +213,213 @@ class _MainLayoutState extends State<MainLayout> {
 
     if (!mounted) return;
 
+    final String currentUser = APIService.instance.currentUser?.name ?? 'System Administrator';
+    final String logoutTime = DateFormat('yyyy-MM-dd hh:mm a').format(DateTime.now());
+
     showDialog(
       context: context,
       barrierDismissible: true,
       builder: (dialogCtx) {
-        return AlertDialog(
+        return Dialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Text(
-            'Close Shift & Logout'.tr(dialogCtx),
-            style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 18),
-          ),
-          content: Form(
-            key: formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  'Please enter the actual cash counted in the drawer to close your shift before logging out.'.tr(dialogCtx),
-                  style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF64748B)),
-                ),
-                const SizedBox(height: 20),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          child: Container(
+            width: 500,
+            padding: const EdgeInsets.all(24),
+            child: Form(
+              key: formKey,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text('Opening Cash:'.tr(dialogCtx), style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w500)),
-                    Text('LKR ${posController.activeShift!.openingBalance.toStringAsFixed(2)}', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold)),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('Expected Cash:'.tr(dialogCtx), style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w500)),
-                    Text('LKR ${expectedBalance.toStringAsFixed(2)}', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.primary)),
-                  ],
-                ),
-                const Divider(height: 24, color: Color(0xFFE2E8F0)),
-                TextFormField(
-                  controller: actualCashController,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: InputDecoration(
-                    labelText: 'Actual Cash Counted (LKR) *'.tr(dialogCtx),
-                    hintText: '0.00',
-                  ),
-                  style: GoogleFonts.inter(fontSize: 13),
-                  validator: (val) {
-                    if (val == null || val.trim().isEmpty) {
-                      return 'Please enter actual cash counted';
-                    }
-                    if (double.tryParse(val.trim()) == null) {
-                      return 'Please enter a valid amount';
-                    }
-                    return null;
-                  },
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogCtx),
-              child: Text('Cancel'.tr(dialogCtx), style: GoogleFonts.inter(color: const Color(0xFF64748B))),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                if (!formKey.currentState!.validate()) return;
-                final actual = double.tryParse(actualCashController.text.trim()) ?? 0.0;
-                
-                try {
-                  // Show loading
-                  showDialog(
-                    context: dialogCtx,
-                    barrierDismissible: false,
-                    builder: (context) => Center(child: CircularProgressIndicator(color: AppTheme.primary)),
-                  );
+                    // Header
+                    Text(
+                      'Shift Close Reconciliation Report'.tr(dialogCtx),
+                      style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Count drawer cash and compare with expected balances. Closing shift prints a final Z-Report.'.tr(dialogCtx),
+                      style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+                    ),
+                    const Divider(height: 24, color: Color(0xFFE2E8F0)),
 
-                  // Close shift
-                  await posController.closeActiveShift(expectedBalance, actual);
-                  
-                  // Logout
-                  await APIService.instance.logout();
-                  
-                  if (mounted) {
-                    // Navigate to Login Screen
-                    Navigator.of(dialogCtx).pop(); // Dismiss loading
-                    Navigator.of(dialogCtx).pop(); // Dismiss dialog
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(builder: (context) => const LoginScreen()),
-                    );
-                  }
-                } catch (e) {
-                  Navigator.pop(dialogCtx); // Dismiss loading
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Failed to close shift: $e'), backgroundColor: Colors.red),
-                  );
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.danger,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    // Session Info
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Session User:'.tr(dialogCtx), style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF475569))),
+                        Text(currentUser, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primary)),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Logout Time:'.tr(dialogCtx), style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF475569))),
+                        Text(logoutTime, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
+                      ],
+                    ),
+                    const Divider(height: 24, color: Color(0xFFE2E8F0)),
+
+                    // Cash Drawer Reconciliation
+                    Text('CASH DRAWER RECONCILIATION', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: const Color(0xFF64748B), letterSpacing: 0.5)),
+                    const SizedBox(height: 12),
+                    _buildReconcileRow('Starting Cash Balance', stats['cash_sales'] == 0 ? posController.activeShift!.openingBalance : (stats['expected_cash']! - stats['cash_sales']! - stats['credit_settlements']! - stats['other_cash_in']! + stats['supplier_payments']! + stats['other_cash_out']!)),
+                    _buildReconcileRow('Cash Sales (+)', stats['cash_sales']!, color: const Color(0xFF16A34A)),
+                    _buildReconcileRow('Credit Settlements (+)', stats['credit_settlements']!, color: const Color(0xFF16A34A)),
+                    _buildReconcileRow('Other Cash In (+)', stats['other_cash_in']!, color: const Color(0xFF16A34A)),
+                    _buildReconcileRow('Supplier Payments (-)', -stats['supplier_payments']!, color: const Color(0xFFDC2626)),
+                    _buildReconcileRow('Other Cash Out (-)', -stats['other_cash_out']!, color: const Color(0xFFDC2626)),
+                    const Divider(height: 16, color: Color(0xFFF1F5F9)),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('EXPECTED CASH IN DRAWER', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
+                        Text('LKR ${stats['expected_cash']!.toStringAsFixed(2)}', style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
+                      ],
+                    ),
+                    const Divider(height: 24, color: Color(0xFFE2E8F0)),
+
+                    // Non-Cash Sales Summary
+                    Text('NON-CASH SALES SUMMARY', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: const Color(0xFF64748B), letterSpacing: 0.5)),
+                    const SizedBox(height: 12),
+                    _buildReconcileRow('Card Payments', stats['card_sales']!),
+                    _buildReconcileRow('LankaQR Payments', stats['qr_sales']!),
+                    _buildReconcileRow('Credit Sales (Outstanding Added)', stats['credit_sales']!),
+                    const Divider(height: 16, color: Color(0xFFF1F5F9)),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('TOTAL SHIFT SALES', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primary)),
+                        Text('LKR ${stats['total_sales']!.toStringAsFixed(2)}', style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.primary)),
+                      ],
+                    ),
+                    const Divider(height: 24, color: Color(0xFFE2E8F0)),
+
+                    // Actual counted cash input
+                    Text('ACTUAL DRAWER CASH COUNT', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: const Color(0xFF64748B), letterSpacing: 0.5)),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: actualCashController,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: InputDecoration(
+                        labelText: 'Actual Cash Counted (LKR) *'.tr(dialogCtx),
+                        hintText: '0.00',
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      ),
+                      style: GoogleFonts.inter(fontSize: 13),
+                      validator: (val) {
+                        if (val == null || val.trim().isEmpty) {
+                          return 'Please enter actual cash counted';
+                        }
+                        if (double.tryParse(val.trim()) == null) {
+                          return 'Please enter a valid amount';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Actions
+                    ElevatedButton.icon(
+                      onPressed: () async {
+                        if (!formKey.currentState!.validate()) return;
+                        final actual = double.tryParse(actualCashController.text.trim()) ?? 0.0;
+                        
+                        try {
+                          showDialog(
+                            context: dialogCtx,
+                            barrierDismissible: false,
+                            builder: (context) => Center(child: CircularProgressIndicator(color: AppTheme.primary)),
+                          );
+
+                          await posController.closeActiveShift(stats['expected_cash']!, actual);
+                          await APIService.instance.logout();
+                          
+                          if (mounted) {
+                            Navigator.of(dialogCtx).pop(); // Dismiss loading
+                            Navigator.of(dialogCtx).pop(); // Dismiss dialog
+                            Navigator.pushReplacement(
+                              context,
+                              MaterialPageRoute(builder: (context) => const LoginScreen()),
+                            );
+                          }
+                        } catch (e) {
+                          Navigator.pop(dialogCtx); // Dismiss loading
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Failed to close shift: $e'), backgroundColor: Colors.red),
+                          );
+                        }
+                      },
+                      icon: const Icon(Icons.lock_outline, size: 16, color: Colors.white),
+                      label: Text('Close Shift & Print Z-Report'.tr(dialogCtx), style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFEF4444),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(dialogCtx),
+                          child: Text('Cancel'.tr(dialogCtx), style: GoogleFonts.inter(color: const Color(0xFF64748B), fontWeight: FontWeight.bold)),
+                        ),
+                        TextButton.icon(
+                          onPressed: () async {
+                            try {
+                              await APIService.instance.logout();
+                              if (mounted) {
+                                Navigator.pop(dialogCtx);
+                                Navigator.pushReplacement(
+                                  context,
+                                  MaterialPageRoute(builder: (context) => const LoginScreen()),
+                                );
+                              }
+                            } catch (e) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Logout failed: $e'), backgroundColor: Colors.red),
+                              );
+                            }
+                          },
+                          icon: Icon(Icons.logout_outlined, size: 14, color: AppTheme.primary),
+                          label: Text('Logout (Keep Shift Open)'.tr(dialogCtx), style: GoogleFonts.inter(color: AppTheme.primary, fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-              child: Text('Close Shift & Logout'.tr(dialogCtx), style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
             ),
-          ],
+          ),
         );
       },
+    );
+  }
+
+  Widget _buildReconcileRow(String label, double val, {Color? color}) {
+    final prefix = val > 0 ? '+' : '';
+    final signStr = val == 0 ? '' : prefix;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B))),
+          Text(
+            'LKR ${val.toStringAsFixed(2)}',
+            style: GoogleFonts.inter(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: color ?? const Color(0xFF1E293B),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
