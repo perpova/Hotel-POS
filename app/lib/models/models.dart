@@ -554,6 +554,8 @@ class OrderModel {
   final String barcode;
   final String createdAt;
   final String? updatedAt;
+  final double receivedAmount;
+  final double changeAmount;
   final List<OrderItemModel> items;
 
   OrderModel({
@@ -578,6 +580,8 @@ class OrderModel {
     required this.barcode,
     required this.createdAt,
     this.updatedAt,
+    this.receivedAmount = 0.00,
+    this.changeAmount = 0.00,
     required this.items,
   });
 
@@ -607,6 +611,8 @@ class OrderModel {
       barcode: json['barcode'] ?? json['order_number'],
       createdAt: json['created_at'],
       updatedAt: json['updated_at'] ?? json['created_at'],
+      receivedAmount: _toDouble(json['received_amount']),
+      changeAmount: _toDouble(json['change_amount']),
       items: mappedItems,
     );
   }
@@ -633,6 +639,8 @@ class OrderModel {
     'barcode': barcode,
     'created_at': createdAt,
     'updated_at': updatedAt,
+    'received_amount': receivedAmount,
+    'change_amount': changeAmount,
     'items': items.map((i) => i.toJson()).toList(),
   };
 }
@@ -841,4 +849,141 @@ class IngredientModel {
         'stock_qty': stockQty,
         'unit': unit,
       };
+}
+
+class SupplierModel {
+  final int id;
+  final String name;
+  final double outstandingBalance;
+  final String deliveryCycle;
+
+  SupplierModel({
+    required this.id,
+    required this.name,
+    required this.outstandingBalance,
+    required this.deliveryCycle,
+  });
+
+  factory SupplierModel.fromJson(Map<String, dynamic> json) => SupplierModel(
+        id: json['id'],
+        name: json['name'] ?? '',
+        outstandingBalance: toDouble(json['outstanding_balance']),
+        deliveryCycle: json['delivery_cycle'] ?? 'Weekly',
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'outstanding_balance': outstandingBalance,
+        'delivery_cycle': deliveryCycle,
+      };
+}
+
+class SupplierDeliveryModel {
+  final int id;
+  final int supplierId;
+  final String itemName;
+  final double quantity;
+  final String unit;
+  final double totalAmount;
+  final String deliveryDate;
+
+  SupplierDeliveryModel({
+    required this.id,
+    required this.supplierId,
+    required this.itemName,
+    required this.quantity,
+    required this.unit,
+    required this.totalAmount,
+    required this.deliveryDate,
+  });
+
+  factory SupplierDeliveryModel.fromJson(Map<String, dynamic> json) => SupplierDeliveryModel(
+        id: json['id'],
+        supplierId: json['supplier_id'],
+        itemName: json['item_name'] ?? '',
+        quantity: toDouble(json['quantity']),
+        unit: json['unit'] ?? 'kg',
+        totalAmount: toDouble(json['total_amount']),
+        deliveryDate: json['delivery_date'] ?? '',
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'supplier_id': supplierId,
+        'item_name': itemName,
+        'quantity': quantity,
+        'unit': unit,
+        'total_amount': totalAmount,
+        'delivery_date': deliveryDate,
+      };
+}
+
+class SupplierPaymentModel {
+  final int id;
+  final int supplierId;
+  final double amount;
+  final String paymentSource;
+  final String? remarks;
+  final String paymentDate;
+
+  SupplierPaymentModel({
+    required this.id,
+    required this.supplierId,
+    required this.amount,
+    required this.paymentSource,
+    this.remarks,
+    required this.paymentDate,
+  });
+
+  factory SupplierPaymentModel.fromJson(Map<String, dynamic> json) => SupplierPaymentModel(
+        id: json['id'],
+        supplierId: json['supplier_id'],
+        amount: toDouble(json['amount']),
+        paymentSource: json['payment_source'] ?? 'drawer',
+        remarks: json['remarks'],
+        paymentDate: json['payment_date'] ?? '',
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'supplier_id': supplierId,
+        'amount': amount,
+        'payment_source': paymentSource,
+        'remarks': remarks,
+        'payment_date': paymentDate,
+      };
+}
+
+class SupplierLedgerEntryModel {
+  final int id;
+  final String description;
+  final double quantity;
+  final String unit;
+  final double debit;  // Deliveries increase outstanding
+  final double credit; // Payments decrease outstanding
+  final String date;
+  final String type; // 'delivery' or 'payment'
+
+  SupplierLedgerEntryModel({
+    required this.id,
+    required this.description,
+    required this.quantity,
+    required this.unit,
+    required this.debit,
+    required this.credit,
+    required this.date,
+    required this.type,
+  });
+
+  factory SupplierLedgerEntryModel.fromJson(Map<String, dynamic> json) => SupplierLedgerEntryModel(
+        id: json['id'],
+        description: json['description'] ?? '',
+        quantity: toDouble(json['quantity']),
+        unit: json['unit'] ?? '',
+        debit: toDouble(json['debit']),
+        credit: toDouble(json['credit']),
+        date: json['date'] ?? '',
+        type: json['type'] ?? 'delivery',
+      );
 }

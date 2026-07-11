@@ -201,6 +201,10 @@ async function initializeDatabase() {
                 await dbPool.query("ALTER TABLE users MODIFY COLUMN role ENUM('admin', 'cashier', 'owner', 'kitchen', 'delivery', 'waiter') NOT NULL");
                 console.log("Migration: Expanded role ENUM in users table to include waiter.");
             } catch (_) {}
+            try {
+                await dbPool.query("ALTER TABLE audit_logs MODIFY COLUMN action_type ENUM('login', 'logout', 'delete_bill', 'change_price', 'edit_stock', 'reprint_bill', 'modify_bill', 'place_order', 'pay_order', 'cash_in', 'cash_out') NOT NULL");
+                console.log("Migration: Expanded action_type ENUM in audit_logs table.");
+            } catch (_) {}
 
             // Migration: Add email to customers table
             try {
@@ -335,6 +339,85 @@ async function initializeDatabase() {
             } catch (err) {
                 console.error("Migration: Creating roles tables failed:", err.message);
             }
+
+            // Migration: Create suppliers table
+            try {
+                await dbPool.query(`
+                    CREATE TABLE IF NOT EXISTS suppliers (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        name VARCHAR(255) NOT NULL,
+                        outstanding_balance DECIMAL(10,2) DEFAULT 0.00,
+                        delivery_cycle VARCHAR(255) DEFAULT 'Weekly',
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+                `);
+                
+                // Seed if empty
+                const [rows] = await dbPool.query("SELECT COUNT(*) as count FROM suppliers");
+                if (rows[0].count === 0) {
+                    const defaultSuppliers = [
+                        ['Aliya Flour Suppliers', 45000.00, 'Weekly (Monday)'],
+                        ['Coca-Cola Beverages', 18500.00, 'Weekly (Thursday)'],
+                        ['Keells Meat Providers', 120000.00, 'Daily'],
+                        ['Prima Flour Co.', 0.00, 'Bi-weekly']
+                    ];
+                    for (const s of defaultSuppliers) {
+                        await dbPool.query('INSERT INTO suppliers (name, outstanding_balance, delivery_cycle) VALUES (?, ?, ?)', s);
+                    }
+                }
+                console.log("Migration: Created and seeded suppliers table.");
+            } catch (err) {
+                console.error("Migration: Creating suppliers table failed:", err.message);
+            }
+
+            // Migration: Create supplier_deliveries table
+            try {
+                await dbPool.query(`
+                    CREATE TABLE IF NOT EXISTS supplier_deliveries (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        supplier_id INT NOT NULL,
+                        item_name VARCHAR(255) NOT NULL,
+                        quantity DECIMAL(10,2) NOT NULL,
+                        unit VARCHAR(50) DEFAULT 'kg',
+                        total_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+                        delivery_date DATE NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE CASCADE
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+                `);
+                console.log("Migration: Created supplier_deliveries table.");
+            } catch (err) {
+                console.error("Migration: Creating supplier_deliveries table failed:", err.message);
+            }
+
+            // Migration: Create supplier_payments table
+            try {
+                await dbPool.query(`
+                    CREATE TABLE IF NOT EXISTS supplier_payments (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        supplier_id INT NOT NULL,
+                        amount DECIMAL(10,2) NOT NULL,
+                        payment_source ENUM('drawer', 'bank') NOT NULL DEFAULT 'drawer',
+                        remarks VARCHAR(255) NULL,
+                        payment_date DATE NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE CASCADE
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+                `);
+                console.log("Migration: Created supplier_payments table.");
+            } catch (err) {
+                console.error("Migration: Creating supplier_payments table failed:", err.message);
+            }
+
+            // Migration: Add received_amount and change_amount to orders table
+            try {
+                await dbPool.query("ALTER TABLE orders ADD COLUMN received_amount DECIMAL(10,2) DEFAULT 0.00");
+                console.log("Migration: Added received_amount to orders table.");
+            } catch (_) {}
+            try {
+                await dbPool.query("ALTER TABLE orders ADD COLUMN change_amount DECIMAL(10,2) DEFAULT 0.00");
+                console.log("Migration: Added change_amount to orders table.");
+            } catch (_) {}
         }
     } catch (error) {
         console.error('Database initialization failed:', error.message);

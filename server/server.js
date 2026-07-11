@@ -947,6 +947,11 @@ app.post('/api/shifts/drawer-log', authenticateToken, async (req, res) => {
             'INSERT INTO cash_drawer_logs (shift_id, type, amount, reason) VALUES (?, ?, ?, ?)',
             [shift_id, type, amount, reason]
         );
+        
+        const actionType = type === 'cash_in' ? 'cash_in' : 'cash_out';
+        const label = type === 'cash_in' ? 'Cash In' : 'Cash Out';
+        await logAudit(actionType, 'cash_drawer_logs', shift_id, `Drawer ${label} adjustment: LKR ${amount} - Reason: ${reason}`, req.user.id);
+        
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -1284,6 +1289,206 @@ app.delete('/api/customers/:id', authenticateToken, async (req, res) => {
 });
 
 // ----------------------------------------------------
+// SUPPLIER CRUD & PAYMENT ENDPOINTS
+// ----------------------------------------------------
+
+app.get('/api/suppliers', authenticateToken, async (req, res) => {
+    try {
+        const suppliers = await db.query('SELECT * FROM suppliers ORDER BY created_at DESC');
+        res.json(suppliers);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/suppliers', authenticateToken, async (req, res) => {
+    const { name, outstanding_balance, delivery_cycle } = req.body;
+    if (!name) {
+        return res.status(400).json({ error: 'Supplier Name is required' });
+    }
+    try {
+        const result = await db.query(
+            'INSERT INTO suppliers (name, outstanding_balance, delivery_cycle) VALUES (?, ?, ?)',
+            [name, outstanding_balance || 0.00, delivery_cycle || 'Weekly']
+        );
+        const newId = result.insertId;
+        const [supplier] = await db.query('SELECT * FROM suppliers WHERE id = ?', [newId]);
+        
+        await logAudit('modify_bill', 'suppliers', newId, `Supplier ${name} added.`, req.user.id);
+        broadcast({ type: 'supplier_created', data: supplier });
+        res.json(supplier);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.put('/api/suppliers/:id', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    const { name, outstanding_balance, delivery_cycle } = req.body;
+    try {
+        let updateFields = [];
+        let params = [];
+        
+        if (name !== undefined) { updateFields.push('name = ?'); params.push(name); }
+        if (outstanding_balance !== undefined) { updateFields.push('outstanding_balance = ?'); params.push(outstanding_balance); }
+        if (delivery_cycle !== undefined) { updateFields.push('delivery_cycle = ?'); params.push(delivery_cycle); }
+
+        if (updateFields.length === 0) {
+            return res.status(400).json({ error: 'No fields provided to update' });
+        }
+
+        params.push(id);
+        await db.query(`UPDATE suppliers SET ${updateFields.join(', ')} WHERE id = ?`, params);
+        const [supplier] = await db.query('SELECT * FROM suppliers WHERE id = ?', [id]);
+        
+        await logAudit('modify_bill', 'suppliers', id, `Supplier ${supplier.name} updated.`, req.user.id);
+        broadcast({ type: 'supplier_updated', data: supplier });
+        res.json(supplier);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.delete('/api/suppliers/:id', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin' && req.user.role !== 'owner') {
+        return res.status(403).json({ error: 'Unauthorized' });
+    }
+    const { id } = req.params;
+    try {
+        const [supplier] = await db.query('SELECT name FROM suppliers WHERE id = ?', [id]);
+        if (!supplier) return res.status(404).json({ error: 'Supplier not found' });
+        await db.query('DELETE FROM suppliers WHERE id = ?', [id]);
+        await logAudit('modify_bill', 'suppliers', id, `Supplier ${supplier.name} deleted.`, req.user.id);
+        broadcast({ type: 'supplier_deleted', data: { id } });
+        res.json({ success: true, message: 'Supplier deleted successfully' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/suppliers/:id/pay', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    const { amount, payment_source, remarks } = req.body;
+    try {
+        const suppliers = await db.query('SELECT * FROM suppliers WHERE id = ?', [id]);
+        if (suppliers.length === 0) return res.status(404).json({ error: 'Supplier not found' });
+        const supplier = suppliers[0];
+
+        await db.query(
+            'UPDATE suppliers SET outstanding_balance = outstanding_balance - ? WHERE id = ?',
+            [amount, id]
+        );
+
+        // Record to supplier_payments
+        await db.query(
+            'INSERT INTO supplier_payments (supplier_id, amount, payment_source, remarks, payment_date) VALUES (?, ?, ?, ?, CURRENT_DATE())',
+            [id, amount, payment_source, remarks || null]
+        );
+
+        if (payment_source === 'drawer') {
+            const openShifts = await db.query('SELECT * FROM shifts WHERE status = "open" LIMIT 1');
+            if (openShifts.length === 0) {
+                return res.status(400).json({ error: 'No active shift found. Please open a shift first.' });
+            }
+            const shiftId = openShifts[0].id;
+            await db.query(
+                'INSERT INTO cash_drawer_logs (shift_id, type, amount, reason) VALUES (?, "cash_out", ?, ?)',
+                [shiftId, amount, `Supplier Payment: ${supplier.name} (${remarks || 'No remarks'})`]
+            );
+        }
+
+        await logAudit('modify_bill', 'suppliers', id, `Paid LKR ${amount} to Supplier ${supplier.name} via ${payment_source}`, req.user.id);
+        
+        const [updatedSupplier] = await db.query('SELECT * FROM suppliers WHERE id = ?', [id]);
+        broadcast({ type: 'supplier_updated', data: updatedSupplier });
+        
+        res.json({ success: true, supplier: updatedSupplier });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.get('/api/suppliers/:id/deliveries', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    try {
+        const deliveries = await db.query('SELECT * FROM supplier_deliveries WHERE supplier_id = ? ORDER BY delivery_date DESC, id DESC', [id]);
+        res.json(deliveries);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/suppliers/:id/deliveries', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    const { item_name, quantity, unit, total_amount, delivery_date } = req.body;
+    if (!item_name || !quantity || !total_amount || !delivery_date) {
+        return res.status(400).json({ error: 'Item Name, Quantity, Total Amount and Delivery Date are required' });
+    }
+    try {
+        const suppliers = await db.query('SELECT * FROM suppliers WHERE id = ?', [id]);
+        if (suppliers.length === 0) return res.status(404).json({ error: 'Supplier not found' });
+        const supplier = suppliers[0];
+
+        const result = await db.query(
+            'INSERT INTO supplier_deliveries (supplier_id, item_name, quantity, unit, total_amount, delivery_date) VALUES (?, ?, ?, ?, ?, ?)',
+            [id, item_name, quantity, unit || 'kg', total_amount, delivery_date]
+        );
+
+        await db.query(
+            'UPDATE suppliers SET outstanding_balance = outstanding_balance + ? WHERE id = ?',
+            [total_amount, id]
+        );
+
+        await logAudit('modify_bill', 'suppliers', id, `Logged delivery: ${item_name} (${quantity} ${unit || 'kg'}) worth LKR ${total_amount} from Supplier ${supplier.name}`, req.user.id);
+        
+        const [updatedSupplier] = await db.query('SELECT * FROM suppliers WHERE id = ?', [id]);
+        broadcast({ type: 'supplier_updated', data: updatedSupplier });
+        
+        res.json({ success: true, deliveryId: result.insertId, supplier: updatedSupplier });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.get('/api/suppliers/:id/payments', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    try {
+        const payments = await db.query('SELECT * FROM supplier_payments WHERE supplier_id = ? ORDER BY payment_date DESC, id DESC', [id]);
+        res.json(payments);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.get('/api/suppliers/:id/ledger', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    try {
+        const deliveries = await db.query(`
+            SELECT id, item_name AS description, quantity, unit, total_amount AS debit, 0.00 AS credit, delivery_date AS date, 'delivery' AS type, created_at
+            FROM supplier_deliveries
+            WHERE supplier_id = ?
+        `, [id]);
+
+        const payments = await db.query(`
+            SELECT id, CONCAT('Payment: ', payment_source, IF(remarks IS NULL OR remarks = '', '', CONCAT(' - ', remarks))) AS description, 0.00 AS quantity, '' AS unit, 0.00 AS debit, amount AS credit, payment_date AS date, 'payment' AS type, created_at
+            FROM supplier_payments
+            WHERE supplier_id = ?
+        `, [id]);
+
+        const combined = [...deliveries, ...payments];
+        combined.sort((a, b) => {
+            const dateCompare = new Date(a.date).getTime() - new Date(b.date).getTime();
+            if (dateCompare !== 0) return dateCompare;
+            return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        });
+
+        res.json(combined);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ----------------------------------------------------
 // USER & CUSTOMER ADDRESS ENDPOINTS
 // ----------------------------------------------------
 
@@ -1386,7 +1591,7 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
     const {
         table_id, order_type, delivery_platform, customer_id, steward_name,
         payment_method, subtotal, discount, total, items, status, payment_status,
-        kot_printed, ack_printed, card_tx_reference
+        kot_printed, ack_printed, card_tx_reference, received_amount, change_amount
     } = req.body;
     
     // Obtain active shift
@@ -1409,7 +1614,7 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
         const day = String(localDate.getDate()).padStart(2, '0');
         const dateStr = `${year}${month}${day}`;
         const queryDate = `${year}-${month}-${day}`;
-
+ 
         const [countResult] = await conn.query('SELECT COUNT(*) as count FROM orders WHERE DATE(created_at) = ?', [queryDate]);
         const nextNum = (countResult[0].count + 1).toString().padStart(4, '0');
         const orderNumber = `ORD-${dateStr}-${nextNum}`;
@@ -1420,13 +1625,13 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
             INSERT INTO orders (
                 order_number, table_id, order_type, delivery_platform, customer_id, steward_name,
                 status, payment_status, payment_method, subtotal, discount, total, cashier_id,
-                shift_id, kot_printed, ack_printed, card_tx_reference, barcode
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                shift_id, kot_printed, ack_printed, card_tx_reference, barcode, received_amount, change_amount
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [
             orderNumber, table_id || null, order_type, delivery_platform || null, customer_id || null,
             steward_name || null, status || 'pending', payment_status || 'unpaid', payment_method || null,
             subtotal, discount, total, req.user.id, activeShiftId, kot_printed || false,
-            ack_printed || false, card_tx_reference || null, barcode
+            ack_printed || false, card_tx_reference || null, barcode, received_amount || 0.00, change_amount || 0.00
         ]);
         
         const newOrderId = orderResult.insertId;
@@ -1531,6 +1736,8 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
         
         await conn.commit();
         
+        await logAudit('place_order', 'orders', newOrderId, `Order ${orderNumber} placed (${order_type.toUpperCase()}). Payment Status: ${payment_status.toUpperCase()}. Total: LKR ${total}`, req.user.id);
+        
         // Broadcast WebSocket notifications
         broadcast({ type: 'order_created', data: { id: newOrderId, order_number: orderNumber, status: status || 'pending', order_type } });
         if (order_type === 'dine_in' && table_id) {
@@ -1587,6 +1794,13 @@ app.put('/api/orders/:id', authenticateToken, async (req, res) => {
             );
             const [tbl] = await db.query('SELECT * FROM dining_tables WHERE id = ?', [updatedOrder.table_id]);
             broadcast({ type: 'table_status_changed', data: tbl });
+        }
+
+        // Log payment or status changes
+        if (payment_status === 'paid') {
+            await logAudit('pay_order', 'orders', id, `Order ${updatedOrder.order_number} marked as PAID via ${updatedOrder.payment_method || 'N/A'}. Total: LKR ${updatedOrder.total}`, req.user.id);
+        } else if (status && status !== 'cancelled') {
+            await logAudit('modify_bill', 'orders', id, `Order ${updatedOrder.order_number} status updated to ${status.toUpperCase()}.`, req.user.id);
         }
         
         if (status === 'cancelled') {
@@ -1888,32 +2102,49 @@ app.get('/api/reports/dashboard', authenticateToken, async (req, res) => {
 
 // End of Day Summary API
 app.get('/api/reports/eod', authenticateToken, async (req, res) => {
+    const { date } = req.query;
+    const localDateStr = new Date().toLocaleDateString('en-CA'); // Outputs YYYY-MM-DD in local time
+    const filterDate = date || localDateStr;
     try {
-        const [sales] = await db.query(`
+        const sales = await db.query(`
             SELECT payment_method, COALESCE(SUM(total), 0) as total, COUNT(*) as count
             FROM orders
-            WHERE payment_status = "paid" AND DATE(created_at) = CURDATE()
+            WHERE payment_status = "paid" AND DATE(created_at) = ?
             GROUP BY payment_method
-        `);
+        `, [filterDate]);
         
-        const [expenses] = await db.query(`
+        const expenses = await db.query(`
             SELECT category, COALESCE(SUM(amount), 0) as total
             FROM expenses
-            WHERE expense_date = CURDATE()
+            WHERE expense_date = ?
             GROUP BY category
-        `);
+        `, [filterDate]);
         
-        const [{ credit_settlements }] = await db.query(`
+        const creditSettlementsResult = await db.query(`
             SELECT COALESCE(SUM(amount), 0) as credit_settlements
             FROM credit_settlements
-            WHERE DATE(date_paid) = CURDATE()
-        `);
+            WHERE DATE(date_paid) = ?
+        `, [filterDate]);
+        const credit_settlements = creditSettlementsResult[0] ? creditSettlementsResult[0].credit_settlements : 0.00;
         
-        const formattedSales = sales.map(item => ({
-            payment_method: item.payment_method,
-            total: Number(item.total),
-            count: Number(item.count)
-        }));
+        const defaultSales = {
+            cash: { payment_method: 'cash', total: 0.00, count: 0 },
+            card: { payment_method: 'card', total: 0.00, count: 0 },
+            qr: { payment_method: 'qr', total: 0.00, count: 0 },
+            credit: { payment_method: 'credit', total: 0.00, count: 0 }
+        };
+        
+        sales.forEach(item => {
+            if (item.payment_method) {
+                const method = item.payment_method.toLowerCase();
+                if (defaultSales[method]) {
+                    defaultSales[method].total = Number(item.total);
+                    defaultSales[method].count = Number(item.count);
+                }
+            }
+        });
+        
+        const formattedSales = Object.values(defaultSales);
 
         const formattedExpenses = expenses.map(item => ({
             category: item.category,
@@ -1967,14 +2198,23 @@ app.get('/api/reports/historical', authenticateToken, async (req, res) => {
 
 // User Activity Logs API
 app.get('/api/reports/logs', authenticateToken, async (req, res) => {
+    const { date } = req.query;
     try {
-        const logs = await db.query(`
+        let sql = `
             SELECT al.*, u.username, u.role
             FROM audit_logs al
             JOIN users u ON al.user_id = u.id
-            ORDER BY al.timestamp DESC
-            LIMIT 100
-        `);
+        `;
+        const params = [];
+        if (date) {
+            sql += ` WHERE DATE(al.timestamp) = ?`;
+            params.push(date);
+        }
+        sql += ` ORDER BY al.timestamp DESC`;
+        if (!date) {
+            sql += ` LIMIT 100`;
+        }
+        const logs = await db.query(sql, params);
         res.json(logs);
     } catch (err) {
         res.status(500).json({ error: err.message });

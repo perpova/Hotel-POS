@@ -6,6 +6,10 @@ import 'package:intl/intl.dart';
 import '../pos_controller.dart';
 import '../theme.dart';
 import '../services/api_service.dart';
+import '../models/models.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 
 class ShiftScreen extends StatefulWidget {
   const ShiftScreen({Key? key}) : super(key: key);
@@ -26,6 +30,28 @@ class _ShiftScreenState extends State<ShiftScreen> {
   double _cashSales = 0.0;
   double _expectedDrawerBalance = 0.0;
   bool _loadingShiftData = false;
+
+  List<SupplierModel> _suppliers = [];
+  SupplierModel? _selectedSupplier;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchSuppliers();
+  }
+
+  Future<void> _fetchSuppliers() async {
+    try {
+      final sups = await APIService.instance.getSuppliers();
+      if (mounted) {
+        setState(() {
+          _suppliers = sups;
+        });
+      }
+    } catch (e) {
+      print('Error fetching suppliers in shift screen: $e');
+    }
+  }
 
   Future<void> _loadShiftData(POSController controller) async {
     if (controller.activeShift == null) return;
@@ -127,7 +153,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
                                   children: [
                                     _buildShiftDetailsArea(controller),
                                     const SizedBox(height: 24),
-                                    _buildCashDrawerLogsCard(),
+                                    _buildCashDrawerLogsCard(controller),
                                   ],
                                 ),
                               ),
@@ -144,7 +170,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
                             children: [
                               _buildShiftDetailsArea(controller),
                               const SizedBox(height: 16),
-                              _buildCashDrawerLogsCard(),
+                              _buildCashDrawerLogsCard(controller),
                               const SizedBox(height: 16),
                               _buildShiftCloseArea(controller),
                             ],
@@ -295,6 +321,34 @@ class _ShiftScreenState extends State<ShiftScreen> {
                   style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
                 ),
                 const SizedBox(height: 16),
+                DropdownButtonFormField<SupplierModel?>(
+                  value: _selectedSupplier,
+                  decoration: const InputDecoration(
+                    labelText: 'Supplier Payment (Optional)',
+                  ),
+                  items: [
+                    const DropdownMenuItem<SupplierModel?>(
+                      value: null,
+                      child: Text('None (General Cash Adjustment)'),
+                    ),
+                    ..._suppliers.map((s) => DropdownMenuItem<SupplierModel?>(
+                          value: s,
+                          child: Text('${s.name} (Bal: LKR ${s.outstandingBalance.toStringAsFixed(0)})'),
+                        )),
+                  ],
+                  onChanged: (val) {
+                    setState(() {
+                      _selectedSupplier = val;
+                      if (val != null) {
+                        _cashInOutReasonController.text = 'Supplier Payment: ${val.name}';
+                      } else {
+                        _cashInOutReasonController.clear();
+                      }
+                    });
+                  },
+                  style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary),
+                ),
+                const SizedBox(height: 16),
                 Row(
                   children: [
                     Expanded(
@@ -358,7 +412,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
   // ----------------------------------------------------
   // LAYOUT: CASH TRANSACTION LEDGER
   // ----------------------------------------------------
-  Widget _buildCashDrawerLogsCard() {
+  Widget _buildCashDrawerLogsCard(POSController controller) {
     return Card(
       elevation: 0,
       color: Colors.white,
@@ -371,9 +425,29 @@ class _ShiftScreenState extends State<ShiftScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Drawer Transaction Logs',
-              style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Drawer Transaction Logs',
+                  style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+                ),
+                if (_drawerLogs.isNotEmpty)
+                  ElevatedButton.icon(
+                    onPressed: () => _printDrawerLogs(controller),
+                    icon: const Icon(Icons.print, size: 14),
+                    label: const Text('Print Logs', style: TextStyle(fontSize: 12)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primary,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                    ),
+                  ),
+              ],
             ),
             const SizedBox(height: 16),
 
@@ -599,20 +673,124 @@ class _ShiftScreenState extends State<ShiftScreen> {
       return;
     }
 
+    if (_selectedSupplier != null && type == 'cash_in') {
+      _showSnackBar('Supplier payments must be recorded as Cash Out.');
+      return;
+    }
+
     try {
       if (controller.isOnline) {
-        await APIService.instance.logDrawerCash(controller.activeShift!.id, type, amt, reason);
+        if (_selectedSupplier != null && type == 'cash_out') {
+          await APIService.instance.paySupplier(_selectedSupplier!.id, amt, 'drawer', reason);
+        } else {
+          await APIService.instance.logDrawerCash(controller.activeShift!.id, type, amt, reason);
+        }
         _fetchDrawerLogs(controller.activeShift!.id);
+        _fetchSuppliers();
       } else {
         print('Offline Log Drawer Cash: Shift ID ${controller.activeShift!.id}, Type $type, Amount $amt');
       }
       
       _cashInOutAmountController.clear();
       _cashInOutReasonController.clear();
+      setState(() {
+        _selectedSupplier = null;
+      });
       _loadShiftData(controller);
       _showSnackBar('Cash Drawer Log recorded successfully.');
     } catch (e) {
       _showSnackBar(e.toString());
+    }
+  }
+
+  Future<void> _printDrawerLogs(POSController controller) async {
+    try {
+      final doc = pw.Document();
+      
+      final headers = ['Type', 'Amount', 'Reason / Remarks', 'Time'];
+      
+      final data = _drawerLogs.map((log) {
+        final isCashIn = log['type'] == 'cash_in';
+        final timeFormatted = DateFormat('hh:mm a').format((DateTime.tryParse(log['timestamp']) ?? DateTime.now()).toLocal());
+        return [
+          isCashIn ? 'IN' : 'OUT',
+          'LKR ${double.parse(log['amount'].toString()).toStringAsFixed(2)}',
+          (log['reason'] ?? '').toString(),
+          timeFormatted
+        ];
+      }).toList();
+
+      doc.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(32),
+          build: (pw.Context context) {
+            return pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text(
+                          'Cash Drawer Transaction Logs',
+                          style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
+                        ),
+                        pw.SizedBox(height: 4),
+                        pw.Text('Active Shift ID: ${controller.activeShift?.id ?? "N/A"}'),
+                        pw.Text('Opened At: ${controller.activeShift?.startTime ?? "N/A"}'),
+                      ],
+                    ),
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.end,
+                      children: [
+                        pw.Text(
+                          'Expected Balance',
+                          style: pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
+                        ),
+                        pw.SizedBox(height: 2),
+                        pw.Text(
+                          'LKR ${_expectedDrawerBalance.toStringAsFixed(2)}',
+                          style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: PdfColors.blue800),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                pw.SizedBox(height: 20),
+                pw.Divider(),
+                pw.SizedBox(height: 10),
+                pw.Text('Logs Generated on: ${DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now())}', style: const pw.TextStyle(fontSize: 10)),
+                pw.SizedBox(height: 20),
+                pw.Table.fromTextArray(
+                  headers: headers,
+                  data: data,
+                  border: pw.TableBorder.all(color: PdfColors.grey300),
+                  headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10),
+                  headerDecoration: const pw.BoxDecoration(color: PdfColors.grey100),
+                  cellStyle: const pw.TextStyle(fontSize: 9),
+                  cellHeight: 24,
+                  cellAlignments: {
+                    0: pw.Alignment.center,
+                    1: pw.Alignment.centerRight,
+                    2: pw.Alignment.centerLeft,
+                    3: pw.Alignment.center,
+                  },
+                ),
+              ],
+            );
+          },
+        ),
+      );
+
+      await Printing.layoutPdf(
+        onLayout: (PdfPageFormat format) async => doc.save(),
+        name: 'Drawer_Logs_Shift_${controller.activeShift?.id ?? "N/A"}',
+      );
+    } catch (e) {
+      _showSnackBar('Failed to generate PDF: $e');
     }
   }
 

@@ -844,6 +844,8 @@ class POSController extends ChangeNotifier {
     required String status, // 'pending', 'preparing'
     required String paymentStatus, // 'unpaid', 'paid'
     String? paymentMethod,
+    double receivedAmount = 0.00,
+    double changeAmount = 0.00,
   }) async {
     if (cart.isEmpty) throw Exception('Cart is empty');
     if (activeShift == null) throw Exception('No active shift. Please open a shift.');
@@ -873,6 +875,8 @@ class POSController extends ChangeNotifier {
       cardTxReference: cardTerminalTxRef,
       barcode: offlineOrderNum,
       createdAt: DateTime.now().toIso8601String(),
+      receivedAmount: receivedAmount,
+      changeAmount: changeAmount,
       items: cart,
     );
 

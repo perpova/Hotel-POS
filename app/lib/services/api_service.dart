@@ -603,6 +603,105 @@ class APIService {
     );
   }
 
+  // Suppliers
+  Future<List<SupplierModel>> getSuppliers() async {
+    final response = await http.get(Uri.parse('$_baseUrl/api/suppliers'), headers: _getHeaders());
+    if (response.statusCode == 200) {
+      final List data = jsonDecode(response.body);
+      return data.map((s) => SupplierModel.fromJson(s)).toList();
+    }
+    throw Exception('Failed to load suppliers');
+  }
+
+  Future<SupplierModel> createSupplier(Map<String, dynamic> data) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/api/suppliers'),
+      headers: _getHeaders(),
+      body: jsonEncode(data),
+    );
+    if (response.statusCode == 200) {
+      return SupplierModel.fromJson(jsonDecode(response.body));
+    }
+    throw Exception(jsonDecode(response.body)['error'] ?? 'Failed to create supplier');
+  }
+
+  Future<SupplierModel> updateSupplier(int id, Map<String, dynamic> data) async {
+    final response = await http.put(
+      Uri.parse('$_baseUrl/api/suppliers/$id'),
+      headers: _getHeaders(),
+      body: jsonEncode(data),
+    );
+    if (response.statusCode == 200) {
+      return SupplierModel.fromJson(jsonDecode(response.body));
+    }
+    throw Exception(jsonDecode(response.body)['error'] ?? 'Failed to update supplier');
+  }
+
+  Future<void> deleteSupplier(int id) async {
+    final response = await http.delete(
+      Uri.parse('$_baseUrl/api/suppliers/$id'),
+      headers: _getHeaders(),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to delete supplier');
+    }
+  }
+
+  Future<void> paySupplier(int id, double amount, String paymentSource, String remarks) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/api/suppliers/$id/pay'),
+      headers: _getHeaders(),
+      body: jsonEncode({
+        'amount': amount,
+        'payment_source': paymentSource,
+        'remarks': remarks,
+      }),
+    );
+    if (response.statusCode != 200) {
+      throw Exception(jsonDecode(response.body)['error'] ?? 'Failed to process supplier payment');
+    }
+  }
+
+  Future<List<SupplierDeliveryModel>> getSupplierDeliveries(int supplierId) async {
+    final response = await http.get(Uri.parse('$_baseUrl/api/suppliers/$supplierId/deliveries'), headers: _getHeaders());
+    if (response.statusCode == 200) {
+      final List data = jsonDecode(response.body);
+      return data.map((d) => SupplierDeliveryModel.fromJson(d)).toList();
+    }
+    throw Exception('Failed to load supplier deliveries');
+  }
+
+  Future<void> createSupplierDelivery(int supplierId, Map<String, dynamic> data) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/api/suppliers/$supplierId/deliveries'),
+      headers: _getHeaders(),
+      body: jsonEncode(data),
+    );
+    if (response.statusCode != 200) {
+      throw Exception(jsonDecode(response.body)['error'] ?? 'Failed to log supplier delivery');
+    }
+  }
+
+  Future<List<SupplierPaymentModel>> getSupplierPayments(int supplierId) async {
+    final response = await http.get(Uri.parse('$_baseUrl/api/suppliers/$supplierId/payments'), headers: _getHeaders());
+    if (response.statusCode == 200) {
+      final List data = jsonDecode(response.body);
+      return data.map((p) => SupplierPaymentModel.fromJson(p)).toList();
+    }
+    throw Exception('Failed to load supplier payments');
+  }
+
+  Future<List<SupplierLedgerEntryModel>> getSupplierLedger(int supplierId) async {
+    final response = await http.get(Uri.parse('$_baseUrl/api/suppliers/$supplierId/ledger'), headers: _getHeaders());
+    if (response.statusCode == 200) {
+      final List data = jsonDecode(response.body);
+      return data.map((l) => SupplierLedgerEntryModel.fromJson(l)).toList();
+    }
+    throw Exception('Failed to load supplier ledger');
+  }
+
+
+
   Future<List<OrderModel>> getOrders() async {
     final response = await http.get(Uri.parse('$_baseUrl/api/orders'), headers: _getHeaders());
     if (response.statusCode == 200) {
@@ -844,8 +943,12 @@ class APIService {
     throw Exception('Failed to load dashboard report');
   }
 
-  Future<Map<String, dynamic>> getEODSummary() async {
-    final response = await http.get(Uri.parse('$_baseUrl/api/reports/eod'), headers: _getHeaders());
+  Future<Map<String, dynamic>> getEODSummary({String? date}) async {
+    String url = '$_baseUrl/api/reports/eod';
+    if (date != null) {
+      url += '?date=$date';
+    }
+    final response = await http.get(Uri.parse(url), headers: _getHeaders());
     if (response.statusCode == 200) {
       return jsonDecode(response.body);
     }
@@ -860,8 +963,12 @@ class APIService {
     throw Exception('Failed to load historical report');
   }
 
-  Future<List<AuditLogModel>> getActivityLogs() async {
-    final response = await http.get(Uri.parse('$_baseUrl/api/reports/logs'), headers: _getHeaders());
+  Future<List<AuditLogModel>> getActivityLogs({String? date}) async {
+    String url = '$_baseUrl/api/reports/logs';
+    if (date != null) {
+      url += '?date=$date';
+    }
+    final response = await http.get(Uri.parse(url), headers: _getHeaders());
     if (response.statusCode == 200) {
       final List data = jsonDecode(response.body);
       return data.map((l) => AuditLogModel.fromJson(l)).toList();

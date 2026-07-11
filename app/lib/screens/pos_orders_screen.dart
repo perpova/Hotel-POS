@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -94,6 +95,8 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
                 cardTxReference: newOrder.cardTxReference,
                 barcode: newOrder.barcode,
                 createdAt: newOrder.createdAt,
+                receivedAmount: newOrder.receivedAmount,
+                changeAmount: newOrder.changeAmount,
                 items: prevItems.isNotEmpty ? prevItems : newOrder.items,
               );
             }
@@ -148,6 +151,8 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
                 cardTxReference: order.cardTxReference,
                 barcode: order.barcode,
                 createdAt: order.createdAt,
+                receivedAmount: order.receivedAmount,
+                changeAmount: order.changeAmount,
                 items: items,
               );
               _selectedOrder = updatedOrder;
@@ -1164,6 +1169,12 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
                               _buildSummaryRow('Discount', 'LKR ${order.discount.toStringAsFixed(2)}'),
                               const Divider(height: 24, color: Color(0xFFF1F5F9)),
                               _buildSummaryRow('Total', 'LKR ${order.total.toStringAsFixed(2)}', isBold: true, isPrice: true),
+                              if ((order.paymentMethod ?? 'cash').toLowerCase() == 'cash' && order.receivedAmount > 0) ...[
+                                const Divider(height: 24, color: Color(0xFFF1F5F9)),
+                                _buildSummaryRow('Received Amount', 'LKR ${order.receivedAmount.toStringAsFixed(2)}'),
+                                const SizedBox(height: 8),
+                                _buildSummaryRow('Change Amount', 'LKR ${order.changeAmount.toStringAsFixed(2)}'),
+                              ],
                             ],
                           ),
                         ),
@@ -1262,172 +1273,167 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
   // PDF INVOICE GENERATION & PRINTING
   // =========================================================================
   Future<void> _printInvoice(OrderModel order, CustomerModel customer) async {
-    // Construct receipt dataset
-    final receiptData = ReceiptData(
-      orderNumber: order.orderNumber,
-      paymentMethod: order.paymentMethod ?? 'cash',
-      items: order.items,
-      subtotal: order.subtotal,
-      discount: order.discount,
-      total: order.total,
-      orderType: order.orderType == 'dine_in' ? 'Dining Table' : order.orderType == 'takeaway' ? 'Takeaway' : 'Delivery',
-      tableName: order.tableId != null ? 'Table ${order.tableId}' : null,
-      customerName: customer.name,
-      receivedAmount: order.total,
-      changeAmount: 0.0,
-      tokenNumber: order.id ?? 1,
-    );
+    // For cash orders, if we have historic receivedAmount in database, use it. Otherwise fall back to order.total.
+    double receivedAmount = (order.paymentMethod ?? 'cash').toLowerCase() == 'cash'
+        ? (order.receivedAmount > 0 ? order.receivedAmount : order.total)
+        : order.total;
+    double changeAmount = (order.paymentMethod ?? 'cash').toLowerCase() == 'cash'
+        ? (order.receivedAmount > 0 ? order.changeAmount : 0.0)
+        : 0.0;
+
+    // We will use a controller for dynamic text updating if they edit cash paid
+    final cashPaidController = TextEditingController(text: receivedAmount.toStringAsFixed(2));
 
     showDialog(
       context: context,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        backgroundColor: const Color(0xFFF1F5F9),
-        child: Container(
-          width: MediaQuery.of(context).size.width * 0.8,
-          constraints: const BoxConstraints(
-            maxWidth: 780,
-            maxHeight: 700,
-          ),
-          child: Column(
-            children: [
-              // Top Action Buttons
-              Container(
-                color: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                child: Row(
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final receiptData = ReceiptData(
+              orderId: order.id ?? 0,
+              orderNumber: order.orderNumber,
+              paymentMethod: order.paymentMethod ?? 'cash',
+              items: order.items,
+              subtotal: order.subtotal,
+              discount: order.discount,
+              total: order.total,
+              orderType: order.orderType == 'dine_in' ? 'Dining Table' : order.orderType == 'takeaway' ? 'Takeaway' : 'Delivery',
+              tableName: order.tableId != null ? 'Table ${order.tableId}' : null,
+              customerName: customer.name,
+              receivedAmount: receivedAmount,
+              changeAmount: changeAmount,
+              tokenNumber: order.id ?? 1,
+              cashierName: 'Cashier ID: ${order.cashierId}',
+              createdAt: order.createdAt,
+            );
+
+            final size = MediaQuery.of(context).size;
+            final posController = Provider.of<POSController>(context, listen: false);
+
+            return Dialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              backgroundColor: const Color(0xFFF1F5F9),
+              child: Container(
+                width: size.width * 0.8,
+                constraints: const BoxConstraints(
+                  maxWidth: 780,
+                  maxHeight: 700,
+                ),
+                child: Column(
                   children: [
-                    ElevatedButton.icon(
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.close, size: 16),
-                      label: const Text('Close'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFEF4444),
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    // Top Action Buttons
+                    Container(
+                      color: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      child: Row(
+                        children: [
+                          ElevatedButton.icon(
+                            onPressed: () => Navigator.pop(context),
+                            icon: const Icon(Icons.close, size: 16),
+                            label: const Text('Close'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFEF4444),
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          if ((order.paymentMethod ?? 'cash').toLowerCase() == 'cash') ...[
+                            // Real-time Cash Paid input
+                            SizedBox(
+                              width: 220,
+                              height: 38,
+                              child: TextField(
+                                controller: cashPaidController,
+                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                style: const TextStyle(fontSize: 13),
+                                decoration: InputDecoration(
+                                  labelText: 'Cash Paid / Given (LKR)',
+                                  labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                                  isDense: true,
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                ),
+                                onChanged: (val) {
+                                  final entered = double.tryParse(val) ?? 0.0;
+                                  setDialogState(() {
+                                    receivedAmount = entered;
+                                    changeAmount = entered > order.total ? (entered - order.total) : 0.0;
+                                  });
+                                },
+                              ),
+                            ),
+                          ],
+                          const Spacer(),
+                          // Print Invoice PDF
+                          ElevatedButton.icon(
+                            onPressed: () async {
+                              try {
+                                final bytes = await _generateInvoicePdfBytes(receiptData);
+                                await Printing.layoutPdf(
+                                  onLayout: (format) async => bytes,
+                                  name: 'Invoice_${receiptData.orderNumber}',
+                                );
+                              } catch (e) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Failed to print Invoice: $e'), backgroundColor: AppTheme.danger),
+                                );
+                              }
+                            },
+                            icon: const Icon(Icons.print, size: 16),
+                            label: const Text('Print Invoice'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF3B82F6),
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          // Download Invoice PDF
+                          ElevatedButton.icon(
+                            onPressed: () async {
+                              try {
+                                final bytes = await _generateInvoicePdfBytes(receiptData);
+                                await _savePdfToFile(bytes, 'Invoice_${receiptData.orderNumber}.pdf');
+                              } catch (e) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Failed to download Invoice: $e'), backgroundColor: AppTheme.danger),
+                                );
+                              }
+                            },
+                            icon: const Icon(Icons.download_rounded, size: 16),
+                            label: const Text('Download Invoice'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF10B981),
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const Spacer(),
-                    // Download Invoice PDF
-                    ElevatedButton.icon(
-                      onPressed: () async {
-                        try {
-                          final bytes = await _generateInvoicePdfBytes(receiptData);
-                          await _savePdfToFile(bytes, 'Invoice_${receiptData.orderNumber}.pdf');
-                        } catch (e) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Failed to download Invoice: $e'), backgroundColor: AppTheme.danger),
-                          );
-                        }
-                      },
-                      icon: const Icon(Icons.download_rounded, size: 16),
-                      label: const Text('Download Invoice'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF10B981),
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+
+                    // Slips Preview Mock
+                    Expanded(
+                      child: SingleChildScrollView(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24.0),
+                          child: Center(
+                            child: SizedBox(
+                              width: 350,
+                              child: _buildCustomerInvoiceSlip(receiptData, posController),
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
-
-              // Slips PDF View Mock
-              Expanded(
-                child: SingleChildScrollView(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24.0),
-                    child: Center(
-                      child: Container(
-                        width: 350,
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(8),
-                          boxShadow: [
-                            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10),
-                          ],
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Center(
-                              child: Text('FoodKing - Restaurant', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 16)),
-                            ),
-                            const Center(child: Text('Food Ordering & Delivery App', style: TextStyle(fontSize: 11, color: Colors.grey))),
-                            const SizedBox(height: 12),
-                            const Divider(color: Colors.black12),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text('Order: #${order.orderNumber.substring(order.orderNumber.length - 8)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                                Text(_formatDate(order.createdAt), style: const TextStyle(fontSize: 11)),
-                              ],
-                            ),
-                            const Divider(color: Colors.black12),
-                            const SizedBox(height: 8),
-                            
-                            // Items list
-                            ...receiptData.items.map((item) => Padding(
-                              padding: const EdgeInsets.only(bottom: 6),
-                              child: Row(
-                                children: [
-                                  Text('${item.quantity} x ', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                                  Expanded(child: Text(item.productName, style: const TextStyle(fontSize: 12))),
-                                  Text('LKR ${(item.price * item.quantity).toStringAsFixed(2)}', style: const TextStyle(fontSize: 12)),
-                                ],
-                              ),
-                            )),
-                            
-                            const Divider(color: Colors.black12),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text('Subtotal:', style: TextStyle(fontSize: 12)),
-                                Text('LKR ${receiptData.subtotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12)),
-                              ],
-                            ),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text('Discount:', style: TextStyle(fontSize: 12)),
-                                Text('LKR ${receiptData.discount.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12)),
-                              ],
-                            ),
-                            const SizedBox(height: 4),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text('Total:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                                Text('LKR ${receiptData.total.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.red)),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            const Divider(color: Colors.black12),
-                            const SizedBox(height: 8),
-                            Center(
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                                decoration: BoxDecoration(
-                                  border: Border.all(color: Colors.grey),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text('Token #${receiptData.tokenNumber}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            const Center(child: Text('Thank You - Please Come Again', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -1459,113 +1465,275 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
 
   Future<Uint8List> _generateInvoicePdfBytes(ReceiptData data) async {
     final pdf = pw.Document();
+    final lang = Provider.of<DashboardController>(this.context, listen: false).selectedLanguage;
+    final bool isSinhala = lang == 'Sinhala';
+    
+    // Load Sinhala Font
+    final fontData = await rootBundle.load('assets/fonts/NotoSansSinhala-Regular.ttf');
+    final sinhalaFont = pw.Font.ttf(fontData);
+
+    // Load Logo
+    pw.MemoryImage? logoImage;
+    try {
+      final logoData = await rootBundle.load('assets/images/mhb_logo.png');
+      logoImage = pw.MemoryImage(logoData.buffer.asUint8List());
+    } catch (_) {}
+    
+    final int totalQty = data.items.fold(0, (sum, item) => sum + item.quantity);
+    final dt = DateTime.tryParse(data.createdAt)?.toLocal() ?? DateTime.now();
+
     pdf.addPage(
       pw.Page(
         pageFormat: PdfPageFormat.roll80,
-        margin: const pw.EdgeInsets.all(10),
+        margin: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 3),
         build: (pw.Context context) {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              pw.Center(
-                child: pw.Text('FoodKing - Restaurant', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13)),
-              ),
-              pw.Center(
-                child: pw.Text('Food Ordering & Delivery App', style: const pw.TextStyle(fontSize: 9)),
-              ),
-              pw.Center(
-                child: pw.Text('House: 25, Road No: 2, Block A, Mirpur-1, Dhaka 1216', style: const pw.TextStyle(fontSize: 8)),
+              // Logo & Oval Header Row
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Row(
+                    crossAxisAlignment: pw.CrossAxisAlignment.center,
+                    children: [
+                      if (logoImage != null) ...[
+                        pw.Image(logoImage, width: 28, height: 28),
+                        pw.SizedBox(width: 6),
+                      ],
+                      pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text(
+                            'මාතර හෝටලය',
+                            style: pw.TextStyle(font: sinhalaFont, fontSize: 10, fontWeight: pw.FontWeight.bold),
+                          ),
+                          pw.Text(
+                            'නො: 04 මහා වීදිය, අකුරැස්ස',
+                            style: pw.TextStyle(font: sinhalaFont, fontSize: 7, color: PdfColors.grey700),
+                          ),
+                          pw.Text(
+                            '041 2283857',
+                            style: pw.TextStyle(font: sinhalaFont, fontSize: 7, color: PdfColors.grey700),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  pw.Container(
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                    decoration: pw.BoxDecoration(
+                      border: pw.Border.all(color: PdfColors.black, width: 1),
+                      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(12)),
+                    ),
+                    child: pw.Text(
+                      _getOvalNumber(data),
+                      style: pw.TextStyle(font: sinhalaFont, fontSize: 10, fontWeight: pw.FontWeight.bold),
+                    ),
+                  ),
+                ],
               ),
               pw.SizedBox(height: 8),
-              pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
-              pw.SizedBox(height: 5),
-
+              pw.Center(
+                child: pw.Text(
+                  'INVOICE',
+                  style: pw.TextStyle(font: sinhalaFont, fontSize: 10, fontWeight: pw.FontWeight.bold, decoration: pw.TextDecoration.underline),
+                ),
+              ),
+              pw.SizedBox(height: 4),
+              
+              _buildPdfInfoRow('Receipt No', _getReceiptNumber(data), sinhalaFont),
+              
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  pw.Text('Order #: ${data.orderNumber.substring(data.orderNumber.length - 8)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
-                  pw.Text('${DateTime.now().day.toString().padLeft(2, '0')}-${DateTime.now().month.toString().padLeft(2, '0')}-${DateTime.now().year}', style: const pw.TextStyle(fontSize: 8)),
+                  pw.Text(
+                    'Date  ${dt.day.toString().padLeft(2, '0')}-${_getMonthName(dt)}-${dt.year}',
+                    style: pw.TextStyle(font: sinhalaFont, fontSize: 8),
+                  ),
+                  pw.Text(
+                    _formatTime(dt, includeSpace: false),
+                    style: pw.TextStyle(font: sinhalaFont, fontSize: 8),
+                  ),
+                  pw.Text(
+                    data.cashierName,
+                    style: pw.TextStyle(font: sinhalaFont, fontSize: 8),
+                  ),
                 ],
               ),
-              pw.SizedBox(height: 5),
-              pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
-              pw.SizedBox(height: 8),
+              
+              pw.SizedBox(height: 4),
+              _buildPdfDashedLine(),
+              pw.SizedBox(height: 4),
 
               pw.Row(
                 children: [
-                  pw.Expanded(flex: 1, child: pw.Text('Qty', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))),
-                  pw.Expanded(flex: 4, child: pw.Text('Description', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))),
-                  pw.Expanded(flex: 2, child: pw.Align(alignment: pw.Alignment.centerRight, child: pw.Text('Price', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)))),
+                  pw.Expanded(flex: 3, child: pw.Text('Description', style: pw.TextStyle(font: sinhalaFont, fontWeight: pw.FontWeight.bold, fontSize: 8))),
+                  pw.Expanded(flex: 1, child: pw.Align(alignment: pw.Alignment.center, child: pw.Text('Qty', style: pw.TextStyle(font: sinhalaFont, fontWeight: pw.FontWeight.bold, fontSize: 8)))),
+                  pw.Expanded(flex: 2, child: pw.Align(alignment: pw.Alignment.centerRight, child: pw.Text('Price', style: pw.TextStyle(font: sinhalaFont, fontWeight: pw.FontWeight.bold, fontSize: 8)))),
+                  pw.Expanded(flex: 2, child: pw.Align(alignment: pw.Alignment.centerRight, child: pw.Text('Amount', style: pw.TextStyle(font: sinhalaFont, fontWeight: pw.FontWeight.bold, fontSize: 8)))),
                 ],
               ),
               pw.SizedBox(height: 2),
               pw.Divider(thickness: 0.5),
               pw.SizedBox(height: 4),
 
-              ...data.items.map((item) {
+              ..._groupDuplicateOrderItems(data.items).map((item) {
                 return pw.Padding(
                   padding: const pw.EdgeInsets.only(bottom: 4.0),
-                  child: pw.Row(
+                  child: pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
-                      pw.Expanded(flex: 1, child: pw.Text('${item.quantity}', style: const pw.TextStyle(fontSize: 9))),
-                      pw.Expanded(flex: 4, child: pw.Text(item.productName, style: const pw.TextStyle(fontSize: 9))),
-                      pw.Expanded(flex: 2, child: pw.Align(alignment: pw.Alignment.centerRight, child: pw.Text('LKR ${(item.price * item.quantity).toStringAsFixed(0)}', style: const pw.TextStyle(fontSize: 9)))),
+                      pw.Row(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Expanded(
+                            flex: 3,
+                            child: pw.Text(
+                              isSinhala ? (item.productSinhalaName ?? item.productName) : item.productName,
+                              style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold),
+                            ),
+                          ),
+                          pw.Expanded(
+                            flex: 1,
+                            child: pw.Align(
+                              alignment: pw.Alignment.center,
+                              child: pw.Text('${item.quantity}', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                            ),
+                          ),
+                          pw.Expanded(
+                            flex: 2,
+                            child: pw.Align(
+                              alignment: pw.Alignment.centerRight,
+                              child: pw.Text(item.price.toStringAsFixed(2), style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                            ),
+                          ),
+                          pw.Expanded(
+                            flex: 2,
+                            child: pw.Align(
+                              alignment: pw.Alignment.centerRight,
+                              child: pw.Text((item.price * item.quantity).toStringAsFixed(2), style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (item.notes != null && item.notes!.isNotEmpty) ...[
+                        pw.SizedBox(height: 1),
+                        pw.Text(
+                          '  * ${item.notes!}',
+                          style: pw.TextStyle(font: sinhalaFont, fontSize: 7, fontStyle: pw.FontStyle.italic),
+                        ),
+                      ],
                     ],
                   ),
                 );
               }).toList(),
-
+              
+              pw.SizedBox(height: 3),
+              _buildPdfDashedLine(),
               pw.SizedBox(height: 4),
-              pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
-              pw.SizedBox(height: 5),
-
+              
+              // Summary
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  pw.Text('SUBTOTAL:', style: const pw.TextStyle(fontSize: 8)),
-                  pw.Text('LKR ${data.subtotal.toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 8)),
-                ],
-              ),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text('DISCOUNT:', style: const pw.TextStyle(fontSize: 8)),
-                  pw.Text('LKR ${data.discount.toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 8)),
-                ],
-              ),
-              pw.SizedBox(height: 2),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text('TOTAL:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
-                  pw.Text('LKR ${data.total.toStringAsFixed(2)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: PdfColors.red)),
-                ],
-              ),
-              pw.SizedBox(height: 5),
-              pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
-              pw.SizedBox(height: 5),
-
-              pw.Text('Order Type: ${data.orderType}', style: const pw.TextStyle(fontSize: 8)),
-              pw.Text('Payment Type: ${data.paymentMethod.toUpperCase()}', style: const pw.TextStyle(fontSize: 8)),
-              pw.SizedBox(height: 8),
-
-              pw.Center(
-                child: pw.Container(
-                  padding: const pw.EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                  decoration: pw.BoxDecoration(
-                    border: pw.Border.all(color: PdfColors.grey),
-                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                  pw.Row(
+                    children: [
+                      pw.Text('No of Items', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                      pw.SizedBox(width: 10),
+                      pw.Text('$totalQty', style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                    ],
                   ),
-                  child: pw.Text(
-                    'Token #${data.tokenNumber}',
-                    style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold),
+                  pw.Row(
+                    children: [
+                      pw.Text('Sub Total', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                      pw.SizedBox(width: 5),
+                      pw.Text(':', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                      pw.SizedBox(width: 10),
+                      pw.Text(data.subtotal.toStringAsFixed(2), style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                    ],
                   ),
+                ],
+              ),
+              
+              if (data.discount > 0)
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.SizedBox.shrink(),
+                    pw.Row(
+                      children: [
+                        pw.Text('Discount', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                        pw.SizedBox(width: 10),
+                        pw.Text(':', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                        pw.SizedBox(width: 10),
+                        pw.Text('-${data.discount.toStringAsFixed(2)}', style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                      ],
+                    ),
+                  ],
                 ),
+
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.SizedBox.shrink(),
+                  pw.Row(
+                    children: [
+                      pw.Text('Total', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                      pw.SizedBox(width: 15),
+                      pw.Text(':', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                      pw.SizedBox(width: 10),
+                      pw.Text(data.total.toStringAsFixed(2), style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                    ],
+                  ),
+                ],
               ),
-              pw.SizedBox(height: 8),
+              
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.SizedBox.shrink(),
+                  pw.Row(
+                    children: [
+                      pw.Text('Paid Amount', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                      pw.SizedBox(width: 5),
+                      pw.Text(':', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                      pw.SizedBox(width: 10),
+                      pw.Text(data.receivedAmount.toStringAsFixed(2), style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                    ],
+                  ),
+                ],
+              ),
+              
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text(
+                    'PAID BY ${data.paymentMethod.toUpperCase()}',
+                    style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold),
+                  ),
+                  pw.Row(
+                    children: [
+                      pw.Text('Balance', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                      pw.SizedBox(width: 10),
+                      pw.Text(':', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                      pw.SizedBox(width: 10),
+                      pw.Text(data.changeAmount.toStringAsFixed(2), style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                    ],
+                  ),
+                ],
+              ),
+              
+              pw.SizedBox(height: 4),
+              _buildPdfDashedLine(),
+              pw.SizedBox(height: 5),
+              
               pw.Center(
-                child: pw.Text('Thank You - Please Come Again', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                child: pw.Text('Thank you & Come Again', style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold)),
+              ),
+              pw.Center(
+                child: pw.Text('Software by Perpova. 0713555566', style: pw.TextStyle(font: sinhalaFont, fontSize: 7)),
               ),
             ],
           );
@@ -1574,10 +1742,405 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
     );
     return pdf.save();
   }
+
+  // Invoice Slip Preview Widget
+  Widget _buildCustomerInvoiceSlip(ReceiptData data, POSController controller) {
+    final lang = Provider.of<DashboardController>(context, listen: true).selectedLanguage;
+    final bool isSinhala = lang == 'Sinhala';
+
+    final int totalQty = data.items.fold(0, (sum, item) => sum + item.quantity);
+    final dt = DateTime.tryParse(data.createdAt)?.toLocal() ?? DateTime.now();
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          )
+        ],
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Logo & Oval Header Row
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Image.asset(
+                    'assets/images/mhb_logo.png',
+                    width: 32,
+                    height: 32,
+                    errorBuilder: (context, error, stackTrace) => const Icon(Icons.restaurant_menu, size: 32, color: Color(0xFF1E293B)),
+                  ),
+                  const SizedBox(width: 8),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'මාතර හෝටලය',
+                        style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)),
+                      ),
+                      Text(
+                        'නො: 04 මහා වීදිය, අකුරැස්ස',
+                        style: GoogleFonts.inter(fontSize: 8, color: const Color(0xFF64748B)),
+                      ),
+                      Text(
+                        '041 2283857',
+                        style: GoogleFonts.inter(fontSize: 8, color: const Color(0xFF64748B)),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(
+                  border: Border.all(color: const Color(0xFF1E293B), width: 1),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Text(
+                  _getOvalNumber(data),
+                  style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Center(
+            child: Text(
+              'INVOICE',
+              style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, decoration: TextDecoration.underline, color: const Color(0xFF1E293B)),
+            ),
+          ),
+          const SizedBox(height: 6),
+          
+          _buildInfoRow('Receipt No', _getReceiptNumber(data)),
+          
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Date  ${dt.day.toString().padLeft(2, '0')}-${_getMonthName(dt)}-${dt.year}',
+                style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF334155), fontWeight: FontWeight.w500),
+              ),
+              Text(
+                _formatTime(dt, includeSpace: false),
+                style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF334155), fontWeight: FontWeight.w500),
+              ),
+              Text(
+                data.cashierName,
+                style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF334155), fontWeight: FontWeight.w500),
+              ),
+            ],
+          ),
+          
+          const SizedBox(height: 6),
+          _buildDashedLine(),
+          const SizedBox(height: 6),
+
+          Row(
+            children: [
+              Expanded(flex: 3, child: Text('Description', style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold))),
+              Expanded(flex: 1, child: Align(alignment: Alignment.center, child: Text('Qty', style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold)))),
+              Expanded(flex: 2, child: Align(alignment: Alignment.centerRight, child: Text('Price', style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold)))),
+              Expanded(flex: 2, child: Align(alignment: Alignment.centerRight, child: Text('Amount', style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold)))),
+            ],
+          ),
+          const SizedBox(height: 4),
+          const Divider(height: 1, color: Color(0xFFCBD5E1)),
+          const SizedBox(height: 6),
+
+          ..._groupDuplicateOrderItems(data.items).map((item) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 6.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        flex: 3,
+                        child: Text(
+                          isSinhala ? (item.productSinhalaName ?? item.productName) : item.productName,
+                          style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      Expanded(
+                        flex: 1,
+                        child: Align(
+                          alignment: Alignment.center,
+                          child: Text('${item.quantity}', style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w500)),
+                        ),
+                      ),
+                      Expanded(
+                        flex: 2,
+                        child: Align(
+                          alignment: Alignment.centerRight,
+                          child: Text(item.price.toStringAsFixed(2), style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w500)),
+                        ),
+                      ),
+                      Expanded(
+                        flex: 2,
+                        child: Align(
+                          alignment: Alignment.centerRight,
+                          child: Text((item.price * item.quantity).toStringAsFixed(2), style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w500)),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (item.notes != null && item.notes!.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      '  * ${item.notes!}',
+                      style: GoogleFonts.inter(fontSize: 8, color: const Color(0xFF64748B), fontStyle: FontStyle.italic),
+                    ),
+                  ],
+                ],
+              ),
+            );
+          }).toList(),
+          
+          const SizedBox(height: 4),
+          _buildDashedLine(),
+          const SizedBox(height: 6),
+          
+          // Summary rows
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Text('No of Items', style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF475569))),
+                  const SizedBox(width: 14),
+                  Text('$totalQty', style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
+                ],
+              ),
+              Row(
+                children: [
+                  Text('Sub Total', style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF475569))),
+                  const SizedBox(width: 12),
+                  Text(':', style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF475569))),
+                  const SizedBox(width: 14),
+                  Text(data.subtotal.toStringAsFixed(2), style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
+                ],
+              ),
+            ],
+          ),
+          
+          if (data.discount > 0)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const SizedBox.shrink(),
+                Row(
+                  children: [
+                    Text('Discount', style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF475569))),
+                    const SizedBox(width: 16),
+                    Text(':', style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF475569))),
+                    const SizedBox(width: 14),
+                    Text('-${data.discount.toStringAsFixed(2)}', style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
+                  ],
+                ),
+              ],
+            ),
+
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const SizedBox.shrink(),
+              Row(
+                children: [
+                  Text('Total', style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF475569))),
+                  const SizedBox(width: 32),
+                  Text(':', style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF475569))),
+                  const SizedBox(width: 14),
+                  Text(data.total.toStringAsFixed(2), style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
+                ],
+              ),
+            ],
+          ),
+          
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const SizedBox.shrink(),
+              Row(
+                children: [
+                  Text('Paid Amount', style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF475569))),
+                  const SizedBox(width: 8),
+                  Text(':', style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF475569))),
+                  const SizedBox(width: 14),
+                  Text(data.receivedAmount.toStringAsFixed(2), style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
+                ],
+              ),
+            ],
+          ),
+          
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'PAID BY ${data.paymentMethod.toUpperCase()}',
+                style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)),
+              ),
+              Row(
+                children: [
+                  Text('Balance', style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF475569))),
+                  const SizedBox(width: 22),
+                  Text(':', style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF475569))),
+                  const SizedBox(width: 14),
+                  Text(data.changeAmount.toStringAsFixed(2), style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
+                ],
+              ),
+            ],
+          ),
+          
+          const SizedBox(height: 6),
+          _buildDashedLine(),
+          const SizedBox(height: 8),
+          
+          Center(
+            child: Text(
+              'Thank you & Come Again',
+              style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w600, color: const Color(0xFF1E293B)),
+            ),
+          ),
+          Center(
+            child: Text(
+              'Software by Perpova. 0713555566',
+              style: GoogleFonts.inter(fontSize: 8, color: const Color(0xFF64748B)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Invoice Slip Preview Helpers
+  String _getReceiptNumber(ReceiptData data) {
+    final paddedId = data.orderId.toString().padLeft(9, '0');
+    return '1$paddedId';
+  }
+
+  String _getOvalNumber(ReceiptData data) {
+    final idStr = data.orderId.toString();
+    if (idStr.length >= 3) {
+      return idStr.substring(idStr.length - 3);
+    }
+    return idStr.padLeft(3, '0');
+  }
+
+  String _getMonthName(DateTime date) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return months[date.month - 1];
+  }
+
+  String _formatTime(DateTime dt, {bool includeSpace = true}) {
+    final hour12 = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
+    final period = dt.hour >= 12 ? 'PM' : 'AM';
+    final hourStr = hour12.toString().padLeft(2, '0');
+    final minStr = dt.minute.toString().padLeft(2, '0');
+    final secStr = dt.second.toString().padLeft(2, '0');
+    return '$hourStr:$minStr:$secStr${includeSpace ? " " : ""}$period';
+  }
+
+  Widget _buildDashedLine() {
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final boxWidth = constraints.constrainWidth();
+        const dashWidth = 4.0;
+        const dashHeight = 1.0;
+        final dashCount = (boxWidth / (2 * dashWidth)).floor();
+        return Flex(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          direction: Axis.horizontal,
+          children: List.generate(dashCount, (_) {
+            return const SizedBox(
+              width: dashWidth,
+              height: dashHeight,
+              child: DecoratedBox(
+                decoration: BoxDecoration(color: Color(0xFFCBD5E1)),
+              ),
+            );
+          }),
+        );
+      },
+    );
+  }
+
+  Widget _buildInfoRow(String label, String val) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: GoogleFonts.inter(fontSize: 10, color: const Color(0xFF64748B))),
+          Text(val, style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600, color: const Color(0xFF334155))),
+        ],
+      ),
+    );
+  }
+
+  List<OrderItemModel> _groupDuplicateOrderItems(List<OrderItemModel> items) {
+    final Map<String, OrderItemModel> grouped = {};
+    for (var item in items) {
+      final key = "${item.productId}_${item.price}_${item.notes ?? ''}";
+      if (grouped.containsKey(key)) {
+        final existing = grouped[key]!;
+        grouped[key] = OrderItemModel(
+          id: existing.id,
+          orderId: existing.orderId,
+          productId: existing.productId,
+          productName: existing.productName,
+          productSinhalaName: existing.productSinhalaName,
+          quantity: existing.quantity + item.quantity,
+          price: existing.price,
+          notes: existing.notes,
+          status: existing.status,
+          isShortEat: existing.isShortEat,
+          extras: existing.extras,
+        );
+      } else {
+        grouped[key] = item;
+      }
+    }
+    return grouped.values.toList();
+  }
+
+  pw.Widget _buildPdfInfoRow(String label, String val, pw.Font font) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(vertical: 1.0),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          pw.Text(label, style: pw.TextStyle(font: font, fontSize: 8)),
+          pw.Text(val, style: pw.TextStyle(font: font, fontSize: 8, fontWeight: pw.FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+
+  pw.Widget _buildPdfDashedLine() {
+    return pw.Text(
+      '-' * 45,
+      style: pw.TextStyle(fontSize: 8, color: PdfColors.grey),
+    );
+  }
 }
 
 // Struct matching ReceiptData inside pos_screen.dart to avoid circular dependency
 class ReceiptData {
+  final int orderId;
   final String orderNumber;
   final String paymentMethod;
   final List<OrderItemModel> items;
@@ -1592,8 +2155,11 @@ class ReceiptData {
   final int tokenNumber;
   final String? cardLastDigits;
   final String? transactionRef;
+  final String cashierName;
+  final String createdAt;
 
   ReceiptData({
+    required this.orderId,
     required this.orderNumber,
     required this.paymentMethod,
     required this.items,
@@ -1608,5 +2174,7 @@ class ReceiptData {
     required this.tokenNumber,
     this.cardLastDigits,
     this.transactionRef,
+    required this.cashierName,
+    required this.createdAt,
   });
 }

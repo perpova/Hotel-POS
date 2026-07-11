@@ -2744,6 +2744,8 @@ class _POSScreenState extends State<POSScreen> {
                             status: 'delivered',
                             paymentStatus: paymentMethod == 'credit' ? 'unpaid' : 'paid',
                             paymentMethod: paymentMethod,
+                            receivedAmount: paymentMethod == 'cash' ? receivedVal : finalTot,
+                            changeAmount: paymentMethod == 'cash' ? changeVal : 0.00,
                           );
 
                           final int orderId = orderResult['orderId'] ?? 0;

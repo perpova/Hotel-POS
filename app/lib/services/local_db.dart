@@ -65,7 +65,9 @@ class LocalDB {
         card_tx_reference $textNullable,
         barcode $textType,
         created_at $textType,
-        sync_status $textType
+        sync_status $textType,
+        received_amount REAL DEFAULT 0.0,
+        change_amount REAL DEFAULT 0.0
       )
     ''');
 
@@ -212,7 +214,9 @@ class LocalDB {
         'card_tx_reference': order.cardTxReference,
         'barcode': order.barcode,
         'created_at': order.createdAt,
-        'sync_status': 'pending'
+        'sync_status': 'pending',
+        'received_amount': order.receivedAmount,
+        'change_amount': order.changeAmount
       });
 
       for (var item in order.items) {
@@ -288,6 +292,8 @@ class LocalDB {
           cardTxReference: map['card_tx_reference'] as String?,
           barcode: map['barcode'] as String,
           createdAt: map['created_at'] as String,
+          receivedAmount: toDouble(map['received_amount'] ?? 0.0),
+          changeAmount: toDouble(map['change_amount'] ?? 0.0),
           items: items,
         ));
       }

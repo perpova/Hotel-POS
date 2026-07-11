@@ -4,6 +4,10 @@ import 'package:intl/intl.dart';
 import '../theme.dart';
 import '../services/api_service.dart';
 import '../models/models.dart';
+import 'supplier_detail_screen.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 
 class ReportsScreen extends StatefulWidget {
   const ReportsScreen({Key? key}) : super(key: key);
@@ -15,6 +19,8 @@ class ReportsScreen extends StatefulWidget {
 class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   bool _loadingData = false;
+  DateTime? _selectedLogsDate;
+  DateTime? _selectedEodDate;
 
   // Data Caches
   Map<String, dynamic>? _eodData;
@@ -29,13 +35,8 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
   String _expenseCategory = 'ingredients';
   String _expenseSource = 'drawer';
 
-  // Supplier mock database
-  final List<Map<String, dynamic>> _suppliers = [
-    {'name': 'Aliya Flour Suppliers', 'outstanding': 45000.00, 'delivery': 'Weekly (Monday)'},
-    {'name': 'Coca-Cola Beverages', 'outstanding': 18500.00, 'delivery': 'Weekly (Thursday)'},
-    {'name': 'Keells Meat Providers', 'outstanding': 120000.00, 'delivery': 'Daily'},
-    {'name': 'Prima Flour Co.', 'outstanding': 0.00, 'delivery': 'Bi-weekly'},
-  ];
+  // Suppliers database
+  List<SupplierModel> _suppliers = [];
 
   @override
   void initState() {
@@ -64,7 +65,8 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
     try {
       switch (_tabController.index) {
         case 0: // EOD Summary
-          final eod = await APIService.instance.getEODSummary();
+          final String? dateParam = _selectedEodDate != null ? DateFormat('yyyy-MM-dd').format(_selectedEodDate!) : null;
+          final eod = await APIService.instance.getEODSummary(date: dateParam);
           if (mounted) _eodData = eod;
           break;
         case 1: // Expenses
@@ -72,14 +74,16 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
           if (mounted) _expenses = exp;
           break;
         case 2: // Suppliers
-          // Supplier database remains local mock
+          final sups = await APIService.instance.getSuppliers();
+          if (mounted) _suppliers = sups;
           break;
         case 3: // Historical Reports
           final hist = await APIService.instance.getHistoricalReport(_historicalPeriod);
           if (mounted) _historicalReports = hist;
           break;
         case 4: // Activity logs
-          final lgs = await APIService.instance.getActivityLogs();
+          final String? dateParam = _selectedLogsDate != null ? DateFormat('yyyy-MM-dd').format(_selectedLogsDate!) : null;
+          final lgs = await APIService.instance.getActivityLogs(date: dateParam);
           if (mounted) _logs = lgs;
           break;
       }
@@ -194,13 +198,76 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
     double totalSales = sales.fold(0.00, (sum, item) => sum + (double.tryParse(item['total'].toString()) ?? 0.00));
     double totalExpenses = expenses.fold(0.00, (sum, item) => sum + (double.tryParse(item['total'].toString()) ?? 0.00));
 
+    final dateStr = _selectedEodDate != null 
+        ? DateFormat('yyyy-MM-dd').format(_selectedEodDate!) 
+        : DateFormat('yyyy-MM-dd').format(DateTime.now());
+
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Today\'s Summary: ${DateFormat('yyyy-MM-dd').format(DateTime.now())}',
-            style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Summary for: $dateStr',
+                style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+              ),
+              Row(
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: _selectedEodDate ?? DateTime.now(),
+                        firstDate: DateTime(2025),
+                        lastDate: DateTime.now(),
+                      );
+                      if (picked != null) {
+                        setState(() {
+                          _selectedEodDate = picked;
+                        });
+                        _loadTabSpecificData();
+                      }
+                    },
+                    icon: const Icon(Icons.calendar_month, size: 16),
+                    label: Text(_selectedEodDate != null ? DateFormat('yyyy-MM-dd').format(_selectedEodDate!) : 'Select Date'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: AppTheme.primary,
+                      elevation: 0,
+                      side: BorderSide(color: AppTheme.primary),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    ),
+                  ),
+                  if (_selectedEodDate != null) ...[
+                    const SizedBox(width: 8),
+                    IconButton(
+                      icon: const Icon(Icons.clear, color: AppTheme.danger),
+                      onPressed: () {
+                        setState(() {
+                          _selectedEodDate = null;
+                        });
+                        _loadTabSpecificData();
+                      },
+                    ),
+                  ],
+                  const SizedBox(width: 12),
+                  ElevatedButton.icon(
+                    onPressed: _printEodSummary,
+                    icon: const Icon(Icons.print, size: 16),
+                    label: const Text('Print Summary'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primary,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
           const SizedBox(height: 20),
           Row(
@@ -528,65 +595,356 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Supplier Outstanding & Deliveries',
-          style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Supplier Outstanding & Deliveries',
+              style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+            ),
+            ElevatedButton.icon(
+              onPressed: () => _showAddEditSupplierDialog(),
+              icon: const Icon(Icons.add, size: 16),
+              label: const Text('Add Supplier'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 16),
         Expanded(
-          child: GridView.builder(
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
-              crossAxisSpacing: 16,
-              mainAxisSpacing: 16,
-              childAspectRatio: 1.8,
-            ),
-            itemCount: _suppliers.length,
-            itemBuilder: (context, index) {
-              final s = _suppliers[index];
-              return Card(
-                elevation: 0,
-                color: Colors.white,
-                shape: RoundedRectangleBorder(
-                  side: const BorderSide(color: Color(0xFFE2E8F0)),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(s['name'], style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Delivery Cycle', style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary)),
-                              const SizedBox(height: 4),
-                              Text(s['delivery'], style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textLightPrimary)),
-                            ],
-                          ),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text('Outstanding Bal', style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary)),
-                              const SizedBox(height: 4),
-                              Text('LKR ${s['outstanding'].toStringAsFixed(2)}', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.primary)),
-                            ],
-                          ),
-                        ],
+          child: _loadingData
+              ? Center(child: CircularProgressIndicator(color: AppTheme.primary))
+              : _suppliers.isEmpty
+                  ? Center(
+                      child: Text(
+                        'No suppliers added yet.',
+                        style: GoogleFonts.inter(color: AppTheme.textLightSecondary),
                       ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
+                    )
+                  : GridView.builder(
+                      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                        maxCrossAxisExtent: 380,
+                        crossAxisSpacing: 16,
+                        mainAxisSpacing: 16,
+                        childAspectRatio: 1.45,
+                      ),
+                      itemCount: _suppliers.length,
+                      itemBuilder: (context, index) {
+                        final s = _suppliers[index];
+                        return Card(
+                          elevation: 0,
+                          color: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            side: const BorderSide(color: Color(0xFFE2E8F0)),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: InkWell(
+                            onTap: () async {
+                              await Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => SupplierDetailScreen(supplier: s),
+                                ),
+                              );
+                              _loadTabSpecificData();
+                            },
+                            borderRadius: BorderRadius.circular(12),
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          s.name,
+                                          style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          IconButton(
+                                            icon: const Icon(Icons.edit, size: 16, color: Colors.blue),
+                                            padding: EdgeInsets.zero,
+                                            constraints: const BoxConstraints(),
+                                            onPressed: () => _showAddEditSupplierDialog(supplier: s),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          IconButton(
+                                            icon: const Icon(Icons.delete, size: 16, color: AppTheme.danger),
+                                            padding: EdgeInsets.zero,
+                                            constraints: const BoxConstraints(),
+                                            onPressed: () => _confirmDeleteSupplier(s),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                  const Spacer(),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text('Delivery Cycle', style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary)),
+                                          const SizedBox(height: 4),
+                                          Text(s.deliveryCycle, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textLightPrimary)),
+                                        ],
+                                      ),
+                                      Column(
+                                        crossAxisAlignment: CrossAxisAlignment.end,
+                                        children: [
+                                          Text('Outstanding Bal', style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary)),
+                                          const SizedBox(height: 4),
+                                          Text('LKR ${s.outstandingBalance.toStringAsFixed(2)}', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.primary)),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                  const Divider(height: 20, color: Color(0xFFE2E8F0)),
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: ElevatedButton.icon(
+                                      onPressed: () => _showPaySupplierDialog(s),
+                                      icon: const Icon(Icons.payment, size: 14),
+                                      label: const Text('Pay Supplier', style: TextStyle(fontSize: 12)),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: const Color(0xFF10B981),
+                                        foregroundColor: Colors.white,
+                                        elevation: 0,
+                                        padding: const EdgeInsets.symmetric(vertical: 8),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
         ),
       ],
+    );
+  }
+
+  void _showAddEditSupplierDialog({SupplierModel? supplier}) {
+    final isEdit = supplier != null;
+    final nameController = TextEditingController(text: supplier?.name ?? '');
+    final balanceController = TextEditingController(text: supplier != null ? supplier.outstandingBalance.toString() : '0.00');
+    final deliveryController = TextEditingController(text: supplier?.deliveryCycle ?? 'Weekly');
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(isEdit ? 'Edit Supplier' : 'Add Supplier', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameController,
+                  decoration: const InputDecoration(labelText: 'Supplier Name *'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: balanceController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Outstanding Balance (LKR)'),
+                  enabled: !isEdit,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: deliveryController,
+                  decoration: const InputDecoration(labelText: 'Delivery Cycle (e.g. Weekly, Daily)'),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final name = nameController.text.trim();
+                final balance = double.tryParse(balanceController.text) ?? 0.00;
+                final delivery = deliveryController.text.trim();
+
+                if (name.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Name is required'), backgroundColor: AppTheme.danger),
+                  );
+                  return;
+                }
+
+                try {
+                  if (isEdit) {
+                    await APIService.instance.updateSupplier(supplier.id, {
+                      'name': name,
+                      'delivery_cycle': delivery,
+                    });
+                  } else {
+                    await APIService.instance.createSupplier({
+                      'name': name,
+                      'outstanding_balance': balance,
+                      'delivery_cycle': delivery,
+                    });
+                  }
+                  Navigator.pop(context);
+                  _loadTabSpecificData();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(isEdit ? 'Supplier updated' : 'Supplier added'), backgroundColor: AppTheme.accent),
+                  );
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(e.toString()), backgroundColor: AppTheme.danger),
+                  );
+                }
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primary, foregroundColor: Colors.white),
+              child: Text(isEdit ? 'Update' : 'Add'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _confirmDeleteSupplier(SupplierModel supplier) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('Delete Supplier', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: AppTheme.danger)),
+          content: Text('Are you sure you want to delete "${supplier.name}"? This action cannot be undone.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                try {
+                  await APIService.instance.deleteSupplier(supplier.id);
+                  Navigator.pop(context);
+                  _loadTabSpecificData();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Supplier deleted'), backgroundColor: AppTheme.accent),
+                  );
+                } catch (e) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(e.toString()), backgroundColor: AppTheme.danger),
+                  );
+                }
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.danger, foregroundColor: Colors.white),
+              child: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showPaySupplierDialog(SupplierModel supplier) {
+    final amountController = TextEditingController();
+    final remarksController = TextEditingController();
+    String paymentSource = 'drawer';
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: Text('Pay Supplier - ${supplier.name}', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Outstanding: LKR ${supplier.outstandingBalance.toStringAsFixed(2)}', style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: AppTheme.primary)),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: amountController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'Payment Amount (LKR) *'),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: remarksController,
+                      decoration: const InputDecoration(labelText: 'Remarks / Invoice No'),
+                    ),
+                    const SizedBox(height: 16),
+                    Text('PAID FROM', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF475569))),
+                    const SizedBox(height: 6),
+                    DropdownButtonFormField<String>(
+                      value: paymentSource,
+                      items: const [
+                        DropdownMenuItem(value: 'drawer', child: Text('Drawer Cash (Logs Drawer Cashout)')),
+                        DropdownMenuItem(value: 'bank', child: Text('Bank Transfer / Check')),
+                      ],
+                      onChanged: (val) => setState(() => paymentSource = val!),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    final amountStr = amountController.text.trim();
+                    final amount = double.tryParse(amountStr) ?? 0.00;
+                    final remarks = remarksController.text.trim();
+
+                    if (amountStr.isEmpty || amount <= 0) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Please enter a valid positive payment amount'), backgroundColor: AppTheme.danger),
+                      );
+                      return;
+                    }
+
+                    try {
+                      await APIService.instance.paySupplier(supplier.id, amount, paymentSource, remarks);
+                      Navigator.pop(context);
+                      _loadTabSpecificData();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Payment recorded successfully'), backgroundColor: AppTheme.accent),
+                      );
+                    } catch (e) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(e.toString()), backgroundColor: AppTheme.danger),
+                      );
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF10B981), foregroundColor: Colors.white),
+                  child: const Text('Pay'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -662,12 +1020,88 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
   // TAB 5: USER ACTIVITY LOGS (AUDIT TRAIL)
   // ----------------------------------------------------
   Widget _buildLogsTab() {
+    final hasLogs = _logs.isNotEmpty;
+    final dateStr = _selectedLogsDate != null 
+        ? DateFormat('yyyy-MM-dd').format(_selectedLogsDate!) 
+        : 'All Logs';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'System Audit Log & Activity Trails',
-          style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'System Audit Log & Activity Trails',
+                  style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Filtered by: $dateStr',
+                  style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary),
+                ),
+              ],
+            ),
+            Row(
+              children: [
+                ElevatedButton.icon(
+                  onPressed: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: _selectedLogsDate ?? DateTime.now(),
+                      firstDate: DateTime(2025),
+                      lastDate: DateTime.now(),
+                    );
+                    if (picked != null) {
+                      setState(() {
+                        _selectedLogsDate = picked;
+                      });
+                      _loadTabSpecificData();
+                    }
+                  },
+                  icon: const Icon(Icons.calendar_month, size: 16),
+                  label: Text(_selectedLogsDate != null ? DateFormat('yyyy-MM-dd').format(_selectedLogsDate!) : 'Select Date'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: AppTheme.primary,
+                    elevation: 0,
+                    side: BorderSide(color: AppTheme.primary),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  ),
+                ),
+                if (_selectedLogsDate != null) ...[
+                  const SizedBox(width: 8),
+                  IconButton(
+                    icon: const Icon(Icons.clear, color: AppTheme.danger),
+                    onPressed: () {
+                      setState(() {
+                        _selectedLogsDate = null;
+                      });
+                      _loadTabSpecificData();
+                    },
+                  ),
+                ],
+                const SizedBox(width: 12),
+                ElevatedButton.icon(
+                  onPressed: hasLogs ? _printActivityLogs : null,
+                  icon: const Icon(Icons.print, size: 16),
+                  label: const Text('Print Logs'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primary,
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: Colors.grey[300],
+                    disabledForegroundColor: Colors.grey[600],
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
         const SizedBox(height: 16),
         Expanded(
@@ -732,5 +1166,215 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
         ),
       ],
     );
+  }
+
+  Future<void> _printActivityLogs() async {
+    try {
+      final doc = pw.Document();
+      
+      final headers = ['Time', 'User', 'Role', 'Action Type', 'Details'];
+      
+      final data = _logs.map((log) {
+        return [
+          log.timestamp.toString(),
+          log.username ?? 'Admin',
+          (log.role ?? 'admin').toUpperCase(),
+          log.actionType.toUpperCase(),
+          log.details
+        ];
+      }).toList();
+
+      final dateStr = _selectedLogsDate != null 
+          ? DateFormat('yyyy-MM-dd').format(_selectedLogsDate!) 
+          : 'All Time (Last 100 Logs)';
+
+      doc.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(32),
+          build: (pw.Context context) {
+            return pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text(
+                          'System Activity Logs & Audit Trail',
+                          style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
+                        ),
+                        pw.SizedBox(height: 4),
+                        pw.Text('Report Date / Scope: $dateStr'),
+                      ],
+                    ),
+                  ],
+                ),
+                pw.SizedBox(height: 20),
+                pw.Divider(),
+                pw.SizedBox(height: 10),
+                pw.Text('Generated on: ${DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now())}', style: const pw.TextStyle(fontSize: 10)),
+                pw.SizedBox(height: 20),
+                pw.Table.fromTextArray(
+                  headers: headers,
+                  data: data,
+                  border: pw.TableBorder.all(color: PdfColors.grey300),
+                  headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10),
+                  headerDecoration: const pw.BoxDecoration(color: PdfColors.grey100),
+                  cellStyle: const pw.TextStyle(fontSize: 9),
+                  cellHeight: 24,
+                  cellAlignments: {
+                    0: pw.Alignment.centerLeft,
+                    1: pw.Alignment.centerLeft,
+                    2: pw.Alignment.center,
+                    3: pw.Alignment.center,
+                    4: pw.Alignment.centerLeft,
+                  },
+                ),
+              ],
+            );
+          },
+        ),
+      );
+
+      await Printing.layoutPdf(
+        onLayout: (PdfPageFormat format) async => doc.save(),
+        name: 'Activity_Logs_${dateStr.replaceAll(' ', '_')}',
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to print activity logs: $e'), backgroundColor: AppTheme.danger),
+      );
+    }
+  }
+
+  Future<void> _printEodSummary() async {
+    try {
+      final doc = pw.Document();
+
+      final dateStr = _selectedEodDate != null 
+          ? DateFormat('yyyy-MM-dd').format(_selectedEodDate!) 
+          : DateFormat('yyyy-MM-dd').format(DateTime.now());
+
+      final sales = _eodData?['sales'] as List? ?? [];
+      final expenses = _eodData?['expenses'] as List? ?? [];
+      final creditSettlements = _eodData?['credit_settlements'] ?? 0.00;
+
+      double totalSales = sales.fold(0.00, (sum, item) => sum + (double.tryParse(item['total'].toString()) ?? 0.00));
+      double totalExpenses = expenses.fold(0.00, (sum, item) => sum + (double.tryParse(item['total'].toString()) ?? 0.00));
+
+      final salesHeaders = ['Payment Method / Count', 'Total Amount'];
+      final salesData = sales.map((s) {
+        return [
+          '${s['payment_method'].toString().toUpperCase()} (${s['count']} bills)',
+          'LKR ${(double.parse(s['total'].toString())).toStringAsFixed(2)}'
+        ];
+      }).toList();
+
+      final expensesHeaders = ['Expense Category', 'Total Amount'];
+      final expensesData = expenses.map((e) {
+        return [
+          e['category'].toString().toUpperCase(),
+          'LKR ${(double.parse(e['total'].toString())).toStringAsFixed(2)}'
+        ];
+      }).toList();
+
+      doc.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(32),
+          build: (pw.Context context) {
+            return pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text(
+                  'End of Day (EOD) Financial Summary',
+                  style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold),
+                ),
+                pw.SizedBox(height: 4),
+                pw.Text('Report Date: $dateStr'),
+                pw.Text('Generated At: ${DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now())}'),
+                pw.SizedBox(height: 20),
+                pw.Divider(),
+                pw.SizedBox(height: 15),
+
+                pw.Text('1. Sales Breakdown', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+                pw.SizedBox(height: 8),
+                pw.Table.fromTextArray(
+                  headers: salesHeaders,
+                  data: salesData,
+                  border: pw.TableBorder.all(color: PdfColors.grey300),
+                  headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10),
+                  headerDecoration: const pw.BoxDecoration(color: PdfColors.grey100),
+                  cellStyle: const pw.TextStyle(fontSize: 9),
+                  cellHeight: 24,
+                  cellAlignments: {
+                    0: pw.Alignment.centerLeft,
+                    1: pw.Alignment.centerRight,
+                  },
+                ),
+                pw.SizedBox(height: 8),
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text('Total Gross Sales:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
+                    pw.Text('LKR ${totalSales.toStringAsFixed(2)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11, color: PdfColors.red800)),
+                  ],
+                ),
+
+                pw.SizedBox(height: 24),
+                pw.Text('2. Expenses Summary', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+                pw.SizedBox(height: 8),
+                expensesData.isEmpty 
+                  ? pw.Text('No expenses recorded for this date.', style: const pw.TextStyle(fontSize: 9))
+                  : pw.Table.fromTextArray(
+                      headers: expensesHeaders,
+                      data: expensesData,
+                      border: pw.TableBorder.all(color: PdfColors.grey300),
+                      headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10),
+                      headerDecoration: const pw.BoxDecoration(color: PdfColors.grey100),
+                      cellStyle: const pw.TextStyle(fontSize: 9),
+                      cellHeight: 24,
+                      cellAlignments: {
+                        0: pw.Alignment.centerLeft,
+                        1: pw.Alignment.centerRight,
+                      },
+                    ),
+                pw.SizedBox(height: 8),
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text('Total Expenses:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
+                    pw.Text('LKR ${totalExpenses.toStringAsFixed(2)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11, color: PdfColors.red800)),
+                  ],
+                ),
+
+                pw.SizedBox(height: 24),
+                pw.Text('3. Credit Settlements Summary', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+                pw.SizedBox(height: 8),
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text('Credit Settlements Received:', style: const pw.TextStyle(fontSize: 10)),
+                    pw.Text('LKR ${creditSettlements.toStringAsFixed(2)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11, color: PdfColors.green800)),
+                  ],
+                ),
+              ],
+            );
+          },
+        ),
+      );
+
+      await Printing.layoutPdf(
+        onLayout: (PdfPageFormat format) async => doc.save(),
+        name: 'EOD_Summary_${dateStr.replaceAll('-', '_')}',
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to print EOD summary: $e'), backgroundColor: AppTheme.danger),
+      );
+    }
   }
 }
