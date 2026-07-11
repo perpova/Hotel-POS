@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -39,6 +40,7 @@ class MainLayout extends StatefulWidget {
 }
 
 class _MainLayoutState extends State<MainLayout> {
+  static bool _hasLaunchedQueueWindow = false;
   int _selectedIndex = 0;
   bool _isSidebarCollapsed = false;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
@@ -133,6 +135,19 @@ class _MainLayoutState extends State<MainLayout> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final controller = Provider.of<POSController>(context, listen: false);
+      final appSettings = Provider.of<AppSettingsController>(context, listen: false);
+
+      // Auto launch separate queue window on secondary display if setting is enabled
+      if (appSettings.extendQueueScreen && !_hasLaunchedQueueWindow) {
+        _hasLaunchedQueueWindow = true;
+        try {
+          final executable = Platform.resolvedExecutable;
+          Process.start(executable, ['--queue-screen']);
+        } catch (e) {
+          print('Auto-launch separate queue window error: $e');
+        }
+      }
+
       await controller.reloadEnvironment();
       controller.setupEventSubscription();
       if (controller.activeShift == null) {
@@ -789,18 +804,22 @@ class _MainLayoutState extends State<MainLayout> {
       );
     }
 
+    final isQueueExtended = _selectedIndex == 4 && appSettings.extendQueueScreen;
+    final isPosExtended = _selectedIndex == 1 && appSettings.extendPosScreen;
+    final isFullScreenMode = isQueueExtended || isPosExtended;
+
     return Scaffold(
       key: _scaffoldKey,
-      drawer: !isDesktop ? Drawer(child: buildSidebarContent()) : null,
+      drawer: (!isDesktop && !isFullScreenMode) ? Drawer(child: buildSidebarContent()) : null,
       body: Row(
         children: [
           // Sidebar on Desktop
-          if (isDesktop && !_isSidebarCollapsed)
+          if (isDesktop && !_isSidebarCollapsed && !isFullScreenMode)
             SizedBox(
               width: 240,
               child: buildSidebarContent(),
             ),
-          if (isDesktop && !_isSidebarCollapsed)
+          if (isDesktop && !_isSidebarCollapsed && !isFullScreenMode)
             const VerticalDivider(width: 1, color: Color(0xFFE2E8F0)),
 
           // Main Body Area
@@ -808,10 +827,11 @@ class _MainLayoutState extends State<MainLayout> {
             child: Column(
               children: [
                 // Top Header Bar
-                Container(
-                  height: 70,
-                  color: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                if (!isFullScreenMode)
+                  Container(
+                    height: 70,
+                    color: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: Row(
                     children: [
                       if (!isDesktop) ...[
@@ -1025,6 +1045,9 @@ class _MainLayoutState extends State<MainLayout> {
                               onChanged: (String? newValue) {
                                 if (newValue != null) {
                                   dashController.setLanguage(newValue);
+                                  try {
+                                    Provider.of<POSController>(context, listen: false).setVoiceLanguage(newValue);
+                                  } catch (_) {}
                                 }
                               },
                             ),

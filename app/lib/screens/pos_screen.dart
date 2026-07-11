@@ -138,6 +138,7 @@ class _POSScreenState extends State<POSScreen> {
   // LEFT: PRODUCTS AREA
   // ----------------------------------------------------
   Widget _buildProductsArea(POSController controller) {
+    final appSettings = Provider.of<AppSettingsController>(context);
     return Container(
       color: const Color(0xFFF8FAFC),
       padding: const EdgeInsets.all(16),
@@ -206,6 +207,28 @@ class _POSScreenState extends State<POSScreen> {
                   tooltip: 'Scan acknowledgement barcode',
                   padding: EdgeInsets.zero,
                   onPressed: () => _showBarcodeScanDialog(controller),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Container(
+                height: 46,
+                width: 46,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: IconButton(
+                  icon: Icon(
+                    appSettings.extendPosScreen ? Icons.fullscreen_exit_rounded : Icons.fullscreen_rounded,
+                    color: AppTheme.primary,
+                    size: 20,
+                  ),
+                  tooltip: appSettings.extendPosScreen ? 'Exit Full Screen' : 'Go Full Screen',
+                  padding: EdgeInsets.zero,
+                  onPressed: () async {
+                    await appSettings.toggleExtendPosScreen();
+                  },
                 ),
               ),
             ],
@@ -1280,11 +1303,9 @@ class _POSScreenState extends State<POSScreen> {
         cashierName: APIService.instance.currentUser?.name ?? 'Admin',
       );
 
-      final lang = Provider.of<DashboardController>(context, listen: false).selectedLanguage;
-      final bool isSinhala = lang == 'Sinhala';
-      String speakText = isSinhala ? "නව මුළුතැන්ගෙයි ඇණවුම: " : "New kitchen order: ";
-      speakText += _buildKOTVoiceMessage(newKotItems, isSinhala, controller);
-      controller.speakVoiceMessage(speakText, language: lang);
+      String speakText = "නව මුළුතැන්ගෙයි ඇණවුම: ";
+      speakText += controller.buildSinhalaKOTVoiceMessage(newKotItems);
+      controller.speakVoiceMessage(speakText, language: 'Sinhala');
 
       controller.markKotItemsAsSent();
 
@@ -2785,7 +2806,7 @@ class _POSScreenState extends State<POSScreen> {
                             final orderResult = await controller.placeOrder(
                               printKOT: true,
                               printAck: true,
-                              status: 'pending',
+                              status: controller.orderType == 'dine_in' ? 'delivered' : 'pending',
                               paymentStatus: paymentMethod == 'credit' ? 'unpaid' : 'paid',
                               paymentMethod: paymentMethod,
                               receivedAmount: paymentMethod == 'cash' ? receivedVal : finalTot,
@@ -2814,52 +2835,18 @@ class _POSScreenState extends State<POSScreen> {
                             cashierName: cashierUsername,
                           );
 
-                          // TTS voice notification to kitchen (KOT printed items only, in Sinhala)
-                          final kotItems = itemsCopy.where((item) {
+                          final isDineIn = controller.orderType == 'dine_in';
+                          final bool hasKotItems = itemsCopy.any((item) {
                             final p = controller.products.firstWhere(
                               (prod) => prod.id == item.productId,
-                              orElse: () => ProductModel(
-                                id: 0,
-                                name: '',
-                                categoryId: 0,
-                                price: 0,
-                                cost: 0,
-                                activePrice: 0,
-                                isHappyHour: false,
-                                stockQty: 0,
-                                minStockLevel: 0,
-                                isShortEat: false,
-                                isKotItem: false,
-                              ),
+                              orElse: () => ProductModel(id: 0, name: '', categoryId: 0, price: 0, cost: 0, activePrice: 0, isHappyHour: false, stockQty: 0, minStockLevel: 0, isShortEat: false, isKotItem: false),
                             );
                             return p.id != 0 && p.isKotItem;
-                          }).toList();
+                          });
 
-                          if (kotItems.isNotEmpty) {
-                            final lang = Provider.of<DashboardController>(this.context, listen: false).selectedLanguage;
-                            final bool isSinhala = lang == 'Sinhala';
-                            
-                            String ttsMsg = '';
-                            if (isSinhala) {
-                              final String typeText = tblName != null && tblName.isNotEmpty
-                                  ? "මේසය $tblName"
-                                  : (controller.orderType == 'takeaway' ? "ටේක් අවේ" : "ඩිලිවරි");
-                              ttsMsg = "ගෙවීම් සම්පූර්ණයි. බිල්පත මුද්‍රණය කරන ලදී. $typeText සඳහා නව ඇණවුම: ";
-                            } else {
-                              final String typeText = tblName != null && tblName.isNotEmpty
-                                  ? "Table $tblName"
-                                  : (controller.orderType == 'takeaway' ? "Takeaway" : "Delivery");
-                              ttsMsg = "Payment complete. Bill printed. New order for $typeText: ";
-                            }
-                            
-                            ttsMsg += _buildKOTVoiceMessage(kotItems, isSinhala, controller);
-                            controller.speakVoiceMessage(ttsMsg, language: lang);
-                          }
-
-                          final isDineIn = controller.orderType == 'dine_in';
                           _showReceiptDialog(
                             receiptData,
-                            showKOT: !isDineIn,
+                            showKOT: !isDineIn && hasKotItems,
                             showInvoice: true,
                           );
                           _tokenNoController.clear();
@@ -2936,9 +2923,9 @@ class _POSScreenState extends State<POSScreen> {
   Widget _buildKeypad(Function(String) onKeyPress) {
     final List<String> keys = [
       '1', '2', '3', '⌫',
-      '4', '5', '6', '',
+      '4', '5', '6', '.',
       '7', '8', '9', '',
-      '00', '0', '.', 'Clear',
+      '000', '00', '0', 'Clear',
     ];
 
     return GridView.builder(
@@ -3211,76 +3198,7 @@ class _POSScreenState extends State<POSScreen> {
     return grouped.values.toList();
   }
 
-  String _buildKOTVoiceMessage(List<OrderItemModel> items, bool isSinhala, POSController controller) {
-    String msg = '';
-    for (var item in items) {
-      final itemName = isSinhala ? (item.productSinhalaName ?? item.productName) : item.productName;
-      String itemDetails = '';
-      
-      if (item.notes != null && item.notes!.isNotEmpty) {
-        final parts = item.notes!.split(' | ');
-        final List<String> detailsList = [];
-        for (var part in parts) {
-          if (part.startsWith('Size: ')) {
-            final sizeVal = part.replaceFirst('Size: ', '');
-            detailsList.add("$sizeVal size");
-          } else if (part.startsWith('Extras: ')) {
-            final extrasVal = part.replaceFirst('Extras: ', '');
-            // Parse name and quantity from extras (e.g. egg (x1) or egg (x2))
-            final regex = RegExp(r"^(.*?)\s*\(x(\d+)\)$");
-            final match = regex.firstMatch(extrasVal);
-            if (match != null) {
-              final extraName = match.group(1);
-              final qtyVal = int.tryParse(match.group(2) ?? '1') ?? 1;
-              if (isSinhala) {
-                final qtySinhala = controller.getSinhalaQuantityText(qtyVal);
-                detailsList.add("extra $extraName $qtySinhala");
-              } else {
-                final qtyEng = _getEnglishQuantityText(qtyVal);
-                detailsList.add("$qtyEng extra $extraName");
-              }
-            } else {
-              if (isSinhala) {
-                detailsList.add("extra $extrasVal");
-              } else {
-                detailsList.add("with extra $extrasVal");
-              }
-            }
-          } else if (part.startsWith('Instructions: ')) {
-            final instVal = part.replaceFirst('Instructions: ', '');
-            detailsList.add(instVal);
-          }
-        }
-        if (detailsList.isNotEmpty) {
-          itemDetails = " (${detailsList.join(', ')})";
-        }
-      }
 
-      if (isSinhala) {
-        final qtyText = controller.getSinhalaQuantityText(item.quantity);
-        msg += "$itemName $qtyText$itemDetails, ";
-      } else {
-        msg += "${item.quantity} $itemName$itemDetails, ";
-      }
-    }
-    return msg;
-  }
-
-  String _getEnglishQuantityText(int qty) {
-    switch (qty) {
-      case 1: return "one";
-      case 2: return "two";
-      case 3: return "three";
-      case 4: return "four";
-      case 5: return "five";
-      case 6: return "six";
-      case 7: return "seven";
-      case 8: return "eight";
-      case 9: return "nine";
-      case 10: return "ten";
-      default: return "$qty";
-    }
-  }
 
   Future<Uint8List> _generateKOTPdfBytes(ReceiptData data, POSController controller) async {
     final pdf = pw.Document();

@@ -141,60 +141,67 @@ class POSController extends ChangeNotifier {
   }
 
   Future<void> speakVoiceMessage(String text, {String? language}) async {
-    final activeLang = language ?? voiceLanguage;
-    final bool isSinhala = activeLang == 'Sinhala';
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final activeLang = language ?? voiceLanguage;
+      final bool isSinhala = activeLang == 'Sinhala' || RegExp(r'[\u0d80-\u0dff]').hasMatch(text);
 
-    if (isSinhala) {
-      // Check if Sinhala is supported locally on the OS
-      bool localSinhalaSupported = false;
-      try {
-        final List<dynamic> langs = await _tts.getLanguages;
-        for (var l in langs) {
-          if (l.toString().toLowerCase().startsWith("si")) {
-            localSinhalaSupported = true;
-            break;
-          }
-        }
-      } catch (_) {}
-
-      if (localSinhalaSupported) {
+      if (isSinhala) {
+        // Check if Sinhala is supported locally on the OS
+        bool localSinhalaSupported = false;
         try {
-          await _tts.setLanguage("si-LK");
-          await _tts.speak(text);
-        } catch (e) {
-          print('TTS Error: $e');
+          final List<dynamic> langs = await _tts.getLanguages;
+          for (var l in langs) {
+            if (l.toString().toLowerCase().startsWith("si")) {
+              localSinhalaSupported = true;
+              break;
+            }
+          }
+        } catch (_) {}
+
+        if (localSinhalaSupported) {
+          try {
+            await _tts.setLanguage("si-LK");
+            await _tts.speak(text);
+          } catch (e) {
+            print('TTS Error: $e');
+          }
+        } else {
+          // Fallback: Online Google TTS API played via native Windows MediaPlayer
+          try {
+            final encodedText = Uri.encodeComponent(text);
+            final url = 'https://translate.google.com/translate_tts?ie=UTF-8&tl=si&client=tw-ob&q=$encodedText';
+            final response = await http.get(
+              Uri.parse(url),
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+              },
+            );
+            if (response.statusCode == 200) {
+              final tempDir = Directory.systemTemp;
+              final tempFile = File('${tempDir.path}${Platform.pathSeparator}tts_speech.mp3');
+              await tempFile.writeAsBytes(response.bodyBytes);
+              await _playMp3Windows(tempFile.path);
+            } else {
+              print('Google TTS Request failed: ${response.statusCode}');
+            }
+          } catch (e) {
+            print('Google TTS Fallback Error: $e');
+            // Final fallback: try standard TTS anyway
+            try {
+              await _tts.speak(text);
+            } catch (_) {}
+          }
         }
       } else {
-        // Fallback: Online Google TTS API played via native Windows MediaPlayer
+        // English TTS voice
         try {
-          final encodedText = Uri.encodeComponent(text);
-          final url = 'https://translate.google.com/translate_tts?ie=UTF-8&tl=si&client=tw-ob&q=$encodedText';
-          final response = await http.get(Uri.parse(url));
-          if (response.statusCode == 200) {
-            final tempDir = Directory.systemTemp;
-            final tempFile = File('${tempDir.path}${Platform.pathSeparator}tts_speech.mp3');
-            await tempFile.writeAsBytes(response.bodyBytes);
-            await _playMp3Windows(tempFile.path);
-          } else {
-            print('Google TTS Request failed: ${response.statusCode}');
-          }
+          await _tts.setLanguage("en-US");
+          await _tts.speak(text);
         } catch (e) {
-          print('Google TTS Fallback Error: $e');
-          // Final fallback: try standard TTS anyway
-          try {
-            await _tts.speak(text);
-          } catch (_) {}
+          print('English TTS Error: $e');
         }
       }
-    } else {
-      // English TTS voice
-      try {
-        await _tts.setLanguage("en-US");
-        await _tts.speak(text);
-      } catch (e) {
-        print('English TTS Error: $e');
-      }
-    }
+    });
   }
 
   Future<void> _playMp3Windows(String filePath) async {
@@ -206,6 +213,94 @@ class POSController extends ChangeNotifier {
     } catch (e) {
       print('Error playing audio via PowerShell: $e');
     }
+  }
+
+  String buildSinhalaKOTVoiceMessage(List<dynamic> items) {
+    const Map<String, String> ingredientTranslations = {
+      'egg': 'බිත්තර',
+      'eggs': 'බිත්තර',
+      'cheese': 'චීස්',
+      'chicken': 'චිකන්',
+      'sausage': 'සොසේජස්',
+      'sausages': 'සොසේජස්',
+      'fish': 'මාළු',
+      'vegetable': 'එළවළු',
+      'vegetables': 'එළවළු',
+      'onion': 'ලූණු',
+      'onions': 'ලූණු',
+      'chilli': 'මිරිස්',
+      'chili': 'මිරිස්',
+      'tomato': 'තක්කාලි',
+      'tomatoes': 'තක්කාලි',
+    };
+
+    String msg = '';
+    for (var item in items) {
+      final int productId = item is Map
+          ? (int.tryParse(item['product_id']?.toString() ?? '') ?? 0)
+          : item.productId;
+      
+      final p = products.firstWhere(
+        (prod) => prod.id == productId,
+        orElse: () => ProductModel(id: 0, name: '', categoryId: 0, price: 0, cost: 0, activePrice: 0, isHappyHour: false, stockQty: 0, minStockLevel: 0, isShortEat: false),
+      );
+      
+      final String name = p.id != 0 && p.sinhalaName != null && p.sinhalaName!.isNotEmpty
+          ? p.sinhalaName!
+          : (item is Map 
+              ? (item['product_sinhala_name'] ?? item['product_name'] ?? '') 
+              : (item.productSinhalaName ?? item.productName));
+      
+      final int qty = item is Map
+          ? (int.tryParse(item['quantity']?.toString() ?? '1') ?? 1)
+          : item.quantity;
+          
+      final String? notes = item is Map
+          ? item['notes']?.toString()
+          : item.notes;
+
+      String itemDetails = '';
+      if (notes != null && notes.isNotEmpty) {
+        final parts = notes.split(' | ');
+        final List<String> detailsList = [];
+        for (var part in parts) {
+          if (part.startsWith('Size: ')) {
+            final sizeVal = part.replaceFirst('Size: ', '');
+            String sizeSinhala = sizeVal;
+            if (sizeVal.toLowerCase() == 'large') sizeSinhala = 'ලොකු';
+            else if (sizeVal.toLowerCase() == 'medium') sizeSinhala = 'මධ්‍යම';
+            else if (sizeVal.toLowerCase() == 'small') sizeSinhala = 'කුඩා';
+            detailsList.add("$sizeSinhala ප්‍රමාණය");
+          } else if (part.startsWith('Extras: ')) {
+            final extrasVal = part.replaceFirst('Extras: ', '');
+            final regex = RegExp(r"^(.*?)\s*\(x(\d+)\)$");
+            final match = regex.firstMatch(extrasVal);
+            
+            String extraName = extrasVal;
+            int qtyVal = 1;
+            if (match != null) {
+              extraName = match.group(1) ?? extrasVal;
+              qtyVal = int.tryParse(match.group(2) ?? '1') ?? 1;
+            }
+            
+            final cleanExtraKey = extraName.trim().toLowerCase();
+            final translatedName = ingredientTranslations[cleanExtraKey] ?? extraName;
+            final qtySinhala = getSinhalaQuantityText(qtyVal);
+            detailsList.add("$translatedName $qtySinhala වැඩිපුර");
+          } else if (part.startsWith('Instructions: ')) {
+            final instVal = part.replaceFirst('Instructions: ', '');
+            detailsList.add(instVal);
+          }
+        }
+        if (detailsList.isNotEmpty) {
+          itemDetails = " (${detailsList.join(', ')})";
+        }
+      }
+
+      final qtyText = getSinhalaQuantityText(qty);
+      msg += "$name $qtyText$itemDetails, ";
+    }
+    return msg;
   }
 
   String getSinhalaQuantityText(int qty) {
@@ -335,7 +430,7 @@ class POSController extends ChangeNotifier {
           
           // Filter items by checking if the product is a KOT item
           final kotItems = items.where((i) {
-            final productId = i['product_id'];
+            final productId = int.tryParse(i['product_id']?.toString() ?? '') ?? 0;
             final p = products.firstWhere(
               (prod) => prod.id == productId,
               orElse: () => ProductModel(
@@ -357,32 +452,7 @@ class POSController extends ChangeNotifier {
           
           if (kotItems.isNotEmpty) {
             String msg = "නව මුළුතැන්ගෙයි ඇණවුම: ";
-            for (var k in kotItems) {
-              final productId = k['product_id'];
-              final p = products.firstWhere(
-                (prod) => prod.id == productId,
-                orElse: () => ProductModel(
-                  id: 0,
-                  name: k['product_name'] ?? '',
-                  sinhalaName: k['product_sinhala_name'] ?? k['product_name'] ?? '',
-                  categoryId: 0,
-                  price: 0,
-                  cost: 0,
-                  activePrice: 0,
-                  isHappyHour: false,
-                  stockQty: 0,
-                  minStockLevel: 0,
-                  isShortEat: false,
-                  isKotItem: false,
-                ),
-              );
-              final itemName = p.sinhalaName != null && p.sinhalaName!.isNotEmpty
-                  ? p.sinhalaName
-                  : p.name;
-              final qtyVal = int.tryParse(k['quantity'].toString()) ?? 1;
-              final qtyText = getSinhalaQuantityText(qtyVal);
-              msg += "$itemName $qtyText. ";
-            }
+            msg += buildSinhalaKOTVoiceMessage(kotItems);
             speakVoiceMessage(msg);
           }
           break;
@@ -408,9 +478,25 @@ class POSController extends ChangeNotifier {
         
         // Restore Dine-In tables state from active unpaid orders (e.g. after a power cut or restart)
         final activeDineInOrders = activeOrders.where((o) => o.orderType == 'dine_in' && o.tableId != null).toList();
+        
+        // Track active table IDs to remove inactive ones
+        final Set<int> activeTableIds = activeDineInOrders.map((o) => o.tableId!).toSet();
+        
+        // 1. Clear inactive tables
+        final List<int> currentTableIds = tableCarts.keys.toList();
+        for (var tid in currentTableIds) {
+          if (!activeTableIds.contains(tid)) {
+            tableCarts.remove(tid);
+            tableActiveOrderIds.remove(tid);
+            tableStewards.remove(tid);
+            tableStatuses[tid] = 'empty';
+          }
+        }
+        
+        // 2. Restore/Update active tables
         for (var o in activeDineInOrders) {
           final tid = o.tableId!;
-          if (!tableCarts.containsKey(tid) || tableCarts[tid]!.isEmpty) {
+          if (!tableCarts.containsKey(tid) || tableCarts[tid]!.isEmpty || tableActiveOrderIds[tid] != o.id) {
             final items = await _api.getOrderItems(o.id!);
             tableCarts[tid] = items;
             tableActiveOrderIds[tid] = o.id!;

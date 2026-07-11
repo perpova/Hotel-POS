@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:async';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
@@ -6,6 +7,7 @@ import 'package:barcode_widget/barcode_widget.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../pos_controller.dart';
+import '../controllers/app_settings_controller.dart';
 import '../theme.dart';
 import '../models.dart';
 import '../api_service.dart';
@@ -13,7 +15,8 @@ import '../widgets/image_helper.dart';
 import 'package:intl/intl.dart';
 
 class OrderQueueScreen extends StatefulWidget {
-  const OrderQueueScreen({Key? key}) : super(key: key);
+  final bool isSeparateWindow;
+  const OrderQueueScreen({Key? key, this.isSeparateWindow = false}) : super(key: key);
 
   @override
   State<OrderQueueScreen> createState() => _OrderQueueScreenState();
@@ -41,6 +44,16 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
     _startPromoSlideTimer();
     _startCycleTimer();
     HardwareKeyboard.instance.addHandler(_handleKeyEvent);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        final controller = Provider.of<POSController>(context, listen: false);
+        await controller.reloadEnvironment();
+        controller.setupEventSubscription();
+      } catch (e) {
+        print('OrderQueueScreen init controller error: $e');
+      }
+    });
   }
 
   @override
@@ -263,6 +276,7 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
 
   Widget _buildQueueScreen(List<OrderModel> preparingOrders, List<OrderModel> readyOrders) {
     final controller = Provider.of<POSController>(context, listen: false);
+    final appSettings = Provider.of<AppSettingsController>(context);
     final activeBanners = _getActiveBanners();
     final hasPromos = activeBanners.isNotEmpty || controller.happyHours.isNotEmpty;
 
@@ -275,13 +289,34 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'CUSTOMER ORDER STATUS',
-                style: GoogleFonts.outfit(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'CUSTOMER ORDER STATUS',
+                    style: GoogleFonts.outfit(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  IconButton(
+                    icon: Icon(
+                      widget.isSeparateWindow ? Icons.close_rounded : (appSettings.extendQueueScreen ? Icons.fullscreen_exit_rounded : Icons.fullscreen_rounded),
+                      color: Colors.white70,
+                      size: 20,
+                    ),
+                    tooltip: widget.isSeparateWindow ? 'Close Window' : (appSettings.extendQueueScreen ? 'Exit Full Screen' : 'Go Full Screen'),
+                    onPressed: () async {
+                      if (widget.isSeparateWindow) {
+                        exit(0);
+                      } else {
+                        await appSettings.toggleExtendQueueScreen();
+                      }
+                    },
+                  ),
+                ],
               ),
               Row(
                 children: [

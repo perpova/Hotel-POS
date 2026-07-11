@@ -7,8 +7,9 @@ import 'controllers/dashboard_controller.dart';
 import 'controllers/app_settings_controller.dart';
 import 'screens/login_screen.dart';
 import 'screens/main_layout.dart';
+import 'screens/order_queue_screen.dart';
 
-void main() async {
+void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Initialize services
@@ -19,6 +20,8 @@ void main() async {
   final appSettings = AppSettingsController();
   await appSettings.init();
 
+  final isQueueScreenMode = args.contains('--queue-screen');
+
   runApp(
     MultiProvider(
       providers: [
@@ -26,13 +29,14 @@ void main() async {
         ChangeNotifierProvider(create: (_) => DashboardController()),
         ChangeNotifierProvider<AppSettingsController>.value(value: appSettings),
       ],
-      child: const HotelPOSApp(),
+      child: HotelPOSApp(isQueueScreenMode: isQueueScreenMode),
     ),
   );
 }
 
 class HotelPOSApp extends StatelessWidget {
-  const HotelPOSApp({Key? key}) : super(key: key);
+  final bool isQueueScreenMode;
+  const HotelPOSApp({Key? key, this.isQueueScreenMode = false}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -45,7 +49,9 @@ class HotelPOSApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       // Automatic initial route redirection based on Auth State
-      home: api.isAuthenticated ? const MainLayout() : const LoginScreen(),
+      home: isQueueScreenMode
+          ? const OrderQueueScreen(isSeparateWindow: true)
+          : (api.isAuthenticated ? const MainLayout() : const LoginScreen()),
     );
   }
 }

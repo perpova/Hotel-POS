@@ -24,9 +24,45 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
 
   project.set_dart_entrypoint_arguments(std::move(command_line_arguments));
 
+  bool is_queue_screen = false;
+  if (command_line != nullptr && wcsstr(command_line, L"--queue-screen") != nullptr) {
+    is_queue_screen = true;
+  }
+
   FlutterWindow window(project);
   Win32Window::Point origin(10, 10);
   Win32Window::Size size(1280, 720);
+
+  if (is_queue_screen) {
+    struct MonitorData {
+      bool found_second = false;
+      RECT second_rect = {0, 0, 0, 0};
+    };
+
+    struct MonitorEnumHelper {
+      static BOOL CALLBACK MonitorEnumProc(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMonitor, LPARAM dwData) {
+        MonitorData* data = reinterpret_cast<MonitorData*>(dwData);
+        MONITORINFO info = {};
+        info.cbSize = sizeof(info);
+        if (GetMonitorInfo(hMonitor, &info)) {
+          if (!(info.dwFlags & MONITORINFOF_PRIMARY)) {
+            data->found_second = true;
+            data->second_rect = info.rcMonitor;
+            return FALSE; // Stop enumeration
+          }
+        }
+        return TRUE;
+      }
+    };
+
+    MonitorData data;
+    EnumDisplayMonitors(nullptr, nullptr, MonitorEnumHelper::MonitorEnumProc, reinterpret_cast<LPARAM>(&data));
+    if (data.found_second) {
+      origin.x = data.second_rect.left + 10;
+      origin.y = data.second_rect.top + 10;
+    }
+  }
+
   if (!window.Create(L"hotel_pos", origin, size)) {
     return EXIT_FAILURE;
   }

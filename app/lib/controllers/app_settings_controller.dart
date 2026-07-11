@@ -23,6 +23,8 @@ class AppSettingsController extends ChangeNotifier {
   String? _faviconBase64;    // favicon / near-icon logo
   String? _footerLogoBase64;
   bool _cartOnLeft = false;
+  bool _extendQueueScreen = false;
+  bool _extendPosScreen = false;
 
   // ── Branches ───────────────────────────────────────────────────────────────
   List<BranchItem> _branches = [];
@@ -43,6 +45,8 @@ class AppSettingsController extends ChangeNotifier {
   String? get faviconBase64  => _faviconBase64;
   String? get footerLogoBase64 => _footerLogoBase64;
   bool get cartOnLeft        => _cartOnLeft;
+  bool get extendQueueScreen => _extendQueueScreen;
+  bool get extendPosScreen   => _extendPosScreen;
 
   List<BranchItem> get branches => List.unmodifiable(_branches);
 
@@ -69,6 +73,8 @@ class AppSettingsController extends ChangeNotifier {
     _faviconBase64    = prefs.getString('favicon_base64');
     _footerLogoBase64 = prefs.getString('footer_logo_base64');
     _cartOnLeft       = prefs.getBool('cart_on_left') ?? false;
+    _extendQueueScreen = prefs.getBool('extend_queue_screen') ?? false;
+    _extendPosScreen   = prefs.getBool('extend_pos_screen') ?? false;
 
     final branchJson = prefs.getString('branches_json');
     if (branchJson != null) {
@@ -172,6 +178,20 @@ class AppSettingsController extends ChangeNotifier {
     _cartOnLeft = !_cartOnLeft;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('cart_on_left', _cartOnLeft);
+    notifyListeners();
+  }
+
+  Future<void> toggleExtendQueueScreen() async {
+    _extendQueueScreen = !_extendQueueScreen;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('extend_queue_screen', _extendQueueScreen);
+    notifyListeners();
+  }
+
+  Future<void> toggleExtendPosScreen() async {
+    _extendPosScreen = !_extendPosScreen;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('extend_pos_screen', _extendPosScreen);
     notifyListeners();
   }
 }

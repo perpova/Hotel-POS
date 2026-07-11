@@ -1937,9 +1937,9 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
         
         // Update Table Status if Dine-in
         if (order_type === 'dine_in' && table_id) {
-            const tableStatus = payment_status === 'paid' ? 'empty' : (ack_printed ? 'billing' : 'seated');
-            const currentOrderIdParam = payment_status === 'paid' ? null : newOrderId;
-            const stewardParam = payment_status === 'paid' ? null : steward_name;
+            const tableStatus = (payment_status === 'paid' || status === 'delivered') ? 'empty' : (ack_printed ? 'billing' : 'seated');
+            const currentOrderIdParam = (payment_status === 'paid' || status === 'delivered') ? null : newOrderId;
+            const stewardParam = (payment_status === 'paid' || status === 'delivered') ? null : steward_name;
             await conn.query(
                 'UPDATE dining_tables SET status = ?, current_order_id = ?, steward_name = ? WHERE id = ?',
                 [tableStatus, currentOrderIdParam, stewardParam, table_id]
@@ -2002,10 +2002,11 @@ app.put('/api/orders/:id', authenticateToken, async (req, res) => {
         params.push(id);
         await db.query(`UPDATE orders SET ${updateFields.join(', ')} WHERE id = ?`, params);
         
-        const [updatedOrder] = await db.query('SELECT * FROM orders WHERE id = ?', [id]);
+        const [updatedOrderRows] = await db.query('SELECT * FROM orders WHERE id = ?', [id]);
+        const updatedOrder = updatedOrderRows[0];
         
         // If Dine-in Table, sync table state
-        if (updatedOrder.table_id) {
+        if (updatedOrder && updatedOrder.table_id) {
             const tableStatus = updatedOrder.payment_status === 'paid' ? 'empty' : (updatedOrder.ack_printed ? 'billing' : 'seated');
             const orderParam = updatedOrder.payment_status === 'paid' ? null : updatedOrder.id;
             const stewardParam = updatedOrder.payment_status === 'paid' ? null : updatedOrder.steward_name;
@@ -2013,18 +2014,18 @@ app.put('/api/orders/:id', authenticateToken, async (req, res) => {
                 'UPDATE dining_tables SET status = ?, current_order_id = ?, steward_name = ? WHERE id = ?',
                 [tableStatus, orderParam, stewardParam, updatedOrder.table_id]
             );
-            const [tbl] = await db.query('SELECT * FROM dining_tables WHERE id = ?', [updatedOrder.table_id]);
-            broadcast({ type: 'table_status_changed', data: tbl });
+            const [tblRows] = await db.query('SELECT * FROM dining_tables WHERE id = ?', [updatedOrder.table_id]);
+            broadcast({ type: 'table_status_changed', data: tblRows[0] });
         }
 
         // Log payment or status changes
-        if (payment_status === 'paid') {
+        if (payment_status === 'paid' && updatedOrder) {
             await logAudit('pay_order', 'orders', id, `Order ${updatedOrder.order_number} marked as PAID via ${updatedOrder.payment_method || 'N/A'}. Total: LKR ${updatedOrder.total}`, req.user.id);
-        } else if (status && status !== 'cancelled') {
+        } else if (status && status !== 'cancelled' && updatedOrder) {
             await logAudit('modify_bill', 'orders', id, `Order ${updatedOrder.order_number} status updated to ${status.toUpperCase()}.`, req.user.id);
         }
         
-        if (status === 'cancelled') {
+        if (status === 'cancelled' && updatedOrder) {
             // Restore inventory if cancelled
             const items = await db.query('SELECT * FROM order_items WHERE order_id = ?', [id]);
             for (const item of items) {

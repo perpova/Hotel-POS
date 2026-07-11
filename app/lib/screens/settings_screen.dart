@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -17,7 +18,7 @@ class SettingsScreen extends StatefulWidget {
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
-enum _SettingsTab { company, theme, branches, editProfile, changePassword, rolesPermissions, connection }
+enum _SettingsTab { company, theme, branches, editProfile, changePassword, rolesPermissions, connection, externalDisplay }
 
 class _SettingsScreenState extends State<SettingsScreen> {
   _SettingsTab _activeTab = _SettingsTab.company;
@@ -118,6 +119,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       const Divider(height: 1, color: Color(0xFFF1F5F9)),
                       _section('SYSTEM'),
                       _item(Icons.settings_ethernet,     'API Connection',   _SettingsTab.connection),
+                      _item(Icons.monitor,               'External Display', _SettingsTab.externalDisplay),
                     ],
                   ),
                 ),
@@ -187,6 +189,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _SettingsTab.changePassword   => 'Change Password',
     _SettingsTab.rolesPermissions => 'Roles & Permissions',
     _SettingsTab.connection       => 'API Connection',
+    _SettingsTab.externalDisplay  => 'External Display',
   };
 
   Widget _buildContent() => switch (_activeTab) {
@@ -197,6 +200,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _SettingsTab.changePassword   => _buildChangePassword(),
     _SettingsTab.rolesPermissions => const RolesPermissionsContent(showHeader: false),
     _SettingsTab.connection       => _buildConnection(),
+    _SettingsTab.externalDisplay  => _buildExternalDisplay(),
   };
 
   // ── Edit Profile ─────────────────────────────────────────────────────────
@@ -351,6 +355,72 @@ class _SettingsScreenState extends State<SettingsScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
     ),
   );
+
+  Widget _buildExternalDisplay() {
+    final appSettings = context.watch<AppSettingsController>();
+    return SingleChildScrollView(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('External Display & Queue Window', style: GoogleFonts.outfit(fontSize: 17, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
+        const Divider(color: Color(0xFFE2E8F0)),
+        const SizedBox(height: 8),
+        Text('Configure the Order Queue display on a secondary customer monitor (connected via HDMI).',
+            style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
+        const SizedBox(height: 24),
+
+        // Auto launch option
+        Row(children: [
+          Text('Open Queue in Separate Window:', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textLightPrimary)),
+          const SizedBox(width: 16),
+          Switch(
+            value: appSettings.extendQueueScreen,
+            activeColor: AppTheme.primary,
+            onChanged: (val) async {
+              await appSettings.toggleExtendQueueScreen();
+            },
+          ),
+          const SizedBox(width: 8),
+          Text(
+            appSettings.extendQueueScreen ? 'Separate Window Mode Enabled' : 'Disabled (Shows inside main window)',
+            style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.primary),
+          ),
+        ]),
+        const SizedBox(height: 12),
+        Text('When enabled, the Order Queue screen will automatically open as a separate independent window when the system starts.',
+            style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B))),
+
+        const SizedBox(height: 32),
+        const Divider(color: Color(0xFFE2E8F0)),
+        const SizedBox(height: 20),
+
+        // Manual open button
+        Text('Manual Window Controls', style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
+        const SizedBox(height: 8),
+        Text('Click below to launch the separate Order Queue window immediately. You can drag it to your external HDMI monitor.',
+            style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
+        const SizedBox(height: 20),
+        
+        ElevatedButton.icon(
+          onPressed: () async {
+            try {
+              final executable = Platform.resolvedExecutable;
+              await Process.start(executable, ['--queue-screen']);
+              _snack('Queue Window launched successfully!');
+            } catch (e) {
+              _snack('Failed to launch window: $e', isError: true);
+            }
+          },
+          icon: const Icon(Icons.open_in_new_rounded, size: 16),
+          label: const Text('Launch Queue Window Now'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppTheme.primary,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          ),
+        ),
+      ]),
+    );
+  }
 }
 
 // ════════════════════════════════════════════════════════════════════════════
