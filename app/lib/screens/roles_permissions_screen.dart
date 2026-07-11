@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
+import '../pos_controller.dart';
 import '../theme.dart';
 import '../api_service.dart';
 
@@ -97,6 +99,10 @@ class _RolesPermissionsContentState extends State<RolesPermissionsContent> {
     if (_selectedRole == null) return;
     try {
       await APIService.instance.saveRolePermissions(_selectedRole!['id'], _permissions);
+      await APIService.instance.loadCurrentUserPermissions();
+      if (mounted) {
+        Provider.of<POSController>(context, listen: false).notifyListeners();
+      }
       _snack('Permissions saved!');
     } catch (e) {
       _snack(e.toString(), isError: true);

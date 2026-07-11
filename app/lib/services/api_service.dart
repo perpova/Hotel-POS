@@ -42,6 +42,7 @@ class APIService {
     final userJson = prefs.getString('auth_user');
     if (userJson != null) {
       currentUser = UserModel.fromJson(jsonDecode(userJson));
+      loadCurrentUserPermissions();
       // Try connecting websocket
       connectWebSocket();
     }
@@ -72,6 +73,7 @@ class APIService {
         final data = jsonDecode(response.body);
         _token = data['token'];
         currentUser = UserModel.fromJson(data['user']);
+        await loadCurrentUserPermissions();
         
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('auth_token', _token!);
@@ -169,6 +171,59 @@ class APIService {
       headers: _getHeaders(),
       body: jsonEncode({'permissions': permissions}),
     );
+  }
+
+  List<dynamic> currentUserPermissions = [];
+
+  Future<void> loadCurrentUserPermissions() async {
+    if (currentUser == null) return;
+    try {
+      final roles = await getRoles();
+      final userRoleName = currentUser!.role.toLowerCase();
+      Map<String, dynamic>? matchingRole;
+      for (final r in roles) {
+        if (r['name']?.toString().toLowerCase() == userRoleName) {
+          matchingRole = r;
+          break;
+        }
+      }
+      if (matchingRole != null) {
+        final roleId = matchingRole['id'];
+        final perms = await getRolePermissions(roleId);
+        currentUserPermissions = perms;
+      }
+    } catch (e) {
+      print('Error loading current user permissions: $e');
+    }
+  }
+
+  bool canViewPage(String pageName) {
+    if (currentUserPermissions.isEmpty) {
+      return true; // Default fallback to avoid lockouts
+    }
+
+    final map = {
+      'POS System': 'POS',
+      'Kitchen Display (KDS)': 'KDS',
+      'Order Queue Screen': 'Order Queue',
+      'Shifts & Drawer': 'Shifts & Cash',
+      'Settings & Stock': 'Settings',
+    };
+    final lookupPage = map[pageName] ?? pageName;
+
+    dynamic matchingPage;
+    for (final p in currentUserPermissions) {
+      if (p['page']?.toString().toLowerCase() == lookupPage.toLowerCase()) {
+        matchingPage = p;
+        break;
+      }
+    }
+
+    if (matchingPage != null) {
+      return matchingPage['can_view'] == 1 || matchingPage['can_view'] == true;
+    }
+
+    return true; 
   }
 
   Map<String, String> _getHeaders() {

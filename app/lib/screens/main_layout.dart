@@ -617,12 +617,23 @@ class _MainLayoutState extends State<MainLayout> {
             const SizedBox(height: 16),
 
             // Navigation Links grouped by categories
-            Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                itemCount: categories.length,
-                itemBuilder: (context, catIdx) {
-                  final cat = categories[catIdx];
+            (() {
+              final visibleCategories = <_SidebarCategory>[];
+              for (final cat in categories) {
+                final filteredItems = cat.items.where((item) {
+                  return APIService.instance.canViewPage(item.title);
+                }).toList();
+                if (filteredItems.isNotEmpty) {
+                  visibleCategories.add(_SidebarCategory(cat.title, filteredItems));
+                }
+              }
+
+              return Expanded(
+                child: ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  itemCount: visibleCategories.length,
+                  itemBuilder: (context, catIdx) {
+                    final cat = visibleCategories[catIdx];
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -692,7 +703,8 @@ class _MainLayoutState extends State<MainLayout> {
                   );
                 },
               ),
-            ),
+            );
+          })(),
 
             // User Profile Section & Logout
             const Divider(height: 1, color: Color(0xFFF1F5F9)),
