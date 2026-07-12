@@ -10,7 +10,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/services.dart' show rootBundle;
+import 'package:flutter/services.dart';
 import '../pos_controller.dart';
 import '../theme.dart';
 import '../models.dart';
@@ -381,13 +381,7 @@ class _POSScreenState extends State<POSScreen> {
                   _showProductOptionsModal(product, controller);
                 } else {
                   controller.addToCart(product, quantity: 1);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('${product.name} successfully added to cart'),
-                      duration: const Duration(seconds: 1),
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
+                  context.showSuccessToast('${product.name} successfully added to cart');
                 }
               }
             : null,
@@ -519,13 +513,7 @@ class _POSScreenState extends State<POSScreen> {
                             } else {
                               final activePrice = controller.getProductActivePrice(product);
                               controller.addToCart(product, quantity: 1, customPrice: activePrice);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('${product.name} successfully added to cart'),
-                                  duration: const Duration(seconds: 1),
-                                  behavior: SnackBarBehavior.floating,
-                                ),
-                              );
+                              context.showSuccessToast('${product.name} successfully added to cart');
                             }
                           }
                         : null,
@@ -1245,9 +1233,7 @@ class _POSScreenState extends State<POSScreen> {
         paymentStatus: 'unpaid',
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('KOT Ticket sent to kitchen. Voice notification played to chef.')),
-        );
+        context.showSuccessToast('KOT Ticket sent to kitchen. Voice notification played to chef.');
       }
     } catch (e) {
       _showErrorSnackBar(e.toString());
@@ -1264,9 +1250,7 @@ class _POSScreenState extends State<POSScreen> {
     }).toList();
 
     if (newKotItems.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No new KOT items to print'), backgroundColor: Color(0xFFEF4444)),
-      );
+      context.showErrorToast('No new KOT items to print');
       return;
     }
 
@@ -1303,17 +1287,11 @@ class _POSScreenState extends State<POSScreen> {
         cashierName: APIService.instance.currentUser?.name ?? 'Admin',
       );
 
-      String speakText = "නව මුළුතැන්ගෙයි ඇණවුම: ";
-      speakText += controller.buildSinhalaKOTVoiceMessage(newKotItems);
-      controller.speakVoiceMessage(speakText, language: 'Sinhala');
-
       controller.markKotItemsAsSent();
 
       if (mounted) {
         _showReceiptDialog(receiptData, showKOT: true, showInvoice: false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Chef notified via voice. Previewing KOT.'), backgroundColor: Color(0xFF10B981)),
-        );
+        context.showSuccessToast('Chef notified via voice. Previewing KOT.');
       }
     } catch (e) {
       _showErrorSnackBar('Failed to print KOT: $e');
@@ -1348,9 +1326,7 @@ class _POSScreenState extends State<POSScreen> {
       controller.setTableStatus(controller.selectedTable!.id, 'billing');
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Bill preview printed. Table status set to Processing Bill.'), backgroundColor: Color(0xFF10B981)),
-        );
+        context.showSuccessToast('Bill preview printed. Table status set to Processing Bill.');
       }
     } catch (e) {
       _showErrorSnackBar('Failed to print bill preview: $e');
@@ -1914,12 +1890,7 @@ class _POSScreenState extends State<POSScreen> {
                           });
 
                           Navigator.pop(context);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Successfully added to cart'),
-                              backgroundColor: Color(0xFF10B981),
-                            ),
-                          );
+                          context.showSuccessToast('Successfully added to cart');
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppTheme.primary,
@@ -2060,15 +2031,11 @@ class _POSScreenState extends State<POSScreen> {
                       await controller.reloadEnvironment();
                       if (context.mounted) {
                         Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Customer registered successfully'), backgroundColor: AppTheme.accent),
-                        );
+                        context.showSuccessToast('Customer registered successfully');
                       }
                     } catch (e) {
                       if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Customer save failed: $e'), backgroundColor: AppTheme.danger),
-                        );
+                        context.showErrorToast('Customer save failed: $e');
                       }
                     }
                   },
@@ -2326,8 +2293,15 @@ class _POSScreenState extends State<POSScreen> {
 
   void _showOrderPaymentDialog(POSController controller) {
     String paymentMethod = 'cash'; // 'cash', 'card', 'qr', 'credit'
-    String enteredAmount = '';
+    final TextEditingController amountController = TextEditingController();
+    final FocusNode amountFocusNode = FocusNode();
     CustomerModel? selectedCreditCustomer;
+    bool isSubmitting = false;
+
+    // Auto-focus the amount field on post frame
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      amountFocusNode.requestFocus();
+    });
 
     showDialog(
       context: context,
@@ -2336,7 +2310,7 @@ class _POSScreenState extends State<POSScreen> {
         return StatefulBuilder(
           builder: (context, setModalState) {
             final cartTotal = controller.cartTotal;
-            final double receivedVal = double.tryParse(enteredAmount) ?? 0.00;
+            final double receivedVal = double.tryParse(amountController.text) ?? 0.00;
             final double changeVal = receivedVal > cartTotal ? receivedVal - cartTotal : 0.00;
 
             // Trigger LankaQR generation if tab is QR
@@ -2346,538 +2320,549 @@ class _POSScreenState extends State<POSScreen> {
 
             void handleKeyPress(String key) {
               setModalState(() {
+                String current = amountController.text;
                 if (key == '⌫') {
-                  if (enteredAmount.isNotEmpty) {
-                    enteredAmount = enteredAmount.substring(0, enteredAmount.length - 1);
+                  if (current.isNotEmpty) {
+                    amountController.text = current.substring(0, current.length - 1);
                   }
                 } else if (key == 'Clear') {
-                  enteredAmount = '';
+                  amountController.text = '';
                 } else {
                   // Max 10 digits
-                  if (enteredAmount.length < 10) {
-                    if (key == '.' && enteredAmount.contains('.')) return;
-                    enteredAmount += key;
+                  if (current.length < 10) {
+                    if (key == '.' && current.contains('.')) return;
+                    amountController.text = current + key;
                   }
                 }
               });
             }
 
+            // Create ReceiptData copy variables and helpers
+            final List<OrderItemModel> itemsCopy = List.from(controller.cart);
+            final double finalSub = controller.cartSubtotal;
+            final double finalDisc = controller.discount;
+            final double finalTot = controller.cartTotal;
+            final String orderTypeLabel = controller.orderType == 'dine_in'
+                ? 'Dining Table'
+                : controller.orderType == 'takeaway'
+                    ? 'Takeaway'
+                    : 'Delivery';
+            final String? tblName = controller.selectedTable?.tableNumber;
+            final String? custName = paymentMethod == 'credit' ? selectedCreditCustomer!.name : controller.selectedCustomer?.name;
+            final int tknNumber = int.tryParse(_tokenNoController.text) ?? (controller.activeOrders.length + 1);
+            final String cashierUsername = APIService.instance.currentUser?.username ?? 'admin';
+            final bool hasKotItems = itemsCopy.any((item) {
+              final p = controller.products.firstWhere(
+                (prod) => prod.id == item.productId,
+                orElse: () => ProductModel(id: 0, name: '', categoryId: 0, price: 0, cost: 0, activePrice: 0, isHappyHour: false, stockQty: 0, minStockLevel: 0, isShortEat: false, isKotItem: false),
+              );
+              return p.id != 0 && p.isKotItem;
+            });
+
+            Future<void> submitPayment() async {
+              if (isSubmitting) return;
+
+              // Validation
+              if (paymentMethod == 'cash') {
+                if (receivedVal < cartTotal) {
+                  _showErrorSnackBar('Received amount must be greater than or equal to total payable.');
+                  return;
+                }
+              } else if (paymentMethod == 'card') {
+                if (amountController.text.length < 4) {
+                  _showErrorSnackBar('Please enter at least last 4 digits of card.');
+                  return;
+                }
+              } else if (paymentMethod == 'credit') {
+                if (selectedCreditCustomer == null) {
+                  _showErrorSnackBar('Please select a credit customer for weekly billing settlement.');
+                  return;
+                }
+              }
+
+              isSubmitting = true;
+
+              try {
+                if (paymentMethod == 'credit' && selectedCreditCustomer != null) {
+                  controller.selectCustomer(selectedCreditCustomer);
+                }
+
+                // Close payment dialog first
+                if (context.mounted) {
+                  Navigator.of(context).pop();
+                }
+
+                int orderId = 0;
+                String orderNum = '';
+
+                if (controller.orderType == 'dine_in' &&
+                    controller.selectedTable != null &&
+                    controller.tableActiveOrderIds[controller.selectedTable!.id] != null) {
+                  final activeOrderId = controller.tableActiveOrderIds[controller.selectedTable!.id]!;
+                  
+                  try {
+                    orderNum = controller.activeOrders
+                        .firstWhere((o) => o.id == activeOrderId)
+                        .orderNumber;
+                  } catch (_) {
+                    orderNum = 'ORD-$activeOrderId';
+                  }
+                  
+                  await APIService.instance.updateOrderOnline(activeOrderId, {
+                    'payment_status': paymentMethod == 'credit' ? 'unpaid' : 'paid',
+                    'payment_method': paymentMethod,
+                    'status': 'delivered',
+                    'received_amount': paymentMethod == 'cash' ? receivedVal : finalTot,
+                    'change_amount': paymentMethod == 'cash' ? changeVal : 0.00,
+                  });
+                  
+                  orderId = activeOrderId;
+                  controller.tableActiveOrderIds.remove(controller.selectedTable!.id);
+                  controller.clearCart();
+                  await controller.reloadEnvironment();
+                } else {
+                  final orderResult = await controller.placeOrder(
+                    printKOT: true,
+                    printAck: true,
+                    status: (!hasKotItems || controller.orderType == 'dine_in') ? 'delivered' : 'pending',
+                    paymentStatus: paymentMethod == 'credit' ? 'unpaid' : 'paid',
+                    paymentMethod: paymentMethod,
+                    receivedAmount: paymentMethod == 'cash' ? receivedVal : finalTot,
+                    changeAmount: paymentMethod == 'cash' ? changeVal : 0.00,
+                  );
+                  orderId = orderResult['orderId'] ?? 0;
+                  orderNum = orderResult['orderNumber'] ?? '';
+                }
+
+                final receiptData = ReceiptData(
+                  orderId: orderId,
+                  orderNumber: orderNum,
+                  paymentMethod: paymentMethod,
+                  items: itemsCopy,
+                  subtotal: finalSub,
+                  discount: finalDisc,
+                  total: finalTot,
+                  orderType: orderTypeLabel,
+                  tableName: tblName,
+                  customerName: custName,
+                  receivedAmount: paymentMethod == 'cash' ? receivedVal : finalTot,
+                  changeAmount: paymentMethod == 'cash' ? changeVal : 0.00,
+                  tokenNumber: tknNumber,
+                  cardLastDigits: paymentMethod == 'card' ? amountController.text : null,
+                  transactionRef: paymentMethod == 'qr' ? amountController.text : null,
+                  cashierName: cashierUsername,
+                );
+
+                final isDineIn = controller.orderType == 'dine_in';
+
+                _showReceiptDialog(
+                  receiptData,
+                  showKOT: !isDineIn && hasKotItems,
+                  showInvoice: true,
+                );
+                _tokenNoController.clear();
+
+              } catch (e) {
+                if (mounted) {
+                  context.showErrorToast(e.toString());
+                }
+              }
+            }
             return Dialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              backgroundColor: Colors.white,
-              clipBehavior: Clip.antiAlias,
-              child: Container(
-                width: 480,
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Header
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Order Payment',
-                          style: GoogleFonts.inter(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: const Color(0xFF1E293B),
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.cancel, color: Color(0xFFEF4444), size: 24),
-                          onPressed: () => Navigator.pop(context),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    const Divider(color: Color(0xFFF1F5F9)),
-                    const SizedBox(height: 12),
-
-                    // Total Amount Display
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF8FAFC),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xFFE2E8F0)),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Total Amount',
-                            style: GoogleFonts.inter(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: const Color(0xFF64748B),
-                            ),
-                          ),
-                          Text(
-                            'LKR ${cartTotal.toStringAsFixed(2)}',
-                            style: GoogleFonts.outfit(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: AppTheme.primary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Payment Method Tabs
-                    Text(
-                      'Select Payment Method',
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: const Color(0xFF64748B),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        // Cash
-                        Expanded(
-                          child: _buildPaymentTabButton(
-                            label: 'Cash',
-                            icon: Icons.wallet_outlined,
-                            isActive: paymentMethod == 'cash',
-                            onTap: () {
-                              setModalState(() {
-                                paymentMethod = 'cash';
-                                enteredAmount = '';
-                              });
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        // Card
-                        Expanded(
-                          child: _buildPaymentTabButton(
-                            label: 'Card',
-                            icon: Icons.credit_card_outlined,
-                            isActive: paymentMethod == 'card',
-                            onTap: () {
-                              setModalState(() {
-                                paymentMethod = 'card';
-                                enteredAmount = '';
-                              });
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        // MFS
-                        Expanded(
-                          child: _buildPaymentTabButton(
-                            label: 'MFS',
-                            icon: Icons.qr_code_scanner_outlined,
-                            isActive: paymentMethod == 'qr',
-                            onTap: () {
-                              setModalState(() {
-                                paymentMethod = 'qr';
-                                enteredAmount = '';
-                              });
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        // Other / Credit
-                        Expanded(
-                          child: _buildPaymentTabButton(
-                            label: 'Other',
-                            icon: Icons.assignment_ind_outlined,
-                            isActive: paymentMethod == 'credit',
-                            onTap: () {
-                              setModalState(() {
-                                paymentMethod = 'credit';
-                                enteredAmount = '';
-                              });
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Dynamic Area based on selection
-                    if (paymentMethod == 'cash') ...[
-                      Text(
-                        'Enter Received Amount',
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: const Color(0xFF64748B),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: const Color(0xFFE2E8F0)),
-                          borderRadius: BorderRadius.circular(10),
-                          color: Colors.white,
-                        ),
-                        child: Text(
-                          enteredAmount.isEmpty ? '0.00' : enteredAmount,
-                          style: GoogleFonts.inter(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: const Color(0xFF1E293B),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                backgroundColor: Colors.white,
+                clipBehavior: Clip.antiAlias,
+                child: Container(
+                  width: 480,
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Header
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            'Change Amount',
+                            'Order Payment',
                             style: GoogleFonts.inter(
-                              fontSize: 12,
-                              color: const Color(0xFF64748B),
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: const Color(0xFF1E293B),
                             ),
                           ),
-                          Text(
-                            'LKR ${changeVal.toStringAsFixed(2)}',
-                            style: GoogleFonts.inter(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: const Color(0xFF10B981),
-                            ),
+                          IconButton(
+                            icon: const Icon(Icons.cancel, color: Color(0xFFEF4444), size: 24),
+                            onPressed: () => Navigator.pop(context),
                           ),
                         ],
                       ),
                       const SizedBox(height: 12),
-                      _buildKeypad(handleKeyPress),
-                    ] else if (paymentMethod == 'card') ...[
+                      const Divider(color: Color(0xFFF1F5F9)),
+                      const SizedBox(height: 12),
+
+                      // Total Amount Display
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Total Amount',
+                              style: GoogleFonts.inter(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: const Color(0xFF64748B),
+                              ),
+                            ),
+                            Text(
+                              'LKR ${cartTotal.toStringAsFixed(2)}',
+                              style: GoogleFonts.outfit(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: AppTheme.primary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Payment Method Tabs
                       Text(
-                        'Enter Last 4 Digits Of Card',
+                        'Select Payment Method',
                         style: GoogleFonts.inter(
                           fontSize: 12,
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.bold,
                           color: const Color(0xFF64748B),
                         ),
                       ),
-                      const SizedBox(height: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: const Color(0xFFE2E8F0)),
-                          borderRadius: BorderRadius.circular(10),
-                          color: Colors.white,
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          // Cash
+                          Expanded(
+                            child: _buildPaymentTabButton(
+                              label: 'Cash',
+                              icon: Icons.wallet_outlined,
+                              isActive: paymentMethod == 'cash',
+                              onTap: () {
+                                setModalState(() {
+                                  paymentMethod = 'cash';
+                                  amountController.clear();
+                                  amountFocusNode.requestFocus();
+                                });
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          // Card
+                          Expanded(
+                            child: _buildPaymentTabButton(
+                              label: 'Card',
+                              icon: Icons.credit_card_outlined,
+                              isActive: paymentMethod == 'card',
+                              onTap: () {
+                                setModalState(() {
+                                  paymentMethod = 'card';
+                                  amountController.clear();
+                                  amountFocusNode.requestFocus();
+                                });
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          // LankaQR
+                          Expanded(
+                            child: _buildPaymentTabButton(
+                              label: 'MFS',
+                              icon: Icons.qr_code_scanner_outlined,
+                              isActive: paymentMethod == 'qr',
+                              onTap: () {
+                                setModalState(() {
+                                  paymentMethod = 'qr';
+                                  amountController.clear();
+                                });
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          // Weekly Settlement Credit
+                          Expanded(
+                            child: _buildPaymentTabButton(
+                              label: 'Other',
+                              icon: Icons.assignment_ind_outlined,
+                              isActive: paymentMethod == 'credit',
+                              onTap: () {
+                                setModalState(() {
+                                  paymentMethod = 'credit';
+                                  amountController.clear();
+                                });
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Dynamic Area based on selection
+                      if (paymentMethod == 'cash') ...[
+                        Text(
+                          'Enter Received Amount',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF64748B),
+                          ),
                         ),
-                        child: Text(
-                          enteredAmount.isEmpty ? '****' : enteredAmount,
+                        const SizedBox(height: 6),
+                        TextField(
+                          controller: amountController,
+                          focusNode: amountFocusNode,
+                          autofocus: true,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          inputFormatters: [
+                            FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
+                          ],
                           style: GoogleFonts.inter(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
                             color: const Color(0xFF1E293B),
                           ),
+                          decoration: InputDecoration(
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            hintText: '0.00',
+                          ),
+                          onChanged: (val) {
+                            setModalState(() {});
+                          },
+                          onSubmitted: (_) {
+                            submitPayment();
+                          },
                         ),
-                      ),
-                      const SizedBox(height: 12),
-                      _buildKeypad(handleKeyPress),
-                    ] else if (paymentMethod == 'qr') ...[
-                      Text(
-                        'Scan LankaQR Code',
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: const Color(0xFF64748B),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Change Amount',
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                color: const Color(0xFF64748B),
+                              ),
+                            ),
+                            Text(
+                              'LKR ${changeVal.toStringAsFixed(2)}',
+                              style: GoogleFonts.inter(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: const Color(0xFF10B981),
+                              ),
+                            ),
+                          ],
                         ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 10),
-                      Center(
-                        child: controller.activeLankaQR != null
-                            ? Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  border: Border.all(color: const Color(0xFFE2E8F0)),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: QrImageView(
+                        const SizedBox(height: 12),
+                        _buildKeypad(handleKeyPress),
+                      ] else if (paymentMethod == 'card') ...[
+                        Text(
+                          'Enter Last 4 Digits Of Card',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF64748B),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        TextField(
+                          controller: amountController,
+                          focusNode: amountFocusNode,
+                          autofocus: true,
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
+                          style: GoogleFonts.inter(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFF1E293B),
+                          ),
+                          decoration: InputDecoration(
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            hintText: '****',
+                          ),
+                          onChanged: (val) {
+                            setModalState(() {});
+                          },
+                          onSubmitted: (_) {
+                            submitPayment();
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        _buildKeypad(handleKeyPress),
+                      ] else if (paymentMethod == 'qr') ...[
+                        // LankaQR Code
+                        Text(
+                          'LankaQR Code',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFF64748B),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          height: 140,
+                          decoration: BoxDecoration(
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                            borderRadius: BorderRadius.circular(12),
+                            color: Colors.white,
+                          ),
+                          alignment: Alignment.center,
+                          child: controller.activeLankaQR != null
+                              ? QrImageView(
                                   data: controller.activeLankaQR!,
                                   version: QrVersions.auto,
-                                  size: 150.0,
+                                  size: 120.0,
+                                  gapless: false,
+                                  eyeStyle: const QrEyeStyle(
+                                    eyeShape: QrEyeShape.square,
+                                    color: Colors.black,
+                                  ),
+                                  dataModuleStyle: const QrDataModuleStyle(
+                                    dataModuleShape: QrDataModuleShape.square,
+                                    color: Colors.black,
+                                  ),
+                                )
+                              : const CircularProgressIndicator(),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Scan LankaQR to pay LKR ${cartTotal.toStringAsFixed(2)}',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.inter(fontSize: 11, color: Colors.green, fontWeight: FontWeight.bold),
+                        ),
+                      ] else if (paymentMethod == 'credit') ...[
+                        // Weekly Settling Credit Customers
+                        Text(
+                          'Select Credit Customer',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFF64748B),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: const Color(0xFFD1D5DB)),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<CustomerModel>(
+                              hint: const Text('Choose customer...'),
+                              value: selectedCreditCustomer,
+                              isExpanded: true,
+                              items: controller.customers.map((CustomerModel c) {
+                                return DropdownMenuItem<CustomerModel>(
+                                  value: c,
+                                  child: Text('${c.name} (${c.phone})'),
+                                );
+                              }).toList(),
+                              onChanged: (CustomerModel? val) {
+                                setModalState(() {
+                                  selectedCreditCustomer = val;
+                                });
+                              },
+                            ),
+                          ),
+                        ),
+                        if (selectedCreditCustomer != null) ...[
+                          const SizedBox(height: 12),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFEF3C7),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: const Color(0xFFFCD34D)),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Credit Settlement Verification',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: const Color(0xFFB45309),
+                                  ),
                                 ),
-                              )
-                            : SizedBox(
-                                height: 150,
-                                child: Center(
-                                  child: CircularProgressIndicator(color: AppTheme.primary),
+                                const SizedBox(height: 6),
+                                Text(
+                                  'Credit Limit: LKR ${selectedCreditCustomer!.creditLimit.toStringAsFixed(2)}',
+                                  style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF78350F)),
                                 ),
-                              ),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Merchant: Hotel POS (PVT) Ltd',
-                        style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w500, color: const Color(0xFF475569)),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Or Enter Transaction Reference ID:',
-                        style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
-                      ),
-                      const SizedBox(height: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: const Color(0xFFE2E8F0)),
-                          borderRadius: BorderRadius.circular(10),
-                          color: Colors.white,
+                                Text(
+                                  'Outstanding Balance: LKR ${selectedCreditCustomer!.outstandingBalance.toStringAsFixed(2)}',
+                                  style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF78350F)),
+                                ),
+                                Text(
+                                  'Remaining Credit: LKR ${(selectedCreditCustomer!.creditLimit - selectedCreditCustomer!.outstandingBalance).toStringAsFixed(2)}',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: (selectedCreditCustomer!.creditLimit - selectedCreditCustomer!.outstandingBalance) >= cartTotal
+                                        ? const Color(0xFF065F46)
+                                        : const Color(0xFF991B1B),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
+                      const SizedBox(height: 16),
+
+                      // Confirm & Print Action Button
+                      ElevatedButton(
+                        onPressed: submitPayment,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
                         child: Text(
-                          enteredAmount.isEmpty ? 'Reference ID' : enteredAmount,
-                          style: GoogleFonts.inter(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                            color: enteredAmount.isEmpty ? const Color(0xFF94A3B8) : const Color(0xFF1E293B),
-                          ),
+                          'Confirm & Print Receipt',
+                          style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 14),
                         ),
                       ),
-                      const SizedBox(height: 10),
-                      _buildKeypad(handleKeyPress),
-                    ] else if (paymentMethod == 'credit') ...[
-                      Text(
-                        'Select Credit Customer',
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: const Color(0xFF64748B),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: const Color(0xFFE2E8F0)),
-                        ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButtonFormField<CustomerModel>(
-                            value: selectedCreditCustomer,
-                            hint: Text('Choose credit account...', style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8))),
-                            decoration: const InputDecoration(
-                              border: InputBorder.none,
-                            ),
-                            items: [
-                              ...controller.customers
-                                  .where((c) => c.id != 1)
-                                  .map((c) => DropdownMenuItem(
-                                        value: c,
-                                        child: Text('${c.name} (${c.phone})', style: GoogleFonts.inter(fontSize: 12)),
-                                      )),
-                            ],
-                            onChanged: (c) {
-                              setModalState(() {
-                                selectedCreditCustomer = c;
-                              });
-                            },
-                          ),
-                        ),
-                      ),
-                      if (selectedCreditCustomer != null) ...[
-                        const SizedBox(height: 16),
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFFFBEB),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: const Color(0xFFFDE68A)),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Account Credit Status:',
-                                style: GoogleFonts.inter(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  color: const Color(0xFFB45309),
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                'Credit Limit: LKR ${selectedCreditCustomer!.creditLimit.toStringAsFixed(2)}',
-                                style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF78350F)),
-                              ),
-                              Text(
-                                'Outstanding Balance: LKR ${selectedCreditCustomer!.outstandingBalance.toStringAsFixed(2)}',
-                                style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF78350F)),
-                              ),
-                              Text(
-                                'Remaining Credit: LKR ${(selectedCreditCustomer!.creditLimit - selectedCreditCustomer!.outstandingBalance).toStringAsFixed(2)}',
-                                style: GoogleFonts.inter(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: (selectedCreditCustomer!.creditLimit - selectedCreditCustomer!.outstandingBalance) >= cartTotal
-                                      ? const Color(0xFF065F46)
-                                      : const Color(0xFF991B1B),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
                     ],
-                    const SizedBox(height: 16),
-
-                    // Confirm & Print Action Button
-                    ElevatedButton(
-                      onPressed: () async {
-                        // Validation
-                        if (paymentMethod == 'cash') {
-                          if (receivedVal < cartTotal) {
-                            _showErrorSnackBar('Received amount must be greater than or equal to total payable.');
-                            return;
-                          }
-                        } else if (paymentMethod == 'card') {
-                          if (enteredAmount.length < 4) {
-                            _showErrorSnackBar('Please enter at least last 4 digits of card.');
-                            return;
-                          }
-                        } else if (paymentMethod == 'credit') {
-                          if (selectedCreditCustomer == null) {
-                            _showErrorSnackBar('Please select a credit customer for weekly billing settlement.');
-                            return;
-                          }
-                        }
-
-                        // Create ReceiptData copy
-                        final List<OrderItemModel> itemsCopy = List.from(controller.cart);
-                        final double finalSub = controller.cartSubtotal;
-                        final double finalDisc = controller.discount;
-                        final double finalTot = controller.cartTotal;
-                        final String orderTypeLabel = controller.orderType == 'dine_in'
-                            ? 'Dining Table'
-                            : controller.orderType == 'takeaway'
-                                ? 'Takeaway'
-                                : 'Delivery';
-                        final String? tblName = controller.selectedTable?.tableNumber;
-                        final String? custName = paymentMethod == 'credit' ? selectedCreditCustomer!.name : controller.selectedCustomer?.name;
-                        final int tknNumber = int.tryParse(_tokenNoController.text) ?? (controller.activeOrders.length + 1);
-                        final String cashierUsername = APIService.instance.currentUser?.username ?? 'admin';
-
-                        try {
-                          if (paymentMethod == 'credit' && selectedCreditCustomer != null) {
-                            controller.selectCustomer(selectedCreditCustomer);
-                          }
-
-                          // Close payment dialog first
-                          if (context.mounted) {
-                            Navigator.of(context).pop();
-                          }
-
-                          int orderId = 0;
-                          String orderNum = '';
-
-                          if (controller.orderType == 'dine_in' &&
-                              controller.selectedTable != null &&
-                              controller.tableActiveOrderIds[controller.selectedTable!.id] != null) {
-                            final activeOrderId = controller.tableActiveOrderIds[controller.selectedTable!.id]!;
-                            
-                            try {
-                              orderNum = controller.activeOrders
-                                  .firstWhere((o) => o.id == activeOrderId)
-                                  .orderNumber;
-                            } catch (_) {
-                              orderNum = 'ORD-$activeOrderId';
-                            }
-                            
-                            await APIService.instance.updateOrderOnline(activeOrderId, {
-                              'payment_status': paymentMethod == 'credit' ? 'unpaid' : 'paid',
-                              'payment_method': paymentMethod,
-                              'status': 'delivered',
-                              'received_amount': paymentMethod == 'cash' ? receivedVal : finalTot,
-                              'change_amount': paymentMethod == 'cash' ? changeVal : 0.00,
-                            });
-                            
-                            orderId = activeOrderId;
-                            controller.tableActiveOrderIds.remove(controller.selectedTable!.id);
-                            controller.clearCart();
-                            await controller.reloadEnvironment();
-                          } else {
-                            final orderResult = await controller.placeOrder(
-                              printKOT: true,
-                              printAck: true,
-                              status: controller.orderType == 'dine_in' ? 'delivered' : 'pending',
-                              paymentStatus: paymentMethod == 'credit' ? 'unpaid' : 'paid',
-                              paymentMethod: paymentMethod,
-                              receivedAmount: paymentMethod == 'cash' ? receivedVal : finalTot,
-                              changeAmount: paymentMethod == 'cash' ? changeVal : 0.00,
-                            );
-                            orderId = orderResult['orderId'] ?? 0;
-                            orderNum = orderResult['orderNumber'] ?? '';
-                          }
-
-                          final receiptData = ReceiptData(
-                            orderId: orderId,
-                            orderNumber: orderNum,
-                            paymentMethod: paymentMethod,
-                            items: itemsCopy,
-                            subtotal: finalSub,
-                            discount: finalDisc,
-                            total: finalTot,
-                            orderType: orderTypeLabel,
-                            tableName: tblName,
-                            customerName: custName,
-                            receivedAmount: paymentMethod == 'cash' ? receivedVal : finalTot,
-                            changeAmount: paymentMethod == 'cash' ? changeVal : 0.00,
-                            tokenNumber: tknNumber,
-                            cardLastDigits: paymentMethod == 'card' ? enteredAmount : null,
-                            transactionRef: paymentMethod == 'qr' ? enteredAmount : null,
-                            cashierName: cashierUsername,
-                          );
-
-                          final isDineIn = controller.orderType == 'dine_in';
-                          final bool hasKotItems = itemsCopy.any((item) {
-                            final p = controller.products.firstWhere(
-                              (prod) => prod.id == item.productId,
-                              orElse: () => ProductModel(id: 0, name: '', categoryId: 0, price: 0, cost: 0, activePrice: 0, isHappyHour: false, stockQty: 0, minStockLevel: 0, isShortEat: false, isKotItem: false),
-                            );
-                            return p.id != 0 && p.isKotItem;
-                          });
-
-                          _showReceiptDialog(
-                            receiptData,
-                            showKOT: !isDineIn && hasKotItems,
-                            showInvoice: true,
-                          );
-                          _tokenNoController.clear();
-
-                        } catch (e) {
-                          if (mounted) {
-                            ScaffoldMessenger.of(this.context).showSnackBar(
-                              SnackBar(content: Text(e.toString()), backgroundColor: AppTheme.danger),
-                            );
-                          }
-                        }
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.primary,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      child: Text(
-                        'Confirm & Print Receipt',
-                        style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 14),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
             );
           },
         );
       },
-    );
+    ).then((_) {
+      Future.delayed(const Duration(milliseconds: 500), () {
+        amountController.dispose();
+        amountFocusNode.dispose();
+      });
+    });
   }
 
   Widget _buildPaymentTabButton({
@@ -3151,19 +3136,7 @@ class _POSScreenState extends State<POSScreen> {
         final file = File(outputPath);
         await file.writeAsBytes(bytes);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Row(
-                children: [
-                  const Icon(Icons.check_circle, color: Colors.white, size: 18),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text('PDF saved: ${file.path}')),
-                ],
-              ),
-              backgroundColor: const Color(0xFF10B981),
-              duration: const Duration(seconds: 4),
-            ),
-          );
+          context.showSuccessToast('PDF saved: ${file.path}');
         }
       }
     } catch (_) {
@@ -4190,9 +4163,7 @@ class _POSScreenState extends State<POSScreen> {
 
   void _showErrorSnackBar(String msg) {
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(msg), backgroundColor: AppTheme.danger),
-      );
+      context.showErrorToast(msg);
     }
   }
 }

@@ -215,7 +215,7 @@ class POSController extends ChangeNotifier {
     }
   }
 
-  String buildSinhalaKOTVoiceMessage(List<dynamic> items) {
+  String buildSinhalaKOTVoiceMessage(List<dynamic> items, {String? orderType, String? tableName}) {
     const Map<String, String> ingredientTranslations = {
       'egg': 'බිත්තර',
       'eggs': 'බිත්තර',
@@ -234,7 +234,23 @@ class POSController extends ChangeNotifier {
       'tomatoes': 'තක්කාලි',
     };
 
-    String msg = '';
+    String msg = 'නව මුළුතැන්ගෙයි ඇණවුම: ';
+    if (orderType == 'dine_in' || orderType == 'Dining Table') {
+      if (tableName != null) {
+        final cleanTable = tableName.replaceAll(RegExp(r'[^0-9]'), '');
+        if (cleanTable.isNotEmpty) {
+          msg += "මේසය අංක $cleanTable, ";
+        } else {
+          msg += "මේසය $tableName, ";
+        }
+      } else {
+        msg += "මේසය, ";
+      }
+    } else if (orderType == 'takeaway' || orderType == 'Takeaway') {
+      msg += "ටේක් අවේ ඇණවුම, ";
+    } else if (orderType == 'delivery' || orderType == 'Delivery') {
+      msg += "ඩිලිවරි ඇණවුම, ";
+    }
     for (var item in items) {
       final int productId = item is Map
           ? (int.tryParse(item['product_id']?.toString() ?? '') ?? 0)
@@ -427,8 +443,10 @@ class POSController extends ChangeNotifier {
           // Synthesize voice message to chefs
           final data = event['data'];
           final items = data['items'] as List;
+          final orderType = data['orderType']?.toString();
+          final tableName = data['tableName']?.toString();
           
-          // Filter items by checking if the product is a KOT item
+          // Filter items by checking if the product is a KOT item AND is pending (newly added)
           final kotItems = items.where((i) {
             final productId = int.tryParse(i['product_id']?.toString() ?? '') ?? 0;
             final p = products.firstWhere(
@@ -447,12 +465,12 @@ class POSController extends ChangeNotifier {
                 isKotItem: false,
               ),
             );
-            return p.id != 0 && p.isKotItem;
+            final String itemStatus = i['status']?.toString() ?? 'pending';
+            return p.id != 0 && p.isKotItem && itemStatus == 'pending';
           }).toList();
           
           if (kotItems.isNotEmpty) {
-            String msg = "නව මුළුතැන්ගෙයි ඇණවුම: ";
-            msg += buildSinhalaKOTVoiceMessage(kotItems);
+            final msg = buildSinhalaKOTVoiceMessage(kotItems, orderType: orderType, tableName: tableName);
             speakVoiceMessage(msg);
           }
           break;
@@ -474,7 +492,38 @@ class POSController extends ChangeNotifier {
       try {
         final ords = await _api.getOrders();
         // filter orders from today / active shifts
-        activeOrders = ords.where((o) => o.status != 'delivered' && o.status != 'cancelled').toList();
+        final unfilteredActive = ords.where((o) => o.status != 'delivered' && o.status != 'cancelled').toList();
+        
+        // Fetch and populate order items for active orders
+        activeOrders = await Future.wait(unfilteredActive.map((o) async {
+          final items = await _api.getOrderItems(o.id!);
+          return OrderModel(
+            id: o.id,
+            orderNumber: o.orderNumber,
+            tableId: o.tableId,
+            orderType: o.orderType,
+            deliveryPlatform: o.deliveryPlatform,
+            customerId: o.customerId,
+            stewardName: o.stewardName,
+            status: o.status,
+            paymentStatus: o.paymentStatus,
+            paymentMethod: o.paymentMethod,
+            subtotal: o.subtotal,
+            discount: o.discount,
+            total: o.total,
+            cashierId: o.cashierId,
+            shiftId: o.shiftId,
+            kotPrinted: o.kotPrinted,
+            ackPrinted: o.ackPrinted,
+            cardTxReference: o.cardTxReference,
+            barcode: o.barcode,
+            createdAt: o.createdAt,
+            updatedAt: o.updatedAt,
+            receivedAmount: o.receivedAmount,
+            changeAmount: o.changeAmount,
+            items: items,
+          );
+        }));
         
         // Restore Dine-In tables state from active unpaid orders (e.g. after a power cut or restart)
         final activeDineInOrders = activeOrders.where((o) => o.orderType == 'dine_in' && o.tableId != null).toList();
@@ -496,9 +545,12 @@ class POSController extends ChangeNotifier {
         // 2. Restore/Update active tables
         for (var o in activeDineInOrders) {
           final tid = o.tableId!;
-          if (!tableCarts.containsKey(tid) || tableCarts[tid]!.isEmpty || tableActiveOrderIds[tid] != o.id) {
-            final items = await _api.getOrderItems(o.id!);
-            tableCarts[tid] = items;
+          if (selectedTable?.id == tid && cart.isNotEmpty) {
+            tableActiveOrderIds[tid] = o.id!;
+            tableStewards[tid] = o.stewardName;
+            tableStatuses[tid] = o.ackPrinted ? 'billing' : 'seated';
+          } else {
+            tableCarts[tid] = o.items;
             tableActiveOrderIds[tid] = o.id!;
             tableStewards[tid] = o.stewardName;
             tableStatuses[tid] = o.ackPrinted ? 'billing' : 'seated';

@@ -1828,34 +1828,100 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
     try {
         await conn.beginTransaction();
         
-        // Generate unique order number (e.g. ORD-20260617-1004)
-        const localDate = new Date();
-        const year = localDate.getFullYear();
-        const month = String(localDate.getMonth() + 1).padStart(2, '0');
-        const day = String(localDate.getDate()).padStart(2, '0');
-        const dateStr = `${year}${month}${day}`;
-        const queryDate = `${year}-${month}-${day}`;
- 
-        const [countResult] = await conn.query('SELECT COUNT(*) as count FROM orders WHERE DATE(created_at) = ?', [queryDate]);
-        const nextNum = (countResult[0].count + 1).toString().padStart(4, '0');
-        const orderNumber = `ORD-${dateStr}-${nextNum}`;
+        let existingOrderId = null;
+        let orderNumber = null;
+        
+        if (order_type === 'dine_in' && table_id) {
+            const [existingOrderRows] = await conn.query(
+                'SELECT id, order_number FROM orders WHERE table_id = ? AND payment_status = "unpaid" AND status != "cancelled" LIMIT 1',
+                [table_id]
+            );
+            if (existingOrderRows.length > 0) {
+                existingOrderId = existingOrderRows[0].id;
+                orderNumber = existingOrderRows[0].order_number;
+            }
+        }
+
+        if (!existingOrderId) {
+            // Generate unique order number (e.g. ORD-20260617-1004)
+            const localDate = new Date();
+            const year = localDate.getFullYear();
+            const month = String(localDate.getMonth() + 1).padStart(2, '0');
+            const day = String(localDate.getDate()).padStart(2, '0');
+            const dateStr = `${year}${month}${day}`;
+            const queryDate = `${year}-${month}-${day}`;
+     
+            const [countResult] = await conn.query('SELECT COUNT(*) as count FROM orders WHERE DATE(created_at) = ?', [queryDate]);
+            const nextNum = (countResult[0].count + 1).toString().padStart(4, '0');
+            orderNumber = `ORD-${dateStr}-${nextNum}`;
+        }
+        
         const barcode = orderNumber; // Barcode maps to order number
         
-        // Insert order
-        const [orderResult] = await conn.query(`
-            INSERT INTO orders (
-                order_number, table_id, order_type, delivery_platform, customer_id, steward_name,
-                status, payment_status, payment_method, subtotal, discount, total, cashier_id,
-                shift_id, kot_printed, ack_printed, card_tx_reference, barcode, received_amount, change_amount
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `, [
-            orderNumber, table_id || null, order_type, delivery_platform || null, customer_id || null,
-            steward_name || null, status || 'pending', payment_status || 'unpaid', payment_method || null,
-            subtotal, discount, total, req.user.id, activeShiftId, kot_printed || false,
-            ack_printed || false, card_tx_reference || null, barcode, received_amount || 0.00, change_amount || 0.00
-        ]);
+        let newOrderId = existingOrderId;
         
-        const newOrderId = orderResult.insertId;
+        if (!existingOrderId) {
+            // Insert new order
+            const [orderResult] = await conn.query(`
+                INSERT INTO orders (
+                    order_number, table_id, order_type, delivery_platform, customer_id, steward_name,
+                    status, payment_status, payment_method, subtotal, discount, total, cashier_id,
+                    shift_id, kot_printed, ack_printed, card_tx_reference, barcode, received_amount, change_amount
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `, [
+                orderNumber, table_id || null, order_type, delivery_platform || null, customer_id || null,
+                steward_name || null, status || 'pending', payment_status || 'unpaid', payment_method || null,
+                subtotal, discount, total, req.user.id, activeShiftId, kot_printed || false,
+                ack_printed || false, card_tx_reference || null, barcode, received_amount || 0.00, change_amount || 0.00
+            ]);
+            newOrderId = orderResult.insertId;
+        } else {
+            // Restore product stock from previous items of this order
+            const [oldStockLogs] = await conn.query(
+                'SELECT product_id, change_qty FROM stock_logs WHERE reason = ?',
+                [`Sale Order: ${orderNumber}`]
+            );
+            for (const log of oldStockLogs) {
+                const restoreQty = Math.abs(log.change_qty);
+                await conn.query('UPDATE products SET stock_qty = stock_qty + ? WHERE id = ?', [restoreQty, log.product_id]);
+                await conn.query(
+                    'INSERT INTO stock_logs (product_id, change_qty, type, reason, user_id) VALUES (?, ?, "adjustment", ?, ?)',
+                    [log.product_id, restoreQty, `Order Updated (Restore): ${orderNumber}`, req.user.id]
+                );
+            }
+            await conn.query('DELETE FROM stock_logs WHERE reason = ?', [`Sale Order: ${orderNumber}`]);
+
+            // Restore ingredient stock from previous items/extras of this order
+            const [oldIngLogs] = await conn.query(
+                'SELECT ingredient_id, change_qty FROM ingredient_stock_logs WHERE reason LIKE ?',
+                [`%in Order: ${orderNumber}`]
+            );
+            for (const log of oldIngLogs) {
+                const restoreQty = Math.abs(log.change_qty);
+                await conn.query('UPDATE ingredients SET stock_qty = stock_qty + ? WHERE id = ?', [restoreQty, log.ingredient_id]);
+                await conn.query(
+                    'INSERT INTO ingredient_stock_logs (ingredient_id, change_qty, type, reason, user_id) VALUES (?, ?, "adjustment", ?, ?)',
+                    [log.ingredient_id, restoreQty, `Restore Updated Order: ${orderNumber}`, req.user.id]
+                );
+            }
+            await conn.query('DELETE FROM ingredient_stock_logs WHERE reason LIKE ?', [`%in Order: ${orderNumber}`]);
+
+            // Delete old items
+            await conn.query('DELETE FROM order_items WHERE order_id = ?', [existingOrderId]);
+            
+            // Update existing order details
+            await conn.query(`
+                UPDATE orders SET 
+                    subtotal = ?, discount = ?, total = ?, steward_name = ?, customer_id = ?,
+                    kot_printed = ?, ack_printed = ?, received_amount = ?, change_amount = ?
+                WHERE id = ?
+            `, [
+                subtotal, discount, total, steward_name || null, customer_id || null,
+                kot_printed || false, ack_printed || false, 
+                received_amount || 0.00, change_amount || 0.00, 
+                existingOrderId
+            ]);
+        }
         
         // Insert order items & reduce stock counts
         for (const item of items) {
@@ -1957,18 +2023,43 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
         
         await conn.commit();
         
-        await logAudit('place_order', 'orders', newOrderId, `Order ${orderNumber} placed (${order_type.toUpperCase()}). Payment Status: ${payment_status.toUpperCase()}. Total: LKR ${total}`, req.user.id);
+        if (existingOrderId) {
+            await logAudit('modify_bill', 'orders', existingOrderId, `Order ${orderNumber} updated (Dine-in items appended). Total updated to: LKR ${total}`, req.user.id);
+        } else {
+            await logAudit('place_order', 'orders', newOrderId, `Order ${orderNumber} placed (${order_type.toUpperCase()}). Payment Status: ${payment_status.toUpperCase()}. Total: LKR ${total}`, req.user.id);
+        }
         
         // Broadcast WebSocket notifications
-        broadcast({ type: 'order_created', data: { id: newOrderId, order_number: orderNumber, status: status || 'pending', order_type } });
+        if (existingOrderId) {
+            broadcast({ type: 'order_updated', data: { id: existingOrderId, order_number: orderNumber, status: status || 'pending', order_type } });
+        } else {
+            broadcast({ type: 'order_created', data: { id: newOrderId, order_number: orderNumber, status: status || 'pending', order_type } });
+        }
+        
         if (order_type === 'dine_in' && table_id) {
             const [tbl] = await db.query('SELECT * FROM dining_tables WHERE id = ?', [table_id]);
-            broadcast({ type: 'table_status_changed', data: tbl });
+            broadcast({ type: 'table_status_changed', data: tbl[0] || tbl });
         }
         
         // Trigger voice message synthesis trigger for KDS
         if (kot_printed) {
-            broadcast({ type: 'kot_trigger_voice', data: { orderNumber, items } });
+            let tableName = null;
+            if (order_type === 'dine_in' && table_id) {
+                const [tblRows] = await db.query('SELECT table_number FROM dining_tables WHERE id = ?', [table_id]);
+                if (tblRows[0]) {
+                    tableName = tblRows[0].table_number;
+                }
+            }
+            broadcast({ 
+                type: 'kot_trigger_voice', 
+                data: { 
+                    orderNumber, 
+                    items,
+                    orderType: order_type,
+                    tableName: tableName,
+                    stewardName: steward_name || null
+                } 
+            });
         }
         
         res.json({ success: true, orderId: newOrderId, order_number: orderNumber });

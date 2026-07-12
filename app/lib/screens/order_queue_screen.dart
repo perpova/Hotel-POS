@@ -206,9 +206,19 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
   Widget build(BuildContext context) {
     final controller = Provider.of<POSController>(context);
 
+    bool hasKotItems(OrderModel o) {
+      return o.items.any((item) {
+        final p = controller.products.firstWhere(
+          (prod) => prod.id == item.productId,
+          orElse: () => ProductModel(id: 0, name: '', categoryId: 0, price: 0, cost: 0, activePrice: 0, isHappyHour: false, stockQty: 0, minStockLevel: 0, isShortEat: false, isKotItem: false),
+        );
+        return p.id != 0 && p.isKotItem;
+      });
+    }
+
     // Sort preparing orders: newest first
     final preparingOrders = controller.activeOrders
-        .where((o) => o.status == 'pending' || o.status == 'preparing')
+        .where((o) => (o.status == 'pending' || o.status == 'preparing') && hasKotItems(o))
         .toList();
     preparingOrders.sort((a, b) {
       final aTime = DateTime.tryParse(a.createdAt) ?? DateTime.now();
@@ -220,6 +230,7 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
     final now = DateTime.now();
     final readyOrders = controller.activeOrders.where((o) {
       if (o.status != 'prepared') return false;
+      if (!hasKotItems(o)) return false;
       final timeStr = o.updatedAt ?? o.createdAt;
       final time = DateTime.tryParse(timeStr) ?? now;
       return now.difference(time).inMinutes < 20;

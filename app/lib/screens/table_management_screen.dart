@@ -40,13 +40,13 @@ class _TableManagementScreenState extends State<TableManagementScreen> {
   }
 
   void _showSnackBar(String message, Color bgColor) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message, style: const TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: bgColor,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    if (bgColor == Colors.red || bgColor == AppTheme.danger) {
+      context.showErrorToast(message);
+    } else if (bgColor == AppTheme.accent || bgColor == Colors.green) {
+      context.showSuccessToast(message);
+    } else {
+      context.showWarningToast(message);
+    }
   }
 
   // Delete Table
@@ -854,9 +854,7 @@ class _TableFormDrawerState extends State<_TableFormDrawer> {
       widget.onSave();
       Navigator.pop(context);
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to save table: $e'), backgroundColor: Colors.red),
-      );
+      context.showErrorToast('Failed to save table: $e');
     } finally {
       setState(() => _isSubmitting = false);
     }
