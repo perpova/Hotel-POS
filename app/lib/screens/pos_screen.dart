@@ -3177,13 +3177,19 @@ class _POSScreenState extends State<POSScreen> {
 
 
   Future<Uint8List> _generateKOTPdfBytes(ReceiptData data, POSController controller) async {
-    final pdf = pw.Document();
     final lang = Provider.of<DashboardController>(this.context, listen: false).selectedLanguage;
     final bool isSinhala = lang == 'Sinhala';
     
     // Load Sinhala Font
     final fontData = await rootBundle.load('assets/fonts/NotoSansSinhala-Regular.ttf');
     final sinhalaFont = pw.Font.ttf(fontData);
+
+    final pdf = pw.Document(
+      theme: pw.ThemeData.withFont(
+        base: sinhalaFont,
+        fontFallback: [pw.Font.helvetica()],
+      ),
+    );
     
     final kotItems = data.items.where((item) {
       final p = controller.products.firstWhere(
@@ -3308,13 +3314,22 @@ class _POSScreenState extends State<POSScreen> {
   }
 
   Future<Uint8List> _generateInvoicePdfBytes(ReceiptData data, POSController controller) async {
-    final pdf = pw.Document();
     final lang = Provider.of<DashboardController>(this.context, listen: false).selectedLanguage;
     final bool isSinhala = lang == 'Sinhala';
     
     // Load Sinhala Font
     final fontData = await rootBundle.load('assets/fonts/NotoSansSinhala-Regular.ttf');
     final sinhalaFont = pw.Font.ttf(fontData);
+    // Load Isiagini Font
+    final isiaginiFontData = await rootBundle.load('assets/fonts/Isiagni.ttf');
+    final isiaginiFont = pw.Font.ttf(isiaginiFontData);
+
+    final pdf = pw.Document(
+      theme: pw.ThemeData.withFont(
+        base: sinhalaFont,
+        fontFallback: [pw.Font.helvetica()],
+      ),
+    );
 
     // Load Logo
     pw.MemoryImage? logoImage;
@@ -3376,9 +3391,9 @@ class _POSScreenState extends State<POSScreen> {
                         crossAxisAlignment: pw.CrossAxisAlignment.start,
                         children: [
                           pw.Text(
-                            'මාතර හෝටලය',
-                            style: pw.TextStyle(font: sinhalaFont, fontSize: 10, fontWeight: pw.FontWeight.bold),
-                          ),
+                             'v£ly »ƒ£Šfzx',
+                             style: pw.TextStyle(font: isiaginiFont, fontSize: 18, fontWeight: pw.FontWeight.bold),
+                           ),
                           pw.Text(
                             'නො: 04 මහා වීදිය, අකුරැස්ස',
                             style: pw.TextStyle(font: sinhalaFont, fontSize: 7, color: PdfColors.grey700),
@@ -3987,17 +4002,17 @@ class _POSScreenState extends State<POSScreen> {
                 children: [
                   Image.asset(
                     'assets/images/mhb_logo.png',
-                    width: 32,
-                    height: 32,
+                    width: 40,
+                    height: 40,
                     errorBuilder: (context, error, stackTrace) => const Icon(Icons.restaurant_menu, size: 32, color: Color(0xFF1E293B)),
                   ),
                   const SizedBox(width: 8),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'මාතර හෝටලය',
-                        style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)),
+                       Text(
+                           'v£ly »ƒ£Šfzx',
+                            style: const TextStyle(fontFamily: 'Isiagni',fontSize: 18,fontWeight: FontWeight.bold,color: Color(0xFF1E293B),),
                       ),
                       Text(
                         'නො: 04 මහා වීදිය, අකුරැස්ස',

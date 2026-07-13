@@ -1465,13 +1465,22 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
   }
 
   Future<Uint8List> _generateInvoicePdfBytes(ReceiptData data) async {
-    final pdf = pw.Document();
     final lang = Provider.of<DashboardController>(this.context, listen: false).selectedLanguage;
     final bool isSinhala = lang == 'Sinhala';
     
     // Load Sinhala Font
     final fontData = await rootBundle.load('assets/fonts/NotoSansSinhala-Regular.ttf');
     final sinhalaFont = pw.Font.ttf(fontData);
+    // Load Isiagini Font
+    final isiaginiFontData = await rootBundle.load('assets/fonts/Isiagni.ttf');
+    final isiaginiFont = pw.Font.ttf(isiaginiFontData);
+
+    final pdf = pw.Document(
+      theme: pw.ThemeData.withFont(
+        base: sinhalaFont,
+        fontFallback: [pw.Font.helvetica()],
+      ),
+    );
 
     // Load Logo
     pw.MemoryImage? logoImage;
@@ -1507,9 +1516,9 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
                         crossAxisAlignment: pw.CrossAxisAlignment.start,
                         children: [
                           pw.Text(
-                            'මාතර හෝටලය',
-                            style: pw.TextStyle(font: sinhalaFont, fontSize: 10, fontWeight: pw.FontWeight.bold),
-                          ),
+                             'v£ly »ƒ£Šfzx',
+                             style: pw.TextStyle(font: isiaginiFont, fontSize: 10, fontWeight: pw.FontWeight.bold),
+                           ),
                           pw.Text(
                             'නො: 04 මහා වීදිය, අකුරැස්ස',
                             style: pw.TextStyle(font: sinhalaFont, fontSize: 7, color: PdfColors.grey700),
@@ -1806,8 +1815,8 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'මාතර හෝටලය',
-                        style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)),
+                           'v£ly »ƒ£Šfzx',
+                            style: const TextStyle(fontFamily: 'Isiagni',fontSize: 12,fontWeight: FontWeight.bold,color: Color(0xFF1E293B),),
                       ),
                       Text(
                         'නො: 04 මහා වීදිය, අකුරැස්ස',

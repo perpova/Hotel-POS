@@ -48,3 +48,9 @@ flutter:
   assets:
     - assets/images/mhb_logo.png
     - assets/fonts/NotoSansSinhala-Regular.ttf
+    - assets/fonts/Isiagni.ttf
+
+  fonts:
+    - family: Isiagni
+      fonts:
+        - asset: assets/fonts/Isiagni.ttf
