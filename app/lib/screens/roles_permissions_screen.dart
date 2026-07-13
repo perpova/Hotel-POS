@@ -10,7 +10,7 @@ import '../api_service.dart';
 // ─────────────────────────────────────────────────────────────────────────────
 const List<String> kAppPages = [
   'Dashboard', 'POS', 'Dining Tables', 'KDS', 'Order Queue',
-  'Items', 'POS Orders', 'Offers', 'Shifts & Cash', 'Reports & Logs',
+  'Items', 'POS Orders', 'Pre Orders', 'Offers', 'Shifts & Cash', 'Reports & Logs',
   'Administrators', 'Delivery Boys', 'Customers', 'Employees', 'Waiters', 'Chefs',
   'Sales Report', 'Items Report', 'Credit Balance Report',
   'Raw Materials', 'POS Stock', 'Roles & Permissions', 'Settings',
@@ -20,6 +20,7 @@ const Set<String> kPagesWithActions = {
   'Items', 'Offers', 'Administrators', 'Delivery Boys',
   'Customers', 'Employees', 'Waiters', 'Chefs',
   'Raw Materials', 'POS Stock', 'Roles & Permissions',
+  'Pre Orders',
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

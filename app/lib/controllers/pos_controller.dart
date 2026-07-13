@@ -27,6 +27,7 @@ class POSController extends ChangeNotifier {
   List<OrderItemModel> cart = [];
   DiningTableModel? selectedTable;
   CustomerModel? selectedCustomer;
+  double activePreOrderAdvance = 0.00;
   String? stewardName;
   String orderType = 'takeaway'; // 'dine_in', 'takeaway', 'delivery'
   String? deliveryPlatform;     // 'uber_eats', 'pickme', 'phone', 'direct'
@@ -55,6 +56,18 @@ class POSController extends ChangeNotifier {
   Map<int, String?> tableStewards = {};
   Map<int, int> tableActiveOrderIds = {};
   List<dynamic> drawerLogs = [];
+
+  // Pre-orders and Notifications States
+  List<dynamic> preOrders = [];
+  List<dynamic> notifications = [];
+  int unreadNotificationCount = 0;
+  int? activePreOrderId;
+  int? requestedScreenIndex;
+
+  void navigateToScreen(int index) {
+    requestedScreenIndex = index;
+    notifyListeners();
+  }
 
   void setVoiceLanguage(String lang) {
     if (voiceLanguage != lang) {
@@ -362,6 +375,8 @@ class POSController extends ChangeNotifier {
         happyHours = await _api.getHappyHours();
         await _fetchActiveOrders();
         await fetchDrawerLogs();
+        await fetchPreOrders();
+        await fetchNotifications();
       } else {
         // Fallback: If completely offline in LAN-first mode,
         // we can fetch last cached settings from SharedPreferences
@@ -483,6 +498,16 @@ class POSController extends ChangeNotifier {
         case 'offer_deleted':
           reloadEnvironment();
           break;
+        case 'new_notification':
+        case 'notifications_read_all':
+        case 'notification_read':
+          fetchNotifications();
+          break;
+        case 'pre_order_created':
+        case 'pre_order_updated':
+        case 'pre_order_deleted':
+          fetchPreOrders();
+          break;
       }
     });
   }
@@ -531,10 +556,10 @@ class POSController extends ChangeNotifier {
         // Track active table IDs to remove inactive ones
         final Set<int> activeTableIds = activeDineInOrders.map((o) => o.tableId!).toSet();
         
-        // 1. Clear inactive tables
+        // 1. Clear inactive tables (only if they were actually saved/active in DB earlier, keeping pure local drafts)
         final List<int> currentTableIds = tableCarts.keys.toList();
         for (var tid in currentTableIds) {
-          if (!activeTableIds.contains(tid)) {
+          if (tableActiveOrderIds[tid] != null && !activeTableIds.contains(tid)) {
             tableCarts.remove(tid);
             tableActiveOrderIds.remove(tid);
             tableStewards.remove(tid);
@@ -545,7 +570,9 @@ class POSController extends ChangeNotifier {
         // 2. Restore/Update active tables
         for (var o in activeDineInOrders) {
           final tid = o.tableId!;
-          if (selectedTable?.id == tid && cart.isNotEmpty) {
+          final hasLocalPending = tableCarts[tid]?.any((item) => item.status == 'pending') ?? false;
+          
+          if ((selectedTable?.id == tid && cart.isNotEmpty) || hasLocalPending) {
             tableActiveOrderIds[tid] = o.id!;
             tableStewards[tid] = o.stewardName;
             tableStatuses[tid] = o.ackPrinted ? 'billing' : 'seated';
@@ -567,6 +594,9 @@ class POSController extends ChangeNotifier {
 
   double get cartSubtotal {
     return cart.fold(0.00, (sum, item) {
+      if (activePreOrderId != null) {
+        return sum + (item.price * item.quantity);
+      }
       ProductModel? p;
       for (var prod in products) {
         if (prod.id == item.productId) {
@@ -587,6 +617,16 @@ class POSController extends ChangeNotifier {
   }
 
   double get discount {
+    if (activePreOrderId != null) {
+      double manualDiscountValue = 0.00;
+      if (discountType == 'percent') {
+        manualDiscountValue = cartSubtotal * (rawDiscountValue / 100.0);
+      } else {
+        manualDiscountValue = rawDiscountValue;
+      }
+      return manualDiscountValue;
+    }
+
     // 1. Calculate Happy Hour discount
     double hhDiscount = cart.fold(0.00, (sum, item) {
       ProductModel? p;
@@ -914,6 +954,8 @@ class POSController extends ChangeNotifier {
     deliveryPlatform = null;
     rawDiscountValue = 0.00;
     discountType = 'percent';
+    activePreOrderAdvance = 0.00;
+    activePreOrderId = null;
     activeLankaQR = null;
     cardTerminalStatus = null;
     cardTerminalTxRef = null;
@@ -1126,6 +1168,7 @@ class POSController extends ChangeNotifier {
     double changeAmount = 0.00,
     bool clearCartAfter = true,
     int? customerId,
+    int? preOrderId,
   }) async {
     if (cart.isEmpty) throw Exception('Cart is empty');
     if (activeShift == null) throw Exception('No active shift. Please open a shift.');
@@ -1157,6 +1200,9 @@ class POSController extends ChangeNotifier {
       createdAt: DateTime.now().toIso8601String(),
       receivedAmount: receivedAmount,
       changeAmount: changeAmount,
+      advancePayment: activePreOrderAdvance,
+      balanceAmount: cartTotal - activePreOrderAdvance < 0 ? 0.00 : cartTotal - activePreOrderAdvance,
+      preOrderId: preOrderId ?? activePreOrderId,
       items: cart,
     );
 
@@ -1197,6 +1243,16 @@ class POSController extends ChangeNotifier {
       print('Order saved offline successfully: $orderNum');
     }
     
+    // Convert associated pre-order if applicable
+    if (isOnline && activePreOrderId != null) {
+      try {
+        await _api.updatePreOrder(activePreOrderId!, {'status': 'converted'});
+      } catch (e) {
+        print('Error converting pre-order: $e');
+      }
+      activePreOrderId = null;
+    }
+
     // Clear and reload
     if (clearCartAfter) {
       clearCart();
@@ -1254,5 +1310,131 @@ class POSController extends ChangeNotifier {
       
       return matchSearch && matchCategory;
     }).toList();
+  }
+
+  // ----------------------------------------------------
+  // PRE-ORDERS & NOTIFICATIONS CONTROLLER METHODS
+  // ----------------------------------------------------
+  Future<void> fetchPreOrders() async {
+    if (!isOnline) return;
+    try {
+      preOrders = await _api.getPreOrders();
+      notifyListeners();
+    } catch (e) {
+      print('Error loading pre-orders: $e');
+    }
+  }
+
+  Future<void> createPreOrder(Map<String, dynamic> data) async {
+    if (!isOnline) return;
+    await _api.createPreOrder(data);
+    await fetchPreOrders();
+  }
+
+  Future<void> updatePreOrder(int id, Map<String, dynamic> data) async {
+    if (!isOnline) return;
+    await _api.updatePreOrder(id, data);
+    await fetchPreOrders();
+  }
+
+  Future<void> deletePreOrder(int id) async {
+    if (!isOnline) return;
+    await _api.deletePreOrder(id);
+    await fetchPreOrders();
+  }
+
+  Future<void> fetchNotifications() async {
+    if (!isOnline) return;
+    try {
+      notifications = await _api.getNotifications();
+      unreadNotificationCount = notifications.where((n) => n['is_read'] == 0 || n['is_read'] == false || n['is_read'] == '0' || n['is_read'] == 0.0).length;
+      notifyListeners();
+    } catch (e) {
+      print('Error loading notifications: $e');
+    }
+  }
+
+  Future<void> readNotification(int id) async {
+    if (!isOnline) return;
+    try {
+      await _api.markNotificationRead(id);
+      final idx = notifications.indexWhere((n) => n['id'] == id);
+      if (idx != -1) {
+        notifications[idx]['is_read'] = 1;
+        unreadNotificationCount = notifications.where((n) => n['is_read'] == 0 || n['is_read'] == false || n['is_read'] == '0' || n['is_read'] == 0.0).length;
+        notifyListeners();
+      }
+    } catch (e) {
+      print('Error marking notification as read: $e');
+    }
+  }
+
+  Future<void> readAllNotifications() async {
+    if (!isOnline) return;
+    try {
+      await _api.markAllNotificationsRead();
+      for (var n in notifications) {
+        n['is_read'] = 1;
+      }
+      unreadNotificationCount = 0;
+      notifyListeners();
+    } catch (e) {
+      print('Error marking all notifications as read: $e');
+    }
+  }
+
+  void loadPreOrderToCart(dynamic preOrder) {
+    cart.clear();
+    activePreOrderId = preOrder['id'];
+    activePreOrderAdvance = double.parse(preOrder['advance_payment']?.toString() ?? '0.0');
+    
+    final custId = preOrder['customer_id'];
+    if (custId != null) {
+      final matchCust = customers.firstWhere((c) => c.id == custId, orElse: () => customers.first);
+      selectedCustomer = matchCust;
+    } else {
+      selectedCustomer = null;
+    }
+    
+    final itemsList = preOrder['items'] as List? ?? [];
+    for (var item in itemsList) {
+      final productId = item['product_id'];
+      final prod = products.firstWhere(
+        (p) => p.id == productId,
+        orElse: () => ProductModel(
+          id: productId,
+          name: item['product_name'] ?? 'Product',
+          categoryId: 0,
+          price: double.parse(item['price']?.toString() ?? '0.0'),
+          cost: 0,
+          activePrice: double.parse(item['price']?.toString() ?? '0.0'),
+          isHappyHour: false,
+          stockQty: 0,
+          minStockLevel: 0,
+          isShortEat: false,
+        ),
+      );
+      
+      cart.add(OrderItemModel(
+        productId: productId,
+        productName: item['product_name'] ?? prod.name,
+        productSinhalaName: item['product_sinhala_name'] ?? prod.sinhalaName,
+        quantity: item['quantity'] ?? 1,
+        price: double.parse(item['price']?.toString() ?? '0.0'),
+        notes: item['notes'],
+        status: 'pending',
+        isShortEat: prod.isShortEat,
+        extras: const [],
+      ));
+    }
+    
+    orderType = 'takeaway';
+    stewardName = null;
+    selectedTable = null;
+    
+    rawDiscountValue = double.parse(preOrder['discount']?.toString() ?? '0.0');
+    discountType = 'fixed';
+    
+    notifyListeners();
   }
 }

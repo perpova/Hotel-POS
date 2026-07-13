@@ -622,16 +622,37 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
             flex: 2,
             child: Align(
               alignment: Alignment.centerLeft,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: typeBg,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  typeLabel,
-                  style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: typeText),
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: typeBg,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      typeLabel,
+                      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: typeText),
+                    ),
+                  ),
+                  if (order.preOrderId != null) ...[
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEEF2FF),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: const Color(0xFFC7D2FE)),
+                      ),
+                      child: Text(
+                        'Pre-Order',
+                        style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold, color: const Color(0xFF4F46E5)),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
           ),
@@ -920,13 +941,36 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Order ID: #${order.orderNumber.substring(order.orderNumber.length - 8)}',
-                  style: GoogleFonts.outfit(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: AppTheme.textLightPrimary,
-                  ),
+                Row(
+                  children: [
+                    Text(
+                      'Order ID: #${order.orderNumber.substring(order.orderNumber.length - 8)}',
+                      style: GoogleFonts.outfit(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.textLightPrimary,
+                      ),
+                    ),
+                    if (order.preOrderId != null) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEEF2FF),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: const Color(0xFFC7D2FE)),
+                        ),
+                        child: Text(
+                          'Pre-Order',
+                          style: GoogleFonts.inter(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFF4F46E5),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
                 const SizedBox(height: 2),
                 Row(
@@ -1303,6 +1347,8 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
               customerName: customer.name,
               receivedAmount: receivedAmount,
               changeAmount: changeAmount,
+              advancePayment: order.advancePayment,
+              balanceAmount: order.balanceAmount,
               tokenNumber: order.id ?? 1,
               cashierName: 'Cashier ID: ${order.cashierId}',
               createdAt: order.createdAt,
@@ -1699,6 +1745,38 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
                   ),
                 ],
               ),
+              if (data.advancePayment > 0) ...[
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.SizedBox.shrink(),
+                    pw.Row(
+                      children: [
+                        pw.Text('Advance Paid', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                        pw.SizedBox(width: 5),
+                        pw.Text(':', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                        pw.SizedBox(width: 10),
+                        pw.Text(data.advancePayment.toStringAsFixed(2), style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                      ],
+                    ),
+                  ],
+                ),
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.SizedBox.shrink(),
+                    pw.Row(
+                      children: [
+                        pw.Text('Balance Due', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                        pw.SizedBox(width: 5),
+                        pw.Text(':', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                        pw.SizedBox(width: 10),
+                        pw.Text(data.balanceAmount.toStringAsFixed(2), style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                      ],
+                    ),
+                  ],
+                ),
+              ],
               
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -1998,6 +2076,38 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
               ),
             ],
           ),
+          if (data.advancePayment > 0) ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const SizedBox.shrink(),
+                Row(
+                  children: [
+                    Text('Advance Paid', style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF475569))),
+                    const SizedBox(width: 8),
+                    Text(':', style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF475569))),
+                    const SizedBox(width: 14),
+                    Text(data.advancePayment.toStringAsFixed(2), style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
+                  ],
+                ),
+              ],
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const SizedBox.shrink(),
+                Row(
+                  children: [
+                    Text('Balance Payable', style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF475569))),
+                    const SizedBox(width: 8),
+                    Text(':', style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF475569))),
+                    const SizedBox(width: 14),
+                    Text(data.balanceAmount.toStringAsFixed(2), style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
+                  ],
+                ),
+              ],
+            ),
+          ],
           
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -2198,6 +2308,8 @@ class ReceiptData {
   final String? customerName;
   final double receivedAmount;
   final double changeAmount;
+  final double advancePayment;
+  final double balanceAmount;
   final int tokenNumber;
   final String? cardLastDigits;
   final String? transactionRef;
@@ -2217,6 +2329,8 @@ class ReceiptData {
     this.customerName,
     required this.receivedAmount,
     required this.changeAmount,
+    this.advancePayment = 0.00,
+    this.balanceAmount = 0.00,
     required this.tokenNumber,
     this.cardLastDigits,
     this.transactionRef,

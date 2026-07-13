@@ -985,6 +985,27 @@ class _POSScreenState extends State<POSScreen> {
                   ),
                 ],
               ),
+              if (controller.activePreOrderAdvance > 0) ...[
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Advance Paid:', style: GoogleFonts.inter(fontSize: 11.5, color: Colors.green)),
+                    Text('-LKR ${controller.activePreOrderAdvance.toStringAsFixed(2)}', style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.bold, color: Colors.green)),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Balance Due:', style: GoogleFonts.outfit(fontSize: 14.5, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
+                    Text(
+                      'LKR ${(controller.cartTotal - controller.activePreOrderAdvance < 0 ? 0.00 : controller.cartTotal - controller.activePreOrderAdvance).toStringAsFixed(2)}',
+                      style: GoogleFonts.outfit(fontSize: 16.5, fontWeight: FontWeight.bold, color: AppTheme.primary),
+                    ),
+                  ],
+                ),
+              ],
             ],
           ),
           const SizedBox(height: 10),
@@ -1249,14 +1270,11 @@ class _POSScreenState extends State<POSScreen> {
       return p.id != 0 && p.isKotItem && item.status == 'pending';
     }).toList();
 
-    if (newKotItems.isEmpty) {
-      context.showErrorToast('No new KOT items to print');
-      return;
-    }
+    final bool hasKot = newKotItems.isNotEmpty;
 
     try {
       final orderResult = await controller.placeOrder(
-        printKOT: true,
+        printKOT: hasKot,
         printAck: false,
         status: 'pending',
         paymentStatus: 'unpaid',
@@ -1271,30 +1289,35 @@ class _POSScreenState extends State<POSScreen> {
         controller.tableActiveOrderIds[controller.selectedTable!.id] = orderId;
       }
 
-      final receiptData = ReceiptData(
-        orderId: orderId,
-        orderNumber: orderNum,
-        paymentMethod: 'unpaid',
-        items: newKotItems,
-        subtotal: 0,
-        discount: 0,
-        total: 0,
-        orderType: 'dine_in',
-        tableName: controller.selectedTable?.tableNumber,
-        receivedAmount: 0,
-        changeAmount: 0,
-        tokenNumber: 0,
-        cashierName: APIService.instance.currentUser?.name ?? 'Admin',
-      );
-
       controller.markKotItemsAsSent();
 
       if (mounted) {
-        _showReceiptDialog(receiptData, showKOT: true, showInvoice: false);
-        context.showSuccessToast('Chef notified via voice. Previewing KOT.');
+        if (hasKot) {
+          final receiptData = ReceiptData(
+            orderId: orderId,
+            orderNumber: orderNum,
+            paymentMethod: 'unpaid',
+            items: newKotItems,
+            subtotal: 0,
+            discount: 0,
+            total: 0,
+            orderType: 'dine_in',
+            tableName: controller.selectedTable?.tableNumber,
+            receivedAmount: 0,
+            changeAmount: 0,
+            advancePayment: 0,
+            balanceAmount: 0,
+            tokenNumber: 0,
+            cashierName: APIService.instance.currentUser?.name ?? 'Admin',
+          );
+          _showReceiptDialog(receiptData, showKOT: true, showInvoice: false);
+          context.showSuccessToast('Chef notified via voice. Previewing KOT.');
+        } else {
+          context.showSuccessToast('Table order saved successfully.');
+        }
       }
     } catch (e) {
-      _showErrorSnackBar('Failed to print KOT: $e');
+      _showErrorSnackBar('Failed to save order: $e');
     }
   }
 
@@ -1316,6 +1339,8 @@ class _POSScreenState extends State<POSScreen> {
         tableName: controller.selectedTable?.tableNumber,
         receivedAmount: 0,
         changeAmount: 0,
+        advancePayment: controller.activePreOrderAdvance,
+        balanceAmount: controller.cartTotal - controller.activePreOrderAdvance < 0 ? 0.00 : controller.cartTotal - controller.activePreOrderAdvance,
         tokenNumber: 0,
         cashierName: APIService.instance.currentUser?.name ?? 'Admin',
       );
@@ -2310,8 +2335,11 @@ class _POSScreenState extends State<POSScreen> {
         return StatefulBuilder(
           builder: (context, setModalState) {
             final cartTotal = controller.cartTotal;
+            final double payableTotal = cartTotal - controller.activePreOrderAdvance < 0
+                ? 0.00
+                : cartTotal - controller.activePreOrderAdvance;
             final double receivedVal = double.tryParse(amountController.text) ?? 0.00;
-            final double changeVal = receivedVal > cartTotal ? receivedVal - cartTotal : 0.00;
+            final double changeVal = receivedVal > payableTotal ? receivedVal - payableTotal : 0.00;
 
             // Trigger LankaQR generation if tab is QR
             if (paymentMethod == 'qr' && controller.activeLankaQR == null) {
@@ -2364,8 +2392,8 @@ class _POSScreenState extends State<POSScreen> {
 
               // Validation
               if (paymentMethod == 'cash') {
-                if (receivedVal < cartTotal) {
-                  _showErrorSnackBar('Received amount must be greater than or equal to total payable.');
+                if (receivedVal < payableTotal) {
+                  _showErrorSnackBar('Received amount must be greater than or equal to balance payable.');
                   return;
                 }
               } else if (paymentMethod == 'card') {
@@ -2412,10 +2440,12 @@ class _POSScreenState extends State<POSScreen> {
                     'payment_status': paymentMethod == 'credit' ? 'unpaid' : 'paid',
                     'payment_method': paymentMethod,
                     'status': 'delivered',
-                    'received_amount': paymentMethod == 'cash' ? receivedVal : finalTot,
+                    'received_amount': paymentMethod == 'cash' ? receivedVal : payableTotal,
                     'change_amount': paymentMethod == 'cash' ? changeVal : 0.00,
                     if (paymentMethod == 'credit' && selectedCreditCustomer != null)
                       'customer_id': selectedCreditCustomer!.id,
+                    if (controller.activePreOrderId != null)
+                      'pre_order_id': controller.activePreOrderId,
                   });
                   
                   orderId = activeOrderId;
@@ -2429,7 +2459,7 @@ class _POSScreenState extends State<POSScreen> {
                     status: (!hasKotItems || controller.orderType == 'dine_in') ? 'delivered' : 'pending',
                     paymentStatus: paymentMethod == 'credit' ? 'unpaid' : 'paid',
                     paymentMethod: paymentMethod,
-                    receivedAmount: paymentMethod == 'cash' ? receivedVal : finalTot,
+                    receivedAmount: paymentMethod == 'cash' ? receivedVal : payableTotal,
                     changeAmount: paymentMethod == 'cash' ? changeVal : 0.00,
                     customerId: paymentMethod == 'credit' ? selectedCreditCustomer?.id : null,
                   );
@@ -2450,6 +2480,8 @@ class _POSScreenState extends State<POSScreen> {
                   customerName: custName,
                   receivedAmount: paymentMethod == 'cash' ? receivedVal : finalTot,
                   changeAmount: paymentMethod == 'cash' ? changeVal : 0.00,
+                  advancePayment: controller.activePreOrderAdvance,
+                  balanceAmount: finalTot - controller.activePreOrderAdvance < 0 ? 0.00 : finalTot - controller.activePreOrderAdvance,
                   tokenNumber: tknNumber,
                   cardLastDigits: paymentMethod == 'card' ? amountController.text : null,
                   transactionRef: paymentMethod == 'qr' ? amountController.text : null,
@@ -2512,25 +2544,75 @@ class _POSScreenState extends State<POSScreen> {
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(color: const Color(0xFFE2E8F0)),
                         ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        child: Column(
                           children: [
-                            Text(
-                              'Total Amount',
-                              style: GoogleFonts.inter(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                color: const Color(0xFF64748B),
-                              ),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'Total Amount',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: const Color(0xFF64748B),
+                                  ),
+                                ),
+                                Text(
+                                  'LKR ${cartTotal.toStringAsFixed(2)}',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: const Color(0xFF475569),
+                                  ),
+                                ),
+                              ],
                             ),
-                            Text(
-                              'LKR ${cartTotal.toStringAsFixed(2)}',
-                              style: GoogleFonts.outfit(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                color: AppTheme.primary,
+                            if (controller.activePreOrderAdvance > 0) ...[
+                              const SizedBox(height: 6),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    'Advance Paid',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                      color: Colors.green,
+                                    ),
+                                  ),
+                                  Text(
+                                    '-LKR ${controller.activePreOrderAdvance.toStringAsFixed(2)}',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.green,
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ),
+                              const Divider(height: 12),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    'Balance Payable',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                      color: const Color(0xFF1E293B),
+                                    ),
+                                  ),
+                                  Text(
+                                    'LKR ${payableTotal.toStringAsFixed(2)}',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppTheme.primary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -2974,8 +3056,16 @@ class _POSScreenState extends State<POSScreen> {
       child: Builder(
         builder: (dialogCtx) {
           final controller = Provider.of<POSController>(dialogCtx, listen: false);
-          final double dialogWidth = (showKOT && showInvoice) ? MediaQuery.of(dialogCtx).size.width * 0.8 : 480;
-          final double maxDialogWidth = (showKOT && showInvoice) ? 780 : 480;
+          final hasKotItems = data.items.any((item) {
+            final p = controller.products.firstWhere(
+              (prod) => prod.id == item.productId,
+              orElse: () => ProductModel(id: 0, name: '', categoryId: 0, price: 0, cost: 0, activePrice: 0, isHappyHour: false, stockQty: 0, minStockLevel: 0, isShortEat: false, isKotItem: false),
+            );
+            return p.id != 0 && p.isKotItem;
+          });
+          final bool activeShowKOT = showKOT && hasKotItems;
+          final double dialogWidth = (activeShowKOT && showInvoice) ? MediaQuery.of(dialogCtx).size.width * 0.8 : 480;
+          final double maxDialogWidth = (activeShowKOT && showInvoice) ? 780 : 480;
           return Container(
             width: dialogWidth,
             constraints: BoxConstraints(
@@ -3002,7 +3092,7 @@ class _POSScreenState extends State<POSScreen> {
                         ),
                       ),
                       const Spacer(),
-                      if (showKOT) ...[
+                      if (activeShowKOT) ...[
                         // Print KOT
                         ElevatedButton.icon(
                           onPressed: () async {
@@ -3047,7 +3137,7 @@ class _POSScreenState extends State<POSScreen> {
                         ),
                       ],
                       if (showInvoice) ...[
-                        if (showKOT) const SizedBox(width: 12),
+                        if (activeShowKOT) const SizedBox(width: 12),
                         // Print Invoice
                         ElevatedButton.icon(
                           onPressed: () async {
@@ -3106,8 +3196,8 @@ class _POSScreenState extends State<POSScreen> {
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            if (showKOT) SizedBox(width: 340, child: _buildKOTSlip(data, controller)),
-                            if (showKOT && showInvoice) const SizedBox(width: 20),
+                            if (activeShowKOT) SizedBox(width: 340, child: _buildKOTSlip(data, controller)),
+                            if (activeShowKOT && showInvoice) const SizedBox(width: 20),
                             if (showInvoice) SizedBox(width: 340, child: _buildCustomerInvoiceSlip(data, controller)),
                           ],
                         ),
@@ -3217,11 +3307,31 @@ class _POSScreenState extends State<POSScreen> {
               ),
               pw.SizedBox(height: 5),
               
-              _buildPdfInfoRow('KOT No:', _getKOTNumber(data), sinhalaFont),
-              _buildPdfInfoRow('Date:', '${DateTime.now().day.toString().padLeft(2, '0')}/${DateTime.now().month.toString().padLeft(2, '0')}/${DateTime.now().year}', sinhalaFont),
-              _buildPdfInfoRow('Time:', _formatTime(DateTime.now(), includeSpace: true), sinhalaFont),
-              if (data.tableName != null && data.tableName!.isNotEmpty)
-                _buildPdfInfoRow('Table:', data.tableName!, sinhalaFont),
+              pw.Row(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Expanded(
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        _buildPdfInfoRow('KOT No:', _getKOTNumber(data), sinhalaFont),
+                        if (data.tableName != null && data.tableName!.isNotEmpty)
+                          _buildPdfInfoRow('Table:', data.tableName!, sinhalaFont),
+                      ],
+                    ),
+                  ),
+                  pw.SizedBox(width: 12),
+                  pw.Expanded(
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        _buildPdfInfoRow('Date:', '${DateTime.now().day.toString().padLeft(2, '0')}/${DateTime.now().month.toString().padLeft(2, '0')}/${DateTime.now().year}', sinhalaFont),
+                        _buildPdfInfoRow('Time:', _formatTime(DateTime.now(), includeSpace: true), sinhalaFont),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
               
               pw.SizedBox(height: 4),
               _buildPdfDashedLine(),
@@ -3623,6 +3733,30 @@ class _POSScreenState extends State<POSScreen> {
                     child: pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.end,
                       children: [
+                        if (data.advancePayment > 0) ...[
+                          pw.Row(
+                            mainAxisAlignment: pw.MainAxisAlignment.end,
+                            children: [
+                              pw.Text('Adv Paid', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                              pw.SizedBox(width: 4),
+                              pw.Text(':', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                              pw.SizedBox(width: 4),
+                              pw.Text(data.advancePayment.toStringAsFixed(2), style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                            ],
+                          ),
+                          pw.SizedBox(height: 4),
+                          pw.Row(
+                            mainAxisAlignment: pw.MainAxisAlignment.end,
+                            children: [
+                              pw.Text('Bal Due', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                              pw.SizedBox(width: 4),
+                              pw.Text(':', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                              pw.SizedBox(width: 4),
+                              pw.Text(data.balanceAmount.toStringAsFixed(2), style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                            ],
+                          ),
+                          pw.SizedBox(height: 4),
+                        ],
                         pw.Row(
                           mainAxisAlignment: pw.MainAxisAlignment.end,
                           children: [
@@ -3850,11 +3984,31 @@ class _POSScreenState extends State<POSScreen> {
           ),
           const SizedBox(height: 8),
           
-          _buildInfoRow('KOT No:', _getKOTNumber(data)),
-          _buildInfoRow('Date:', '${DateTime.now().day.toString().padLeft(2, '0')}/${DateTime.now().month.toString().padLeft(2, '0')}/${DateTime.now().year}'),
-          _buildInfoRow('Time:', _formatTime(DateTime.now(), includeSpace: true)),
-          if (data.tableName != null && data.tableName!.isNotEmpty)
-            _buildInfoRow('Table:', data.tableName!),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildInfoRow('KOT No:', _getKOTNumber(data)),
+                    if (data.tableName != null && data.tableName!.isNotEmpty)
+                      _buildInfoRow('Table:', data.tableName!),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildInfoRow('Date:', '${DateTime.now().day.toString().padLeft(2, '0')}/${DateTime.now().month.toString().padLeft(2, '0')}/${DateTime.now().year}'),
+                    _buildInfoRow('Time:', _formatTime(DateTime.now(), includeSpace: true)),
+                  ],
+                ),
+              ),
+            ],
+          ),
           
           const SizedBox(height: 6),
           _buildDashedLine(),
@@ -4255,6 +4409,30 @@ class _POSScreenState extends State<POSScreen> {
                         Text(data.receivedAmount.toStringAsFixed(2), style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
                       ],
                     ),
+                    if (data.advancePayment > 0) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          Text('Adv Paid', style: GoogleFonts.inter(fontSize: 8.5, color: const Color(0xFF475569))),
+                          const SizedBox(width: 4),
+                          Text(':', style: GoogleFonts.inter(fontSize: 8.5, color: const Color(0xFF475569))),
+                          const SizedBox(width: 4),
+                          Text(data.advancePayment.toStringAsFixed(2), style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          Text('Bal Payable', style: GoogleFonts.inter(fontSize: 8.5, color: const Color(0xFF475569))),
+                          const SizedBox(width: 4),
+                          Text(':', style: GoogleFonts.inter(fontSize: 8.5, color: const Color(0xFF475569))),
+                          const SizedBox(width: 4),
+                          Text(data.balanceAmount.toStringAsFixed(2), style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
+                        ],
+                      ),
+                    ],
                     const SizedBox(height: 4),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.end,
@@ -4401,6 +4579,8 @@ class ReceiptData {
   final String? customerName;
   final double receivedAmount;
   final double changeAmount;
+  final double advancePayment;
+  final double balanceAmount;
   final int tokenNumber;
   final String? cardLastDigits;
   final String? transactionRef;
@@ -4419,6 +4599,8 @@ class ReceiptData {
     this.customerName,
     required this.receivedAmount,
     required this.changeAmount,
+    this.advancePayment = 0.00,
+    this.balanceAmount = 0.00,
     required this.tokenNumber,
     this.cardLastDigits,
     this.transactionRef,

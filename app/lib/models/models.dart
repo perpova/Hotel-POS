@@ -556,6 +556,9 @@ class OrderModel {
   final String? updatedAt;
   final double receivedAmount;
   final double changeAmount;
+  final double advancePayment;
+  final double balanceAmount;
+  final int? preOrderId;
   final List<OrderItemModel> items;
 
   OrderModel({
@@ -582,6 +585,9 @@ class OrderModel {
     this.updatedAt,
     this.receivedAmount = 0.00,
     this.changeAmount = 0.00,
+    this.advancePayment = 0.00,
+    this.balanceAmount = 0.00,
+    this.preOrderId,
     required this.items,
   });
 
@@ -613,6 +619,9 @@ class OrderModel {
       updatedAt: json['updated_at'] ?? json['created_at'],
       receivedAmount: _toDouble(json['received_amount']),
       changeAmount: _toDouble(json['change_amount']),
+      advancePayment: _toDouble(json['advance_payment'] ?? 0.00),
+      balanceAmount: _toDouble(json['balance_amount'] ?? 0.00),
+      preOrderId: json['pre_order_id'],
       items: mappedItems,
     );
   }
@@ -641,6 +650,9 @@ class OrderModel {
     'updated_at': updatedAt,
     'received_amount': receivedAmount,
     'change_amount': changeAmount,
+    'advance_payment': advancePayment,
+    'balance_amount': balanceAmount,
+    'pre_order_id': preOrderId,
     'items': items.map((i) => i.toJson()).toList(),
   };
 }

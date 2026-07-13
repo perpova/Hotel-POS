@@ -432,6 +432,93 @@ async function initializeDatabase() {
                 await dbPool.query("ALTER TABLE orders ADD COLUMN change_amount DECIMAL(10,2) DEFAULT 0.00");
                 console.log("Migration: Added change_amount to orders table.");
             } catch (_) {}
+
+            // Migration: Create pre_orders, pre_order_items, and notifications tables
+            try {
+                await dbPool.query(`
+                    CREATE TABLE IF NOT EXISTS pre_orders (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        pre_order_number VARCHAR(50) UNIQUE NOT NULL,
+                        customer_id INT DEFAULT NULL,
+                        customer_name VARCHAR(100) NOT NULL,
+                        customer_phone VARCHAR(20) NOT NULL,
+                        received_date DATETIME NOT NULL,
+                        status ENUM('pending', 'converted', 'cancelled') DEFAULT 'pending',
+                        subtotal DECIMAL(10,2) NOT NULL,
+                        discount DECIMAL(10,2) DEFAULT 0.00,
+                        total DECIMAL(10,2) NOT NULL,
+                        is_notified BOOLEAN DEFAULT FALSE,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                        FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+                `);
+                console.log("Migration: Created pre_orders table successfully.");
+            } catch (err) {
+                console.error("Migration: Creating pre_orders table failed:", err.message);
+            }
+
+            try {
+                await dbPool.query(`
+                    CREATE TABLE IF NOT EXISTS pre_order_items (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        pre_order_id INT NOT NULL,
+                        product_id INT NOT NULL,
+                        quantity INT NOT NULL,
+                        price DECIMAL(10,2) NOT NULL,
+                        notes VARCHAR(255) DEFAULT NULL,
+                        FOREIGN KEY (pre_order_id) REFERENCES pre_orders(id) ON DELETE CASCADE,
+                        FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+                `);
+                console.log("Migration: Created pre_order_items table successfully.");
+            } catch (err) {
+                console.error("Migration: Creating pre_order_items table failed:", err.message);
+            }
+
+            try {
+                await dbPool.query(`
+                    CREATE TABLE IF NOT EXISTS notifications (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        title VARCHAR(255) NOT NULL,
+                        message TEXT NOT NULL,
+                        type VARCHAR(50) DEFAULT 'general',
+                        is_read BOOLEAN DEFAULT FALSE,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+                `);
+                console.log("Migration: Created notifications table successfully.");
+            } catch (err) {
+                console.error("Migration: Creating notifications table failed:", err.message);
+            }
+
+            // Migration: Add advance_payment and balance_amount to pre_orders
+            try {
+                await dbPool.query("ALTER TABLE pre_orders ADD COLUMN advance_payment DECIMAL(10,2) DEFAULT 0.00");
+                console.log("Migration: Added advance_payment to pre_orders table.");
+            } catch (_) {}
+            try {
+                await dbPool.query("ALTER TABLE pre_orders ADD COLUMN balance_amount DECIMAL(10,2) DEFAULT 0.00");
+                console.log("Migration: Added balance_amount to pre_orders table.");
+            } catch (_) {}
+
+            // Migration: Add advance_payment and balance_amount to orders
+            try {
+                await dbPool.query("ALTER TABLE orders ADD COLUMN advance_payment DECIMAL(10,2) DEFAULT 0.00");
+                console.log("Migration: Added advance_payment to orders table.");
+            } catch (_) {}
+            try {
+                await dbPool.query("ALTER TABLE orders ADD COLUMN balance_amount DECIMAL(10,2) DEFAULT 0.00");
+                console.log("Migration: Added balance_amount to orders table.");
+            } catch (_) {}
+            try {
+                await dbPool.query("ALTER TABLE orders ADD COLUMN pre_order_id INT NULL");
+                console.log("Migration: Added pre_order_id to orders table.");
+            } catch (_) {}
+            try {
+                await dbPool.query("ALTER TABLE orders ADD CONSTRAINT fk_orders_pre_order FOREIGN KEY (pre_order_id) REFERENCES pre_orders(id) ON DELETE SET NULL");
+                console.log("Migration: Added fk_orders_pre_order constraint.");
+            } catch (_) {}
         }
     } catch (error) {
         console.error('Database initialization failed:', error.message);

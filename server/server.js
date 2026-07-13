@@ -84,6 +84,43 @@ async function logAudit(actionType, tableName, recordId, details, userId) {
     }
 }
 
+// Low Stock Notification Helper
+async function checkLowStockNotification(productId) {
+    try {
+        const products = await db.query("SELECT * FROM products WHERE id = ?", [productId]);
+        if (products.length === 0) return;
+        const product = products[0];
+        
+        if (product.track_stock && product.stock_qty <= product.min_stock_level) {
+            // Check if we already have an unread low stock notification for this product
+            const existing = await db.query(
+                "SELECT id FROM notifications WHERE type = 'low_stock' AND is_read = 0 AND message LIKE ?",
+                [`%Product ${product.name} is low on stock%`]
+            );
+            if (existing.length === 0) {
+                const title = "Low Stock Alert";
+                const message = `Product ${product.name} is low on stock (${product.stock_qty} left)`;
+                await db.query(
+                    "INSERT INTO notifications (title, message, type) VALUES (?, ?, 'low_stock')",
+                    [title, message]
+                );
+                broadcast({
+                    type: 'new_notification',
+                    data: {
+                        title,
+                        message,
+                        type: 'low_stock',
+                        created_at: new Date()
+                    }
+                });
+            }
+        }
+    } catch (err) {
+        console.error('Error checking low stock notification:', err);
+    }
+}
+
+
 // ----------------------------------------------------
 // AUTHENTICATION ENDPOINTS
 // ----------------------------------------------------
@@ -312,9 +349,7 @@ app.post('/api/products/:id/stock', authenticateToken, async (req, res) => {
         const [product] = await db.query('SELECT * FROM products WHERE id = ?', [id]);
         
         // Send alert if low stock
-        if (product.stock_qty <= product.min_stock_level) {
-            broadcast({ type: 'low_stock_alert', data: { productId: product.id, name: product.name, stock: product.stock_qty } });
-        }
+        await checkLowStockNotification(id);
         
         // Broadcast stock update
         broadcast({ type: 'stock_updated', data: { productId: id, stock_qty: product.stock_qty } });
@@ -1863,7 +1898,8 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
     const {
         table_id, order_type, delivery_platform, customer_id, steward_name,
         payment_method, subtotal, discount, total, items, status, payment_status,
-        kot_printed, ack_printed, card_tx_reference, received_amount, change_amount
+        kot_printed, ack_printed, card_tx_reference, received_amount, change_amount,
+        advance_payment, balance_amount, pre_order_id
     } = req.body;
     
     // Obtain active shift
@@ -1894,17 +1930,25 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
         }
 
         if (!existingOrderId) {
-            // Generate unique order number (e.g. ORD-20260617-1004)
-            const localDate = new Date();
-            const year = localDate.getFullYear();
-            const month = String(localDate.getMonth() + 1).padStart(2, '0');
-            const day = String(localDate.getDate()).padStart(2, '0');
-            const dateStr = `${year}${month}${day}`;
-            const queryDate = `${year}-${month}-${day}`;
-     
-            const [countResult] = await conn.query('SELECT COUNT(*) as count FROM orders WHERE DATE(created_at) = ?', [queryDate]);
-            const nextNum = (countResult[0].count + 1).toString().padStart(4, '0');
-            orderNumber = `ORD-${dateStr}-${nextNum}`;
+            if (pre_order_id) {
+                const [poRows] = await conn.query('SELECT pre_order_number FROM pre_orders WHERE id = ?', [pre_order_id]);
+                if (poRows.length > 0) {
+                    orderNumber = poRows[0].pre_order_number;
+                }
+            }
+            if (!orderNumber) {
+                // Generate unique order number (e.g. ORD-20260617-1004)
+                const localDate = new Date();
+                const year = localDate.getFullYear();
+                const month = String(localDate.getMonth() + 1).padStart(2, '0');
+                const day = String(localDate.getDate()).padStart(2, '0');
+                const dateStr = `${year}${month}${day}`;
+                const queryDate = `${year}-${month}-${day}`;
+         
+                const [countResult] = await conn.query('SELECT COUNT(*) as count FROM orders WHERE DATE(created_at) = ?', [queryDate]);
+                const nextNum = (countResult[0].count + 1).toString().padStart(4, '0');
+                orderNumber = `ORD-${dateStr}-${nextNum}`;
+            }
         }
         
         const barcode = orderNumber; // Barcode maps to order number
@@ -1917,13 +1961,15 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
                 INSERT INTO orders (
                     order_number, table_id, order_type, delivery_platform, customer_id, steward_name,
                     status, payment_status, payment_method, subtotal, discount, total, cashier_id,
-                    shift_id, kot_printed, ack_printed, card_tx_reference, barcode, received_amount, change_amount
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    shift_id, kot_printed, ack_printed, card_tx_reference, barcode, received_amount, change_amount,
+                    advance_payment, balance_amount, pre_order_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `, [
                 orderNumber, table_id || null, order_type, delivery_platform || null, customer_id || null,
                 steward_name || null, status || 'pending', payment_status || 'unpaid', payment_method || null,
                 subtotal, discount, total, req.user.id, activeShiftId, kot_printed || false,
-                ack_printed || false, card_tx_reference || null, barcode, received_amount || 0.00, change_amount || 0.00
+                ack_printed || false, card_tx_reference || null, barcode, received_amount || 0.00, change_amount || 0.00,
+                advance_payment || 0.00, balance_amount || 0.00, pre_order_id || null
             ]);
             newOrderId = orderResult.insertId;
         } else {
@@ -1964,12 +2010,14 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
             await conn.query(`
                 UPDATE orders SET 
                     subtotal = ?, discount = ?, total = ?, steward_name = ?, customer_id = ?,
-                    kot_printed = ?, ack_printed = ?, received_amount = ?, change_amount = ?
+                    kot_printed = ?, ack_printed = ?, received_amount = ?, change_amount = ?,
+                    advance_payment = ?, balance_amount = ?
                 WHERE id = ?
             `, [
                 subtotal, discount, total, steward_name || null, customer_id || null,
                 kot_printed || false, ack_printed || false, 
                 received_amount || 0.00, change_amount || 0.00, 
+                advance_payment || 0.00, balance_amount || 0.00,
                 existingOrderId
             ]);
         }
@@ -2065,14 +2113,20 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
         
         // Add to Credit Person outstanding balance if credit payment method
         if (payment_method === 'credit' && customer_id) {
+            const outstandingInc = balance_amount !== undefined ? parseFloat(balance_amount) : total;
             await conn.query(
                 'UPDATE customers SET outstanding_balance = outstanding_balance + ? WHERE id = ?',
-                [total, customer_id]
+                [outstandingInc, customer_id]
             );
-            await logAudit('modify_bill', 'customers', customer_id, `Added outstanding balance LKR ${total} via Credit Order: ${orderNumber}`, req.user.id);
+            await logAudit('modify_bill', 'customers', customer_id, `Added outstanding balance LKR ${outstandingInc} via Credit Order: ${orderNumber}`, req.user.id);
         }
         
         await conn.commit();
+
+        // Check low stock notifications for all ordered items
+        for (const item of items) {
+            checkLowStockNotification(item.product_id).catch(err => console.error("Error checking low stock after order:", err));
+        }
         
         if (existingOrderId) {
             await logAudit('modify_bill', 'orders', existingOrderId, `Order ${orderNumber} updated (Dine-in items appended). Total updated to: LKR ${total}`, req.user.id);
@@ -2378,6 +2432,17 @@ app.post('/api/sync', authenticateToken, async (req, res) => {
         
         await conn.commit();
         console.log('Sync processing completed successfully.');
+
+        // Check low stock notifications for synced items
+        if (offline_orders && offline_orders.length > 0) {
+            for (const o of offline_orders) {
+                if (o.items && o.items.length > 0) {
+                    for (const item of o.items) {
+                        checkLowStockNotification(item.product_id).catch(err => console.error("Error checking low stock after sync:", err));
+                    }
+                }
+            }
+        }
         
         // Pull latest states to return to client
         const categories = await db.query('SELECT * FROM categories WHERE status = "active"');
@@ -2748,6 +2813,209 @@ app.put('/api/roles/:id/permissions', authenticateToken, async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
+
+// ----------------------------------------------------
+// PRE-ORDERS ENDPOINTS
+// ----------------------------------------------------
+
+app.get('/api/pre-orders', authenticateToken, async (req, res) => {
+    try {
+        const preorders = await db.query('SELECT * FROM pre_orders ORDER BY received_date ASC');
+        for (let po of preorders) {
+            const items = await db.query(`
+                SELECT poi.*, p.name as product_name, p.sinhala_name as product_sinhala_name
+                FROM pre_order_items poi
+                JOIN products p ON poi.product_id = p.id
+                WHERE poi.pre_order_id = ?
+            `, [po.id]);
+            po.items = items;
+        }
+        res.json(preorders);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/pre-orders', authenticateToken, async (req, res) => {
+    const { customer_id, customer_name, customer_phone, received_date, subtotal, discount, total, items, advance_payment, balance_amount } = req.body;
+    if (!customer_name || !customer_phone || !received_date || !items || items.length === 0) {
+        return res.status(400).json({ error: 'Missing required pre-order details' });
+    }
+    
+    const dbPool = await db.getPool();
+    const conn = await dbPool.getConnection();
+    try {
+        await conn.beginTransaction();
+        
+        // Generate pre-order number (PRE-20260713-0001)
+        const localDate = new Date();
+        const year = localDate.getFullYear();
+        const month = String(localDate.getMonth() + 1).padStart(2, '0');
+        const day = String(localDate.getDate()).padStart(2, '0');
+        const dateStr = `${year}${month}${day}`;
+        const queryDate = `${year}-${month}-${day}`;
+ 
+        const [countResult] = await conn.query('SELECT COUNT(*) as count FROM pre_orders WHERE DATE(created_at) = ?', [queryDate]);
+        const nextNum = (countResult[0].count + 1).toString().padStart(4, '0');
+        const preOrderNumber = `PRE-${dateStr}-${nextNum}`;
+        
+        const [result] = await conn.query(`
+            INSERT INTO pre_orders (pre_order_number, customer_id, customer_name, customer_phone, received_date, subtotal, discount, total, advance_payment, balance_amount)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [preOrderNumber, customer_id || null, customer_name, customer_phone, received_date, subtotal, discount, total, advance_payment || 0.00, balance_amount || 0.00]);
+        
+        const preOrderId = result.insertId;
+        
+        for (const item of items) {
+            await conn.query(`
+                INSERT INTO pre_order_items (pre_order_id, product_id, quantity, price, notes)
+                VALUES (?, ?, ?, ?, ?)
+            `, [preOrderId, item.product_id, item.quantity, item.price, item.notes || null]);
+        }
+        
+        await conn.commit();
+        
+        broadcast({ type: 'pre_order_created', data: { id: preOrderId, pre_order_number: preOrderNumber } });
+        res.json({ success: true, id: preOrderId, pre_order_number: preOrderNumber });
+    } catch (err) {
+        await conn.rollback();
+        res.status(500).json({ error: err.message });
+    } finally {
+        conn.release();
+    }
+});
+
+app.put('/api/pre-orders/:id', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    const { customer_id, customer_name, customer_phone, received_date, subtotal, discount, total, items, status, advance_payment, balance_amount } = req.body;
+    
+    const dbPool = await db.getPool();
+    const conn = await dbPool.getConnection();
+    try {
+        await conn.beginTransaction();
+        
+        let updateFields = [];
+        let params = [];
+        if (customer_id !== undefined) { updateFields.push('customer_id = ?'); params.push(customer_id); }
+        if (customer_name !== undefined) { updateFields.push('customer_name = ?'); params.push(customer_name); }
+        if (customer_phone !== undefined) { updateFields.push('customer_phone = ?'); params.push(customer_phone); }
+        if (received_date !== undefined) { updateFields.push('received_date = ?'); params.push(received_date); }
+        if (subtotal !== undefined) { updateFields.push('subtotal = ?'); params.push(subtotal); }
+        if (discount !== undefined) { updateFields.push('discount = ?'); params.push(discount); }
+        if (total !== undefined) { updateFields.push('total = ?'); params.push(total); }
+        if (status !== undefined) { updateFields.push('status = ?'); params.push(status); }
+        if (advance_payment !== undefined) { updateFields.push('advance_payment = ?'); params.push(advance_payment); }
+        if (balance_amount !== undefined) { updateFields.push('balance_amount = ?'); params.push(balance_amount); }
+        
+        if (updateFields.length > 0) {
+            params.push(id);
+            await conn.query(`UPDATE pre_orders SET ${updateFields.join(', ')} WHERE id = ?`, params);
+        }
+        
+        if (items && Array.isArray(items)) {
+            await conn.query('DELETE FROM pre_order_items WHERE pre_order_id = ?', [id]);
+            for (const item of items) {
+                await conn.query(`
+                    INSERT INTO pre_order_items (pre_order_id, product_id, quantity, price, notes)
+                    VALUES (?, ?, ?, ?, ?)
+                `, [id, item.product_id, item.quantity, item.price, item.notes || null]);
+            }
+        }
+        
+        await conn.commit();
+        broadcast({ type: 'pre_order_updated', data: { id } });
+        res.json({ success: true });
+    } catch (err) {
+        await conn.rollback();
+        res.status(500).json({ error: err.message });
+    } finally {
+        conn.release();
+    }
+});
+
+app.delete('/api/pre-orders/:id', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    try {
+        await db.query('DELETE FROM pre_orders WHERE id = ?', [id]);
+        broadcast({ type: 'pre_order_deleted', data: { id } });
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ----------------------------------------------------
+// NOTIFICATIONS ENDPOINTS
+// ----------------------------------------------------
+
+app.get('/api/notifications', authenticateToken, async (req, res) => {
+    try {
+        const rows = await db.query('SELECT * FROM notifications ORDER BY created_at DESC LIMIT 100');
+        res.json(rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.put('/api/notifications/read', authenticateToken, async (req, res) => {
+    try {
+        await db.query('UPDATE notifications SET is_read = 1');
+        broadcast({ type: 'notifications_read_all' });
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.put('/api/notifications/:id/read', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    try {
+        await db.query('UPDATE notifications SET is_read = 1 WHERE id = ?', [id]);
+        broadcast({ type: 'notification_read', data: { id } });
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Background task to check for near pre-orders (30 mins before received date)
+setInterval(async () => {
+    try {
+        const now = new Date();
+        const thirtyMinsLater = new Date(now.getTime() + 30 * 60000);
+        
+        // Find pending pre-orders due soon
+        const pending = await db.query(
+            "SELECT * FROM pre_orders WHERE status = 'pending' AND is_notified = 0 AND received_date <= ?",
+            [thirtyMinsLater]
+        );
+        
+        for (const po of pending) {
+            await db.query("UPDATE pre_orders SET is_notified = 1 WHERE id = ?", [po.id]);
+            
+            const title = "Pre-Order Alert";
+            const dueTime = new Date(po.received_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const message = `Pre-Order ${po.pre_order_number} is due soon at ${dueTime} for ${po.customer_name}`;
+            
+            await db.query(
+                "INSERT INTO notifications (title, message, type) VALUES (?, ?, 'pre_order_alert')",
+                [title, message]
+            );
+            
+            broadcast({
+                type: 'new_notification',
+                data: {
+                    title,
+                    message,
+                    type: 'pre_order_alert',
+                    created_at: new Date()
+                }
+            });
+        }
+    } catch (err) {
+        console.error("Error checking pre-order alerts in background:", err);
+    }
+}, 60000); // Check every 1 minute
 
 // Start Server and Init Database
 server.listen(PORT, async () => {

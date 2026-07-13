@@ -1147,6 +1147,72 @@ class APIService {
   }
 
   // ----------------------------------------------------
+  // PRE-ORDERS APIs
+  // ----------------------------------------------------
+  Future<List<dynamic>> getPreOrders() async {
+    final response = await http.get(Uri.parse('$_baseUrl/api/pre-orders'), headers: _getHeaders());
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body) as List<dynamic>;
+    }
+    throw Exception('Failed to load pre-orders');
+  }
+
+  Future<Map<String, dynamic>> createPreOrder(Map<String, dynamic> data) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/api/pre-orders'),
+      headers: _getHeaders(),
+      body: jsonEncode(data),
+    );
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body) as Map<String, dynamic>;
+    }
+    throw Exception(jsonDecode(response.body)['error'] ?? 'Failed to create pre-order');
+  }
+
+  Future<void> updatePreOrder(int id, Map<String, dynamic> data) async {
+    final response = await http.put(
+      Uri.parse('$_baseUrl/api/pre-orders/$id'),
+      headers: _getHeaders(),
+      body: jsonEncode(data),
+    );
+    if (response.statusCode != 200) {
+      throw Exception(jsonDecode(response.body)['error'] ?? 'Failed to update pre-order');
+    }
+  }
+
+  Future<void> deletePreOrder(int id) async {
+    final response = await http.delete(Uri.parse('$_baseUrl/api/pre-orders/$id'), headers: _getHeaders());
+    if (response.statusCode != 200) {
+      throw Exception('Failed to delete pre-order');
+    }
+  }
+
+  // ----------------------------------------------------
+  // NOTIFICATIONS APIs
+  // ----------------------------------------------------
+  Future<List<dynamic>> getNotifications() async {
+    final response = await http.get(Uri.parse('$_baseUrl/api/notifications'), headers: _getHeaders());
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body) as List<dynamic>;
+    }
+    throw Exception('Failed to load notifications');
+  }
+
+  Future<void> markAllNotificationsRead() async {
+    final response = await http.put(Uri.parse('$_baseUrl/api/notifications/read'), headers: _getHeaders());
+    if (response.statusCode != 200) {
+      throw Exception('Failed to mark notifications as read');
+    }
+  }
+
+  Future<void> markNotificationRead(int id) async {
+    final response = await http.put(Uri.parse('$_baseUrl/api/notifications/$id/read'), headers: _getHeaders());
+    if (response.statusCode != 200) {
+      throw Exception('Failed to mark notification as read');
+    }
+  }
+
+  // ----------------------------------------------------
   // WEBSOCKET REALTIME EVENTS CLIENT
   // ----------------------------------------------------
   void connectWebSocket() {

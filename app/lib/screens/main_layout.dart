@@ -31,6 +31,7 @@ import 'pos_stock_screen.dart';
 import 'edit_profile_screen.dart';
 import 'change_password_screen.dart';
 import 'roles_permissions_screen.dart';
+import 'pre_orders_screen.dart';
 
 class MainLayout extends StatefulWidget {
   const MainLayout({Key? key}) : super(key: key);
@@ -71,6 +72,7 @@ class _MainLayoutState extends State<MainLayout> {
     'Edit Profile',
     'Change Password',
     'Roles & Permissions',
+    'Pre Orders',
   ];
 
   Widget _getScreen(int index) {
@@ -125,6 +127,8 @@ class _MainLayoutState extends State<MainLayout> {
         return const ChangePasswordScreen();
       case 24:
         return const RolesPermissionsScreen();
+      case 25:
+        return const PreOrdersScreen();
       default:
         return const DashboardScreen();
     }
@@ -446,6 +450,16 @@ class _MainLayoutState extends State<MainLayout> {
     final dashController = Provider.of<DashboardController>(context);
     final appSettings = context.watch<AppSettingsController>();
 
+    if (posController.requestedScreenIndex != null) {
+      final reqIdx = posController.requestedScreenIndex!;
+      posController.requestedScreenIndex = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        setState(() {
+          _selectedIndex = reqIdx;
+        });
+      });
+    }
+
     final branchNames = appSettings.branches.map((b) => b.name).toList();
     if (branchNames.isEmpty) {
       branchNames.add('Main Branch');
@@ -487,6 +501,7 @@ class _MainLayoutState extends State<MainLayout> {
         'POS & ORDERS',
         [
           _SidebarItem(Icons.point_of_sale_outlined, 'POS System', 1),
+          _SidebarItem(Icons.history_toggle_off_outlined, 'Pre Orders', 25),
           _SidebarItem(Icons.receipt_long_outlined, 'POS Orders', 9),
           _SidebarItem(Icons.queue_play_next_outlined, 'Queue Screen', 4),
           _SidebarItem(Icons.kitchen_outlined, 'K.D.S (Kitchen)', 3),
@@ -1078,14 +1093,128 @@ class _MainLayoutState extends State<MainLayout> {
                         const SizedBox(width: 16),
                       ],
 
-                      // Notification Bell with indicator badge
-                      IconButton(
-                        icon: const Badge(
-                          label: Text('1', style: TextStyle(fontSize: 8)),
+                      // Notification Bell with dynamic badge and dropdown menu
+                      PopupMenuButton<dynamic>(
+                        offset: const Offset(0, 50),
+                        icon: Badge(
+                          label: Text(
+                            '${posController.unreadNotificationCount}',
+                            style: const TextStyle(fontSize: 8, color: Colors.white),
+                          ),
+                          isLabelVisible: posController.unreadNotificationCount > 0,
                           backgroundColor: Colors.red,
-                          child: Icon(Icons.notifications_none_outlined, color: Color(0xFF64748B), size: 20),
+                          child: const Icon(Icons.notifications_none_outlined, color: Color(0xFF64748B), size: 20),
                         ),
-                        onPressed: () {},
+                        tooltip: 'Notifications',
+                        itemBuilder: (BuildContext context) {
+                          final list = posController.notifications;
+                          return [
+                            PopupMenuItem<dynamic>(
+                              enabled: false,
+                              child: Container(
+                                width: 320,
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text(
+                                          'Notifications'.tr(context),
+                                          style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+                                        ),
+                                        if (posController.unreadNotificationCount > 0)
+                                          TextButton(
+                                            onPressed: () async {
+                                              await posController.readAllNotifications();
+                                              Navigator.pop(context);
+                                            },
+                                            child: Text('Mark all as read'.tr(context), style: const TextStyle(fontSize: 11)),
+                                          ),
+                                      ],
+                                    ),
+                                    const Divider(height: 8, color: Color(0xFFE2E8F0)),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            if (list.isEmpty)
+                              PopupMenuItem<dynamic>(
+                                enabled: false,
+                                child: Container(
+                                  width: 320,
+                                  padding: const EdgeInsets.symmetric(vertical: 24),
+                                  child: Center(
+                                    child: Text(
+                                      'No notifications yet'.tr(context),
+                                      style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8)),
+                                    ),
+                                  ),
+                                ),
+                              )
+                            else
+                              ...list.map((n) {
+                                final bool isRead = n['is_read'] == 1 || n['is_read'] == true;
+                                return PopupMenuItem<dynamic>(
+                                  onTap: () async {
+                                    if (!isRead) {
+                                      await posController.readNotification(n['id']);
+                                    }
+                                  },
+                                  child: Container(
+                                    width: 320,
+                                    padding: const EdgeInsets.symmetric(vertical: 6),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Expanded(
+                                              child: Text(
+                                                n['title'] ?? 'Alert',
+                                                overflow: TextOverflow.ellipsis,
+                                                style: GoogleFonts.inter(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: isRead ? const Color(0xFF64748B) : AppTheme.primary,
+                                                ),
+                                              ),
+                                            ),
+                                            if (!isRead)
+                                              Container(
+                                                width: 6,
+                                                height: 6,
+                                                decoration: const BoxDecoration(
+                                                  color: Colors.blue,
+                                                  shape: BoxShape.circle,
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          n['message'] ?? '',
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: GoogleFonts.inter(
+                                            fontSize: 11,
+                                            color: isRead ? const Color(0xFF94A3B8) : const Color(0xFF334155),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          DateFormat('yyyy-MM-dd hh:mm a').format(DateTime.tryParse(n['created_at'])?.toLocal() ?? DateTime.now()),
+                                          style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF94A3B8)),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                          ];
+                        },
                       ),
 
                       const SizedBox(width: 8),

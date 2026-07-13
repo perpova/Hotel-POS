@@ -50,7 +50,14 @@ class _UsersScreenState extends State<UsersScreen> {
   List<AddressModel> _addresses = [];
   bool _loadingAddresses = false;
   List<OrderModel> _userOrders = [];
+  List<OrderModel> _rawUserOrders = [];
   bool _loadingOrders = false;
+
+  // Orders history filters
+  String _ordersFilterPreset = 'all'; // 'all', 'daily', 'weekly', 'monthly', 'single', 'custom'
+  DateTime? _ordersFilterStartDate;
+  DateTime? _ordersFilterEndDate;
+  DateTime? _ordersFilterSingleDate;
 
   // Form Keys
   final _userFormKey = GlobalKey<FormState>();
@@ -192,6 +199,11 @@ class _UsersScreenState extends State<UsersScreen> {
     setState(() {
       _loadingOrders = true;
       _userOrders = [];
+      _rawUserOrders = [];
+      _ordersFilterPreset = 'all';
+      _ordersFilterStartDate = null;
+      _ordersFilterEndDate = null;
+      _ordersFilterSingleDate = null;
     });
     try {
       final isCust = item is CustomerModel;
@@ -202,12 +214,17 @@ class _UsersScreenState extends State<UsersScreen> {
         if (isCust) {
           return o.customerId == id;
         } else {
+          final user = item as UserModel;
+          if (user.role.toLowerCase() == 'waiter') {
+            return o.stewardName != null && o.stewardName!.toLowerCase() == user.name.toLowerCase();
+          }
           return o.cashierId == id;
         }
       }).toList();
       
       if (mounted) {
         setState(() {
+          _rawUserOrders = filtered;
           _userOrders = filtered;
           _loadingOrders = false;
         });
@@ -1956,90 +1973,368 @@ class _UsersScreenState extends State<UsersScreen> {
     );
   }
 
+  List<OrderModel> get _filteredUserOrders {
+    final now = DateTime.now();
+    return _rawUserOrders.where((o) {
+      final orderDate = DateTime.tryParse(o.createdAt)?.toLocal() ?? DateTime.now();
+      
+      if (_ordersFilterPreset == 'daily') {
+        return orderDate.year == now.year && orderDate.month == now.month && orderDate.day == now.day;
+      } else if (_ordersFilterPreset == 'weekly') {
+        final sevenDaysAgo = now.subtract(const Duration(days: 7));
+        return orderDate.isAfter(sevenDaysAgo);
+      } else if (_ordersFilterPreset == 'monthly') {
+        final thirtyDaysAgo = now.subtract(const Duration(days: 30));
+        return orderDate.isAfter(thirtyDaysAgo);
+      } else if (_ordersFilterPreset == 'single' && _ordersFilterSingleDate != null) {
+        return orderDate.year == _ordersFilterSingleDate!.year &&
+               orderDate.month == _ordersFilterSingleDate!.month &&
+               orderDate.day == _ordersFilterSingleDate!.day;
+      } else if (_ordersFilterPreset == 'custom') {
+        bool match = true;
+        if (_ordersFilterStartDate != null) {
+          final startOfDay = DateTime(_ordersFilterStartDate!.year, _ordersFilterStartDate!.month, _ordersFilterStartDate!.day);
+          match = match && (orderDate.isAfter(startOfDay) || orderDate.isAtSameMomentAs(startOfDay));
+        }
+        if (_ordersFilterEndDate != null) {
+          final endOfDay = DateTime(_ordersFilterEndDate!.year, _ordersFilterEndDate!.month, _ordersFilterEndDate!.day, 23, 59, 59);
+          match = match && (orderDate.isBefore(endOfDay) || orderDate.isAtSameMomentAs(endOfDay));
+        }
+        return match;
+      }
+      return true; // all
+    }).toList();
+  }
+
+  Future<void> _printOrdersHistoryReport(List<OrderModel> orders) async {
+    final name = _viewingItem is CustomerModel ? (_viewingItem as CustomerModel).name : (_viewingItem as UserModel).name;
+    final role = _viewingItem is CustomerModel ? 'CUSTOMER' : (_viewingItem as UserModel).role.toUpperCase();
+
+    final doc = pw.Document();
+    double totalSum = orders.fold(0.0, (sum, o) => sum + o.total);
+
+    final headers = ['Order Number', 'Date & Time', 'Status', 'Amount'];
+    final data = orders.map((o) {
+      final dateFormatted = DateFormat('yyyy-MM-dd hh:mm a').format((DateTime.tryParse(o.createdAt) ?? DateTime.now()).toLocal());
+      return [
+        o.orderNumber,
+        dateFormatted,
+        o.status.toUpperCase(),
+        'LKR ${o.total.toStringAsFixed(2)}',
+      ];
+    }).toList();
+
+    doc.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        build: (pw.Context context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Center(
+                child: pw.Text(
+                  'MATARA HOTEL',
+                  style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold),
+                ),
+              ),
+              pw.Center(
+                child: pw.Text(
+                  'Orders History Report',
+                  style: pw.TextStyle(fontSize: 14, color: PdfColors.grey600),
+                ),
+              ),
+              pw.SizedBox(height: 20),
+              pw.Divider(),
+              pw.SizedBox(height: 10),
+              
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text('Staff Member: $name', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                      pw.Text('Role: $role'),
+                    ],
+                  ),
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.end,
+                    children: [
+                      pw.Text('Exported On: ${DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now())}'),
+                      pw.Text('Total Served: ${orders.length} orders'),
+                    ],
+                  ),
+                ],
+              ),
+              pw.SizedBox(height: 20),
+              
+              pw.Table.fromTextArray(
+                headers: headers,
+                data: data,
+                border: pw.TableBorder.all(color: PdfColors.grey300),
+                headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                headerDecoration: const pw.BoxDecoration(color: PdfColors.grey100),
+                cellHeight: 25,
+                cellAlignments: {
+                  0: pw.Alignment.centerLeft,
+                  1: pw.Alignment.centerLeft,
+                  2: pw.Alignment.center,
+                  3: pw.Alignment.centerRight,
+                },
+              ),
+              pw.SizedBox(height: 20),
+              pw.Divider(),
+              
+              pw.Align(
+                alignment: pw.Alignment.centerRight,
+                child: pw.Text(
+                  'Grand Total: LKR ${totalSum.toStringAsFixed(2)}',
+                  style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    await Printing.layoutPdf(
+      onLayout: (PdfPageFormat format) async => doc.save(),
+      name: 'Orders_Report_${name.replaceAll(" ", "_")}',
+    );
+  }
+
   // TAB 3: My Orders Tab content
   Widget _buildOrdersTab() {
+    final orders = _filteredUserOrders;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('Orders History', style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
         const SizedBox(height: 20),
 
+        // Filters Row
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: _ordersFilterPreset,
+                  items: const [
+                    DropdownMenuItem(value: 'all', child: Text('All Time')),
+                    DropdownMenuItem(value: 'daily', child: Text('Daily (Today)')),
+                    DropdownMenuItem(value: 'weekly', child: Text('Weekly (Last 7 Days)')),
+                    DropdownMenuItem(value: 'monthly', child: Text('Monthly (Last 30 Days)')),
+                    DropdownMenuItem(value: 'single', child: Text('Single Date')),
+                    DropdownMenuItem(value: 'custom', child: Text('Custom Range')),
+                  ],
+                  onChanged: (val) {
+                    setState(() {
+                      _ordersFilterPreset = val!;
+                    });
+                  },
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            
+            if (_ordersFilterPreset == 'single') ...[
+              OutlinedButton.icon(
+                onPressed: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: _ordersFilterSingleDate ?? DateTime.now(),
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime(2030),
+                  );
+                  if (picked != null) {
+                    setState(() {
+                      _ordersFilterSingleDate = picked;
+                    });
+                  }
+                },
+                icon: const Icon(Icons.calendar_today, size: 14),
+                label: Text(
+                  _ordersFilterSingleDate == null
+                      ? 'Select Date'
+                      : DateFormat('yyyy-MM-dd').format(_ordersFilterSingleDate!),
+                  style: GoogleFonts.inter(fontSize: 12),
+                ),
+              ),
+            ] else if (_ordersFilterPreset == 'custom') ...[
+              OutlinedButton.icon(
+                onPressed: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: _ordersFilterStartDate ?? DateTime.now(),
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime(2030),
+                  );
+                  if (picked != null) {
+                    setState(() {
+                      _ordersFilterStartDate = picked;
+                    });
+                  }
+                },
+                icon: const Icon(Icons.calendar_today, size: 14),
+                label: Text(
+                  _ordersFilterStartDate == null
+                      ? 'Start Date'
+                      : DateFormat('yyyy-MM-dd').format(_ordersFilterStartDate!),
+                  style: GoogleFonts.inter(fontSize: 12),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text('to', style: GoogleFonts.inter(fontSize: 12, color: Colors.grey)),
+              const SizedBox(width: 8),
+              OutlinedButton.icon(
+                onPressed: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: _ordersFilterEndDate ?? DateTime.now(),
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime(2030),
+                  );
+                  if (picked != null) {
+                    setState(() {
+                      _ordersFilterEndDate = picked;
+                    });
+                  }
+                },
+                icon: const Icon(Icons.calendar_today, size: 14),
+                label: Text(
+                  _ordersFilterEndDate == null
+                      ? 'End Date'
+                      : DateFormat('yyyy-MM-dd').format(_ordersFilterEndDate!),
+                  style: GoogleFonts.inter(fontSize: 12),
+                ),
+              ),
+            ],
+            
+            const Spacer(),
+            
+            ElevatedButton.icon(
+              onPressed: orders.isEmpty ? null : () => _printOrdersHistoryReport(orders),
+              icon: const Icon(Icons.picture_as_pdf, size: 14),
+              label: const Text('Export PDF'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red[800],
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 20),
+
         if (_loadingOrders)
           Center(child: CircularProgressIndicator(color: AppTheme.primary))
-        else if (_userOrders.isEmpty)
+        else if (orders.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 40.0),
             child: Center(
               child: Text(
-                'No orders placed yet.',
+                'No orders found matching the filter.',
                 style: GoogleFonts.inter(color: const Color(0xFF64748B)),
               ),
             ),
           )
         else
-          // Orders Grid Card Layout
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: _userOrders.length,
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
-              crossAxisSpacing: 16,
-              mainAxisSpacing: 16,
-              childAspectRatio: 1.8,
+          // Orders Compact Table Layout
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
             ),
-            itemBuilder: (context, index) {
-              final o = _userOrders[index];
-              final dateFormatted = DateFormat('hh:mm a, dd-MM-yyyy').format((DateTime.tryParse(o.createdAt) ?? DateTime.now()).toLocal());
-              
-              return Card(
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  side: const BorderSide(color: Color(0xFFE2E8F0)),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Container(
+                  color: const Color(0xFFF8FAFC),
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                  child: Row(
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Order ID: #${o.orderNumber.length > 12 ? o.orderNumber.substring(o.orderNumber.length - 8) : o.orderNumber}',
-                            style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
-                          ),
-                          _buildOrderBadge(o.status),
-                        ],
-                      ),
-                      Text(
-                        '${o.items.length} items',
-                        style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
-                      ),
-                      Text(
-                        dateFormatted,
-                        style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF94A3B8)),
-                      ),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Total: LKR ${o.total.toStringAsFixed(2)}',
-                            style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primary),
-                          ),
-                          Text(
-                            'See Order Details >',
-                            style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.blue),
-                          ),
-                        ],
-                      ),
+                      Expanded(flex: 3, child: _buildTableHeaderText('ORDER ID')),
+                      Expanded(flex: 4, child: _buildTableHeaderText('DATE & TIME')),
+                      Expanded(flex: 2, child: _buildTableHeaderText('STATUS')),
+                      Expanded(flex: 3, child: _buildTableHeaderText('TOTAL')),
+                      Expanded(flex: 2, child: _buildTableHeaderText('ACTION')),
                     ],
                   ),
                 ),
-              );
-            },
+                ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: orders.length,
+                  separatorBuilder: (context, index) => const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                  itemBuilder: (context, index) {
+                    final o = orders[index];
+                    final dateFormatted = DateFormat('hh:mm a, dd-MM-yyyy').format((DateTime.tryParse(o.createdAt) ?? DateTime.now()).toLocal());
+                    
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            flex: 3,
+                            child: Text(
+                              '#${o.orderNumber.length > 12 ? o.orderNumber.substring(o.orderNumber.length - 8) : o.orderNumber}',
+                              style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 4,
+                            child: Text(
+                              dateFormatted,
+                              style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF475569)),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: _buildOrderBadge(o.status),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 3,
+                            child: Text(
+                              'LKR ${o.total.toStringAsFixed(2)}',
+                              style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.primary),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: Row(
+                                children: [
+                                  GestureDetector(
+                                    onTap: () => _showUserOrderDetailDialog(o),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(6),
+                                      decoration: BoxDecoration(color: const Color(0xFFFFF0F5), borderRadius: BorderRadius.circular(6)),
+                                      child: Icon(Icons.visibility_outlined, color: AppTheme.primary, size: 14),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
           ),
       ],
     );
@@ -2070,6 +2365,166 @@ class _UsersScreenState extends State<UsersScreen> {
         status.toUpperCase(),
         style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold, color: fg),
       ),
+    );
+  }
+
+  void _showUserOrderDetailDialog(OrderModel order) async {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) {
+        return Center(
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              width: 480,
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10)],
+              ),
+              child: FutureBuilder<List<OrderItemModel>>(
+                future: APIService.instance.getOrderItems(order.id!),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return SizedBox(
+                      height: 200,
+                      child: Center(child: CircularProgressIndicator(color: AppTheme.primary)),
+                    );
+                  }
+                  
+                  if (snapshot.hasError) {
+                    return SizedBox(
+                      height: 200,
+                      child: Center(child: Text('Error loading details: ${snapshot.error}')),
+                    );
+                  }
+
+                  final items = snapshot.data ?? [];
+                  
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Order Details',
+                            style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close, size: 18),
+                            onPressed: () => Navigator.pop(context),
+                          ),
+                        ],
+                      ),
+                      const Divider(height: 20),
+                      Text(
+                        'Order Number: #${order.orderNumber}',
+                        style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF64748B)),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Date: ${DateFormat('yyyy-MM-dd hh:mm a').format((DateTime.tryParse(order.createdAt) ?? DateTime.now()).toLocal())}',
+                        style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+                      ),
+                      const SizedBox(height: 16),
+                      
+                      Text(
+                        'Items Ordered',
+                        style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        constraints: const BoxConstraints(maxHeight: 180),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: ListView.separated(
+                          shrinkWrap: true,
+                          itemCount: items.length,
+                          separatorBuilder: (context, idx) => const Divider(height: 1),
+                          itemBuilder: (context, idx) {
+                            final item = items[idx];
+                            return ListTile(
+                              dense: true,
+                              title: Text(item.productName, style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
+                              subtitle: item.notes != null && item.notes!.isNotEmpty
+                                  ? Text('Notes: ${item.notes}', style: GoogleFonts.inter(fontSize: 10, fontStyle: FontStyle.italic))
+                                  : null,
+                              trailing: Text(
+                                '${item.quantity} x LKR ${item.price.toStringAsFixed(2)}',
+                                style: GoogleFonts.inter(fontWeight: FontWeight.bold),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      
+                      // Totals
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('Subtotal:', style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B))),
+                          Text('LKR ${order.subtotal.toStringAsFixed(2)}', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      if (order.discount > 0) ...[
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('Discount:', style: GoogleFonts.inter(fontSize: 12, color: Colors.red)),
+                            Text('-LKR ${order.discount.toStringAsFixed(2)}', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.red)),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                    ],
+                    if (order.advancePayment > 0) ...[
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('Advance Paid:', style: GoogleFonts.inter(fontSize: 12, color: Colors.green)),
+                          Text('LKR ${order.advancePayment.toStringAsFixed(2)}', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.green)),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                    ],
+                    const Divider(),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Total Amount:', style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold)),
+                        Text('LKR ${order.total.toStringAsFixed(2)}', style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold, color: AppTheme.primary)),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primary,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        child: const Text('OK'),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+          ),
+        );
+      },
     );
   }
 
