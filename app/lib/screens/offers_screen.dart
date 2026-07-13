@@ -57,6 +57,9 @@ class _OffersScreenState extends State<OffersScreen> {
   final _startTimeController = TextEditingController(text: '17:00:00');
   final _endTimeController = TextEditingController(text: '19:00:00');
   String _selectedDays = '1,2,3,4,5'; // Monday to Friday
+  String? _happyHourImageName;
+  String? _happyHourImageBase64;
+  Map<String, dynamic>? _editingHappyHour;
 
   bool _isSaving = false;
 
@@ -132,22 +135,81 @@ class _OffersScreenState extends State<OffersScreen> {
     });
   }
 
-  // Open Happy Hour Drawer (Add only)
-  void _openHappyHourDrawer() {
+  // Open Happy Hour Drawer (Add/Edit)
+  void _openHappyHourDrawer([Map<String, dynamic>? group]) {
     setState(() {
       _isHappyHourForm = true;
       _editingOffer = null;
+      _editingHappyHour = group;
       _isDrawerOpen = true;
 
-      _happyHourNameController.clear();
-      _selectedPromoProducts.clear();
-      _happyHourPromoType = 'percent';
-      _happyHourSelectionMode = 'product';
-      _selectedHappyHourCategoryId = null;
-      _promoPriceController.clear();
-      _startTimeController.text = '17:00:00';
-      _endTimeController.text = '19:00:00';
-      _selectedDays = '1,2,3,4,5';
+      if (group != null) {
+        _happyHourNameController.text = group['name'] ?? '';
+        final start = group['start_time'].toString();
+        final end = group['end_time'].toString();
+        _startTimeController.text = start.length > 8 ? start.substring(0, 8) : start;
+        _endTimeController.text = end.length > 8 ? end.substring(0, 8) : end;
+        _selectedDays = group['days_of_week'] ?? '1,2,3,4,5';
+        
+        final categoryId = group['category_id'];
+        if (categoryId != null) {
+          _happyHourSelectionMode = 'category';
+          _selectedHappyHourCategoryId = categoryId;
+          _happyHourPromoType = 'percent';
+          final pPrice = group['promo_price'];
+          if (pPrice != null) {
+            final parsed = double.tryParse(pPrice.toString());
+            _promoPriceController.text = parsed != null 
+                ? (parsed % 1 == 0 ? parsed.toInt().toString() : parsed.toString())
+                : pPrice.toString();
+          } else {
+            _promoPriceController.text = '';
+          }
+          _happyHourImageBase64 = group['image_base64'];
+          _happyHourImageName = group['image_base64'] != null ? 'Existing Image' : null;
+        } else {
+          _happyHourSelectionMode = 'product';
+          _selectedHappyHourCategoryId = null;
+          _happyHourPromoType = 'fixed';
+          _happyHourImageBase64 = null;
+          _happyHourImageName = null;
+          
+          // Get the first product's promo price in this group
+          final productsList = group['products'] as List;
+          if (productsList.isNotEmpty) {
+            final pPrice = productsList[0]['promo_price'];
+            final parsed = pPrice != null ? double.tryParse(pPrice.toString()) : null;
+            _promoPriceController.text = parsed != null 
+                ? (parsed % 1 == 0 ? parsed.toInt().toString() : parsed.toString())
+                : (pPrice?.toString() ?? '');
+          } else {
+            _promoPriceController.text = '';
+          }
+          
+          // Pre-populate _selectedPromoProducts from matching names
+          final posController = Provider.of<POSController>(context, listen: false);
+          _selectedPromoProducts = [];
+          for (var p in productsList) {
+            final pName = p['name'];
+            final match = posController.products.firstWhere((prod) => prod.name == pName, orElse: () => ProductModel(id: 0, name: '', categoryId: 0, price: 0, cost: 0, activePrice: 0, isHappyHour: false, stockQty: 0, minStockLevel: 0, isShortEat: false));
+            if (match.id != 0) {
+              _selectedPromoProducts.add(match);
+            }
+          }
+        }
+      } else {
+        _happyHourNameController.clear();
+        _selectedPromoProducts.clear();
+        _happyHourPromoType = 'percent';
+        _happyHourSelectionMode = 'product';
+        _selectedHappyHourCategoryId = null;
+        _promoPriceController.clear();
+        _startTimeController.text = '17:00:00';
+        _endTimeController.text = '19:00:00';
+        _selectedDays = '1,2,3,4,5';
+        _happyHourImageBase64 = null;
+        _happyHourImageName = null;
+      }
     });
   }
 
@@ -156,7 +218,31 @@ class _OffersScreenState extends State<OffersScreen> {
     setState(() {
       _isDrawerOpen = false;
       _editingOffer = null;
+      _editingHappyHour = null;
+      _happyHourImageBase64 = null;
+      _happyHourImageName = null;
     });
+  }
+
+  Future<void> _pickHappyHourImage() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowMultiple: false,
+      );
+      if (result != null && result.files.single.path != null) {
+        final file = File(result.files.single.path!);
+        final bytes = await file.readAsBytes();
+        setState(() {
+          _happyHourImageName = result.files.single.name;
+          _happyHourImageBase64 = base64Encode(bytes);
+        });
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to pick image: $e'), backgroundColor: AppTheme.danger),
+      );
+    }
   }
 
   // Pick Image File
@@ -284,7 +370,7 @@ class _OffersScreenState extends State<OffersScreen> {
     }
   }
 
-  // Save Happy Hour (POST)
+  // Save Happy Hour (POST/PUT)
   Future<void> _saveHappyHour(POSController posController) async {
     if (!_happyHourFormKey.currentState!.validate()) return;
 
@@ -293,13 +379,6 @@ class _OffersScreenState extends State<OffersScreen> {
       if (_selectedHappyHourCategoryId == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Please select a category'), backgroundColor: AppTheme.danger),
-        );
-        return;
-      }
-      productsToSave = posController.products.where((p) => p.categoryId == _selectedHappyHourCategoryId && p.isHappyHourEligible).toList();
-      if (productsToSave.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No happy-hour eligible products found in this category'), backgroundColor: AppTheme.danger),
         );
         return;
       }
@@ -322,23 +401,83 @@ class _OffersScreenState extends State<OffersScreen> {
     final end = _endTimeController.text.trim();
 
     try {
-      for (var product in productsToSave) {
-        double price;
-        if (_happyHourPromoType == 'percent') {
-          price = product.price * (1 - (discountVal / 100.0));
-          price = double.parse(price.toStringAsFixed(2));
+      if (_editingHappyHour == null) {
+        if (_happyHourSelectionMode == 'category') {
+          await APIService.instance.configureHappyHour(
+            null,
+            discountVal,
+            start,
+            end,
+            _selectedDays,
+            _happyHourNameController.text.trim(),
+            _selectedHappyHourCategoryId,
+            _happyHourImageBase64,
+          );
         } else {
-          price = discountVal;
+          for (var product in productsToSave) {
+            double price;
+            if (_happyHourPromoType == 'percent') {
+              price = product.price * (1 - (discountVal / 100.0));
+              price = double.parse(price.toStringAsFixed(2));
+            } else {
+              price = discountVal;
+            }
+            await APIService.instance.configureHappyHour(
+              product.id,
+              price,
+              start,
+              end,
+              _selectedDays,
+              _happyHourNameController.text.trim(),
+              null,
+              null,
+            );
+          }
         }
-        await APIService.instance.configureHappyHour(
-          product.id,
-          price,
-          start,
-          end,
-          _selectedDays,
-          _happyHourNameController.text.trim(),
-          _happyHourSelectionMode == 'category' ? _selectedHappyHourCategoryId : null,
-        );
+      } else {
+        final ids = _editingHappyHour!['ids'] as List<int>;
+        if (_happyHourSelectionMode == 'category') {
+          // Keep the first ID, delete the others, and update it
+          for (int i = 1; i < ids.length; i++) {
+            await APIService.instance.deleteHappyHour(ids[i]);
+          }
+          await APIService.instance.updateHappyHour(
+            ids[0],
+            null,
+            discountVal,
+            start,
+            end,
+            _selectedDays,
+            _happyHourNameController.text.trim(),
+            _selectedHappyHourCategoryId,
+            _happyHourImageBase64,
+            'active',
+          );
+        } else {
+          // Delete old product configuration, insert new one to support selection modifications
+          for (var id in ids) {
+            await APIService.instance.deleteHappyHour(id);
+          }
+          for (var product in productsToSave) {
+            double price;
+            if (_happyHourPromoType == 'percent') {
+              price = product.price * (1 - (discountVal / 100.0));
+              price = double.parse(price.toStringAsFixed(2));
+            } else {
+              price = discountVal;
+            }
+            await APIService.instance.configureHappyHour(
+              product.id,
+              price,
+              start,
+              end,
+              _selectedDays,
+              _happyHourNameController.text.trim(),
+              null,
+              null,
+            );
+          }
+        }
       }
       _closeDrawer();
       await _loadOffers();
@@ -934,6 +1073,8 @@ class _OffersScreenState extends State<OffersScreen> {
           'days_of_week': days,
           'category_id': categoryId,
           'category_name': categoryName,
+          'promo_price': promo['promo_price'],
+          'image_base64': promo['image_base64'],
           'products': <Map<String, dynamic>>[],
           'ids': <int>[],
         };
@@ -1010,15 +1151,20 @@ class _OffersScreenState extends State<OffersScreen> {
                     child: categoryId != null
                         ? Padding(
                             padding: const EdgeInsets.only(top: 4.0),
-                            child: RichText(
-                              text: TextSpan(
-                                style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightPrimary),
-                                children: [
-                                  const TextSpan(text: 'Category: ', style: TextStyle(color: Color(0xFF64748B))),
-                                  TextSpan(text: categoryName ?? 'Unknown Category', style: const TextStyle(fontWeight: FontWeight.bold)),
-                                  TextSpan(text: ' (${productsList.length} items)', style: const TextStyle(color: Color(0xFF64748B))),
-                                ],
-                              ),
+                            child: Builder(
+                              builder: (context) {
+                                final categoryProductsCount = posController.products.where((p) => p.categoryId == categoryId).length;
+                                return RichText(
+                                  text: TextSpan(
+                                    style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightPrimary),
+                                    children: [
+                                      const TextSpan(text: 'Category: ', style: TextStyle(color: Color(0xFF64748B))),
+                                      TextSpan(text: categoryName ?? 'Unknown Category', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                      TextSpan(text: ' ($categoryProductsCount items)', style: const TextStyle(color: Color(0xFF64748B))),
+                                    ],
+                                  ),
+                                );
+                              }
                             ),
                           )
                         : Column(
@@ -1065,16 +1211,26 @@ class _OffersScreenState extends State<OffersScreen> {
                   ),
                   Expanded(
                     flex: 2,
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: GestureDetector(
-                        onTap: () => _deactivateHappyHourGroup(ids, posController),
-                        child: Container(
-                          padding: const EdgeInsets.all(6),
-                          decoration: BoxDecoration(color: const Color(0xFFFEF2F2), borderRadius: BorderRadius.circular(6)),
-                          child: const Icon(Icons.cancel_outlined, color: AppTheme.danger, size: 14),
+                    child: Row(
+                      children: [
+                        GestureDetector(
+                          onTap: () => _openHappyHourDrawer(group),
+                          child: Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(color: const Color(0xFFFFF0F5), borderRadius: BorderRadius.circular(6)),
+                            child: Icon(Icons.edit, color: AppTheme.primary, size: 14),
+                          ),
                         ),
-                      ),
+                        const SizedBox(width: 8),
+                        GestureDetector(
+                          onTap: () => _deactivateHappyHourGroup(ids, posController),
+                          child: Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(color: const Color(0xFFFEF2F2), borderRadius: BorderRadius.circular(6)),
+                            child: const Icon(Icons.cancel_outlined, color: AppTheme.danger, size: 14),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -1590,6 +1746,46 @@ class _OffersScreenState extends State<OffersScreen> {
                     ],
                     onChanged: (val) => setState(() => _selectedDays = val!),
                   ),
+                  if (_happyHourSelectionMode == 'category') ...[
+                    const SizedBox(height: 20),
+                    _buildFieldLabel('IMAGE (FOR CATEGORY BANNER)'),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        ElevatedButton(
+                          onPressed: _pickHappyHourImage,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            foregroundColor: AppTheme.primary,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              side: const BorderSide(color: Color(0xFFE2E8F0)),
+                            ),
+                          ),
+                          child: Text('Choose File', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600)),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            _happyHourImageName ?? 'No file chosen',
+                            style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (_happyHourImageBase64 != null) ...[
+                      const SizedBox(height: 12),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: SizedBox(
+                          height: 100,
+                          width: double.infinity,
+                          child: Base64ImageWidget(base64Str: _happyHourImageBase64, fit: BoxFit.cover),
+                        ),
+                      ),
+                    ],
+                  ],
                 ],
               ),
             ),

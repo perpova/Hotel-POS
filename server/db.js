@@ -166,6 +166,20 @@ async function initializeDatabase() {
                 console.log("Migration: Added category_id to happy_hour_pricing table.");
             } catch (_) {}
             try {
+                await dbPool.query("SET FOREIGN_KEY_CHECKS = 0");
+                await dbPool.query("ALTER TABLE happy_hour_pricing MODIFY product_id INT NULL");
+                await dbPool.query("UPDATE happy_hour_pricing SET product_id = NULL WHERE product_id = 0");
+                await dbPool.query("SET FOREIGN_KEY_CHECKS = 1");
+                console.log("Migration: Allowed NULL product_id in happy_hour_pricing table and cleaned up 0s.");
+            } catch (err) {
+                console.error("Migration: Allowed NULL product_id failed:", err.message);
+                try { await dbPool.query("SET FOREIGN_KEY_CHECKS = 1"); } catch (_) {}
+            }
+            try {
+                await dbPool.query("ALTER TABLE happy_hour_pricing ADD COLUMN image_base64 LONGTEXT NULL");
+                console.log("Migration: Added image_base64 to happy_hour_pricing table.");
+            } catch (_) {}
+            try {
                 await dbPool.query("ALTER TABLE happy_hour_pricing ADD CONSTRAINT fk_hhp_category FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL");
                 console.log("Migration: Added fk_hhp_category constraint to happy_hour_pricing table.");
             } catch (_) {}

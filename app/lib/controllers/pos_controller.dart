@@ -747,6 +747,7 @@ class POSController extends ChangeNotifier {
     final currentDay = now.weekday; // 1=Mon, 7=Sun
     final currentMin = now.hour * 60 + now.minute;
     
+    // 1. Look for product-specific happy hour first
     for (var hp in happyHours) {
       if (hp['product_id'] == product.id && hp['status'] == 'active') {
         final daysStr = hp['days_of_week']?.toString() ?? '1,2,3,4,5,6,7';
@@ -762,6 +763,28 @@ class POSController extends ChangeNotifier {
         }
       }
     }
+
+    // 2. Look for category-specific happy hour if no product-specific one is active
+    for (var hp in happyHours) {
+      final catId = hp['category_id'];
+      final prodId = hp['product_id'];
+      if (catId == product.categoryId && (prodId == null || prodId == 0 || prodId == '0') && hp['status'] == 'active') {
+        final daysStr = hp['days_of_week']?.toString() ?? '1,2,3,4,5,6,7';
+        final days = daysStr.split(',').map((e) => int.tryParse(e.trim())).toList();
+        if (days.contains(currentDay)) {
+          final startMin = _parseTimeToMinutes(hp['start_time']?.toString() ?? '');
+          final endMin = _parseTimeToMinutes(hp['end_time']?.toString() ?? '');
+          if (startMin != null && endMin != null) {
+            if (currentMin >= startMin && currentMin <= endMin) {
+              final discountPct = toDouble(hp['promo_price']);
+              final activePrice = product.price * (1 - (discountPct / 100.0));
+              return double.parse(activePrice.toStringAsFixed(2));
+            }
+          }
+        }
+      }
+    }
+
     return product.price;
   }
 
@@ -1102,6 +1125,7 @@ class POSController extends ChangeNotifier {
     double receivedAmount = 0.00,
     double changeAmount = 0.00,
     bool clearCartAfter = true,
+    int? customerId,
   }) async {
     if (cart.isEmpty) throw Exception('Cart is empty');
     if (activeShift == null) throw Exception('No active shift. Please open a shift.');
@@ -1116,7 +1140,7 @@ class POSController extends ChangeNotifier {
       tableId: selectedTable?.id,
       orderType: orderType,
       deliveryPlatform: deliveryPlatform,
-      customerId: selectedCustomer?.id ?? 1, // Default walking customer
+      customerId: customerId ?? selectedCustomer?.id ?? 1, // Default walking customer
       stewardName: stewardName,
       status: status,
       paymentStatus: paymentStatus,

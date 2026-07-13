@@ -183,13 +183,15 @@ app.post('/api/categories', authenticateToken, async (req, res) => {
 app.get('/api/products', async (req, res) => {
     const showAll = req.query.all === 'true';
     try {
-        // Fetch products along with active happy hour pricing
+        // Fetch products
         const products = await db.query(`
-            SELECT p.*, h.promo_price, h.start_time, h.end_time, h.days_of_week
+            SELECT p.*
             FROM products p
-            LEFT JOIN happy_hour_pricing h ON p.id = h.product_id AND h.status = 'active'
             ${showAll ? '' : "WHERE p.status = 'active'"}
         `);
+        
+        // Fetch all active happy hours
+        const activeHappyHours = await db.query("SELECT * FROM happy_hour_pricing WHERE status = 'active'");
         
         // Map products and calculate if happy hour is currently active
         const currentTime = new Date();
@@ -201,12 +203,32 @@ app.get('/api/products', async (req, res) => {
             let activePrice = Number(p.price);
             let isHappyHour = false;
             
-            if (p.promo_price) {
-                const days = p.days_of_week.split(',').map(Number);
-                if (days.includes(currentDayFormatted)) {
-                    if (timeString >= p.start_time && timeString <= p.end_time) {
-                        activePrice = Number(p.promo_price);
-                        isHappyHour = true;
+            // Check if product is eligible for happy hour
+            const isEligible = p.is_happy_hour_eligible === undefined || p.is_happy_hour_eligible === null ? true : !!p.is_happy_hour_eligible;
+            
+            if (isEligible) {
+                // Find matching happy hour
+                // 1. Look for product-specific happy hour
+                let hhp = activeHappyHours.find(h => h.product_id === p.id);
+                // 2. If not found, look for category-specific happy hour
+                if (!hhp && p.category_id) {
+                    hhp = activeHappyHours.find(h => h.category_id === p.category_id && (!h.product_id || h.product_id === 0 || h.product_id === '0'));
+                }
+
+                if (hhp && hhp.start_time && hhp.end_time && hhp.days_of_week) {
+                    const days = hhp.days_of_week.split(',').map(Number);
+                    if (days.includes(currentDayFormatted)) {
+                        if (timeString >= hhp.start_time && timeString <= hhp.end_time) {
+                            if (hhp.product_id && hhp.product_id !== 0 && hhp.product_id !== '0') {
+                                activePrice = Number(hhp.promo_price);
+                            } else {
+                                // Category-level: hhp.promo_price acts as percentage discount
+                                const discountPct = Number(hhp.promo_price);
+                                activePrice = Number(p.price) * (1 - (discountPct / 100.0));
+                                activePrice = Number(activePrice.toFixed(2));
+                            }
+                            isHappyHour = true;
+                        }
                     }
                 }
             }
@@ -673,20 +695,49 @@ app.post('/api/happyhour', authenticateToken, async (req, res) => {
     if (req.user.role !== 'admin' && req.user.role !== 'owner') {
         return res.status(403).json({ error: 'Unauthorized' });
     }
-    const { product_id, promo_price, start_time, end_time, days_of_week, name, category_id } = req.body;
+    const { product_id, promo_price, start_time, end_time, days_of_week, name, category_id, image_base64 } = req.body;
     try {
-        // Deactivate previous active promos for this product
-        await db.query('UPDATE happy_hour_pricing SET status = "inactive" WHERE product_id = ?', [product_id]);
+        if (category_id && !product_id) {
+            // Deactivate previous active category promos for this category
+            await db.query('UPDATE happy_hour_pricing SET status = "inactive" WHERE category_id = ? AND product_id IS NULL', [category_id]);
+        } else if (product_id) {
+            // Deactivate previous active product promos for this product
+            await db.query('UPDATE happy_hour_pricing SET status = "inactive" WHERE product_id = ?', [product_id]);
+        }
         
         const result = await db.query(
-            'INSERT INTO happy_hour_pricing (product_id, promo_price, start_time, end_time, days_of_week, name, category_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [product_id, promo_price, start_time, end_time, days_of_week, name || null, category_id || null]
+            'INSERT INTO happy_hour_pricing (product_id, promo_price, start_time, end_time, days_of_week, name, category_id, image_base64) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            [product_id || null, promo_price, start_time, end_time, days_of_week, name || null, category_id || null, image_base64 || null]
         );
         
-        await logAudit('change_price', 'products', product_id, `Happy hour pricing configured to LKR ${promo_price}`, req.user.id);
+        await logAudit('change_price', 'products', product_id || 0, `Happy hour pricing configured for ${name || 'Product'}`, req.user.id);
         broadcast({ type: 'happy_hour_updated' });
         
         res.json({ success: true, insertId: result.insertId });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.put('/api/happyhour/:id', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin' && req.user.role !== 'owner') {
+        return res.status(403).json({ error: 'Unauthorized' });
+    }
+    const { id } = req.params;
+    const { product_id, promo_price, start_time, end_time, days_of_week, name, category_id, image_base64, status } = req.body;
+    try {
+        await db.query(`
+            UPDATE happy_hour_pricing
+            SET product_id = ?, promo_price = ?, start_time = ?, end_time = ?, days_of_week = ?, name = ?, category_id = ?, image_base64 = ?, status = ?
+            WHERE id = ?
+        `, [
+            product_id || null, promo_price, start_time, end_time, days_of_week, name || null, category_id || null, image_base64 || null, status || 'active', id
+        ]);
+        
+        await logAudit('change_price', 'products', product_id || 0, `Happy hour pricing updated.`, req.user.id);
+        broadcast({ type: 'happy_hour_updated' });
+        
+        res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -697,7 +748,7 @@ app.get('/api/happyhour', authenticateToken, async (req, res) => {
         const promos = await db.query(`
             SELECT hhp.*, p.name as product_name, p.price as original_price, c.name as category_name
             FROM happy_hour_pricing hhp
-            JOIN products p ON hhp.product_id = p.id
+            LEFT JOIN products p ON hhp.product_id = p.id
             LEFT JOIN categories c ON hhp.category_id = c.id
             WHERE hhp.status = "active"
             ORDER BY hhp.id DESC
@@ -2074,7 +2125,7 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
 // Update Order (Status, print checks, card reference)
 app.put('/api/orders/:id', authenticateToken, async (req, res) => {
     const { id } = req.params;
-    const { status, payment_status, payment_method, ack_printed, kot_printed, card_tx_reference, table_id } = req.body;
+    const { status, payment_status, payment_method, ack_printed, kot_printed, card_tx_reference, table_id, customer_id } = req.body;
     try {
         let updateFields = [];
         let params = [];
@@ -2085,6 +2136,7 @@ app.put('/api/orders/:id', authenticateToken, async (req, res) => {
         if (ack_printed !== undefined) { updateFields.push('ack_printed = ?'); params.push(ack_printed); }
         if (kot_printed !== undefined) { updateFields.push('kot_printed = ?'); params.push(kot_printed); }
         if (card_tx_reference) { updateFields.push('card_tx_reference = ?'); params.push(card_tx_reference); }
+        if (customer_id) { updateFields.push('customer_id = ?'); params.push(customer_id); }
         
         if (updateFields.length === 0) {
             return res.status(400).json({ error: 'No fields provided to update.' });
@@ -2107,6 +2159,21 @@ app.put('/api/orders/:id', authenticateToken, async (req, res) => {
             );
             const [tblRows] = await db.query('SELECT * FROM dining_tables WHERE id = ?', [updatedOrder.table_id]);
             broadcast({ type: 'table_status_changed', data: tblRows[0] });
+        }
+
+        // If payment method is updated to credit, update the customer's outstanding balance
+        if (payment_method === 'credit' && updatedOrder) {
+            const finalCustomerId = customer_id || updatedOrder.customer_id;
+            if (finalCustomerId) {
+                await db.query(
+                    'UPDATE customers SET outstanding_balance = outstanding_balance + ? WHERE id = ?',
+                    [updatedOrder.total, finalCustomerId]
+                );
+                await logAudit('modify_bill', 'customers', finalCustomerId, `Added outstanding balance LKR ${updatedOrder.total} via Credit Order Update: ${updatedOrder.order_number}`, req.user.id);
+                // Also broadcast shift_updated / customer_updated so clients sync
+                broadcast({ type: 'customer_updated', data: { id: finalCustomerId } });
+                broadcast({ type: 'shift_updated' });
+            }
         }
 
         // Log payment or status changes

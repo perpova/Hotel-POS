@@ -1065,9 +1065,9 @@ class _POSScreenState extends State<POSScreen> {
         const SizedBox(height: 8),
         Row(
           children: [
-            Expanded(child: _buildFoodKingTypeButton('dine_in', 'Dine-In', controller)),
-            const SizedBox(width: 8),
             Expanded(child: _buildFoodKingTypeButton('takeaway', 'Takeaway', controller)),
+            const SizedBox(width: 8),
+            Expanded(child: _buildFoodKingTypeButton('dine_in', 'Dine-In', controller)),
             const SizedBox(width: 8),
             Expanded(child: _buildFoodKingTypeButton('delivery', 'Delivery', controller)),
           ],
@@ -2348,7 +2348,7 @@ class _POSScreenState extends State<POSScreen> {
                     ? 'Takeaway'
                     : 'Delivery';
             final String? tblName = controller.selectedTable?.tableNumber;
-            final String? custName = paymentMethod == 'credit' ? selectedCreditCustomer!.name : controller.selectedCustomer?.name;
+            final String? custName = paymentMethod == 'credit' ? selectedCreditCustomer?.name : controller.selectedCustomer?.name;
             final int tknNumber = int.tryParse(_tokenNoController.text) ?? (controller.activeOrders.length + 1);
             final String cashierUsername = APIService.instance.currentUser?.username ?? 'admin';
             final bool hasKotItems = itemsCopy.any((item) {
@@ -2414,6 +2414,8 @@ class _POSScreenState extends State<POSScreen> {
                     'status': 'delivered',
                     'received_amount': paymentMethod == 'cash' ? receivedVal : finalTot,
                     'change_amount': paymentMethod == 'cash' ? changeVal : 0.00,
+                    if (paymentMethod == 'credit' && selectedCreditCustomer != null)
+                      'customer_id': selectedCreditCustomer!.id,
                   });
                   
                   orderId = activeOrderId;
@@ -2429,6 +2431,7 @@ class _POSScreenState extends State<POSScreen> {
                     paymentMethod: paymentMethod,
                     receivedAmount: paymentMethod == 'cash' ? receivedVal : finalTot,
                     changeAmount: paymentMethod == 'cash' ? changeVal : 0.00,
+                    customerId: paymentMethod == 'credit' ? selectedCreditCustomer?.id : null,
                   );
                   orderId = orderResult['orderId'] ?? 0;
                   orderNum = orderResult['orderNumber'] ?? '';
@@ -3321,6 +3324,33 @@ class _POSScreenState extends State<POSScreen> {
     } catch (_) {}
     
     final int totalQty = data.items.fold(0, (sum, item) => sum + item.quantity);
+    double totalHappyHourDiscount = 0.0;
+    for (var item in data.items) {
+      final productList = controller.products.where((p) => p.id == item.productId).toList();
+      final product = productList.isNotEmpty ? productList.first : null;
+      double originalPrice = item.price;
+      if (product != null) {
+        originalPrice = product.price;
+        String? selectedSize;
+        if (item.notes != null && item.notes!.contains('Size: ')) {
+          final match = RegExp(r'Size:\s*([^|]+)').firstMatch(item.notes!);
+          if (match != null) {
+            selectedSize = match.group(1)?.trim();
+          }
+        }
+        if (selectedSize != null) {
+          final szList = product.sizes.where((s) => s.name.toLowerCase() == selectedSize!.toLowerCase()).toList();
+          if (szList.isNotEmpty) {
+            originalPrice = szList.first.price;
+          }
+        }
+        double extrasPriceSum = item.extras.fold(0.0, (sum, ext) => sum + ext.price);
+        originalPrice += extrasPriceSum;
+      }
+      if (originalPrice > item.price) {
+        totalHappyHourDiscount += (originalPrice - item.price) * item.quantity;
+      }
+    }
 
     pdf.addPage(
       pw.Page(
@@ -3420,6 +3450,29 @@ class _POSScreenState extends State<POSScreen> {
               pw.SizedBox(height: 4),
 
               ..._groupDuplicateOrderItems(data.items).map((item) {
+                final productList = controller.products.where((p) => p.id == item.productId).toList();
+                final product = productList.isNotEmpty ? productList.first : null;
+                double originalPrice = item.price;
+                if (product != null) {
+                  originalPrice = product.price;
+                  String? selectedSize;
+                  if (item.notes != null && item.notes!.contains('Size: ')) {
+                    final match = RegExp(r'Size:\s*([^|]+)').firstMatch(item.notes!);
+                    if (match != null) {
+                      selectedSize = match.group(1)?.trim();
+                    }
+                  }
+                  if (selectedSize != null) {
+                    final szList = product.sizes.where((s) => s.name.toLowerCase() == selectedSize!.toLowerCase()).toList();
+                    if (szList.isNotEmpty) {
+                      originalPrice = szList.first.price;
+                    }
+                  }
+                  double extrasPriceSum = item.extras.fold(0.0, (sum, ext) => sum + ext.price);
+                  originalPrice += extrasPriceSum;
+                }
+                final isDiscounted = originalPrice > item.price;
+
                 return pw.Padding(
                   padding: const pw.EdgeInsets.only(bottom: 4.0),
                   child: pw.Column(
@@ -3458,6 +3511,13 @@ class _POSScreenState extends State<POSScreen> {
                           ),
                         ],
                       ),
+                      if (isDiscounted) ...[
+                        pw.SizedBox(height: 1),
+                        pw.Text(
+                          '  (Orig: LKR ${originalPrice.toStringAsFixed(2)} | Disc: LKR ${(originalPrice - item.price).toStringAsFixed(2)})',
+                          style: pw.TextStyle(font: sinhalaFont, fontSize: 7, color: PdfColors.red, fontStyle: pw.FontStyle.italic),
+                        ),
+                      ],
                       if (item.notes != null && item.notes!.isNotEmpty) ...[
                         pw.SizedBox(height: 1),
                         pw.Text(
@@ -3476,58 +3536,101 @@ class _POSScreenState extends State<POSScreen> {
               
               // Summary
               pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  pw.Row(
-                    children: [
-                      pw.Text('No of Items', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
-                      pw.SizedBox(width: 10),
-                      pw.Text('$totalQty', style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold)),
-                    ],
+                  // Column 1: Items & Payment Method
+                  pw.Expanded(
+                    flex: 4,
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Row(
+                          children: [
+                            pw.Text('Items', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                            pw.SizedBox(width: 6),
+                            pw.Text('$totalQty', style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                          ],
+                        ),
+                        pw.SizedBox(height: 4),
+                        pw.Text(
+                          'PAID BY ${data.paymentMethod.toUpperCase()}',
+                          style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold),
+                        ),
+                      ],
+                    ),
                   ),
-                  pw.Row(
-                    children: [
-                      pw.Text('Total', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
-                      pw.SizedBox(width: 15),
-                      pw.Text(':', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
-                      pw.SizedBox(width: 10),
-                      pw.Text(data.total.toStringAsFixed(2), style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold)),
-                    ],
+                  // Column 2: Total & Discounts
+                  pw.Expanded(
+                    flex: 4,
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.end,
+                      children: [
+                        pw.Row(
+                          mainAxisAlignment: pw.MainAxisAlignment.end,
+                          children: [
+                            pw.Text('Sub Total', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                            pw.SizedBox(width: 4),
+                            pw.Text(':', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                            pw.SizedBox(width: 4),
+                            pw.Text(data.subtotal.toStringAsFixed(2), style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                          ],
+                        ),
+                        if (data.discount > 0) ...[
+                          pw.SizedBox(height: 4),
+                          pw.Row(
+                            mainAxisAlignment: pw.MainAxisAlignment.end,
+                            children: [
+                              pw.Text('Discount', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                              pw.SizedBox(width: 4),
+                              pw.Text(':', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                              pw.SizedBox(width: 4),
+                              pw.Text('-${data.discount.toStringAsFixed(2)}', style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                            ],
+                          ),
+                        ],
+                        pw.SizedBox(height: 4),
+                        pw.Row(
+                          mainAxisAlignment: pw.MainAxisAlignment.end,
+                          children: [
+                            pw.Text('Total', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                            pw.SizedBox(width: 4),
+                            pw.Text(':', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                            pw.SizedBox(width: 4),
+                            pw.Text(data.total.toStringAsFixed(2), style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                ],
-              ),
-              
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.SizedBox.shrink(),
-                  pw.Row(
-                    children: [
-                      pw.Text('Paid Amount', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
-                      pw.SizedBox(width: 5),
-                      pw.Text(':', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
-                      pw.SizedBox(width: 10),
-                      pw.Text(data.receivedAmount.toStringAsFixed(2), style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold)),
-                    ],
-                  ),
-                ],
-              ),
-              
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text(
-                    'PAID BY ${data.paymentMethod.toUpperCase()}',
-                    style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold),
-                  ),
-                  pw.Row(
-                    children: [
-                      pw.Text('Balance', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
-                      pw.SizedBox(width: 10),
-                      pw.Text(':', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
-                      pw.SizedBox(width: 10),
-                      pw.Text(data.changeAmount.toStringAsFixed(2), style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold)),
-                    ],
+                  // Column 3: Paid Amount & Balance
+                  pw.Expanded(
+                    flex: 4,
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.end,
+                      children: [
+                        pw.Row(
+                          mainAxisAlignment: pw.MainAxisAlignment.end,
+                          children: [
+                            pw.Text('Paid', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                            pw.SizedBox(width: 4),
+                            pw.Text(':', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                            pw.SizedBox(width: 4),
+                            pw.Text(data.receivedAmount.toStringAsFixed(2), style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                          ],
+                        ),
+                        pw.SizedBox(height: 4),
+                        pw.Row(
+                          mainAxisAlignment: pw.MainAxisAlignment.end,
+                          children: [
+                            pw.Text('Balance', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                            pw.SizedBox(width: 4),
+                            pw.Text(':', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                            pw.SizedBox(width: 4),
+                            pw.Text(data.changeAmount.toStringAsFixed(2), style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -3830,6 +3933,33 @@ class _POSScreenState extends State<POSScreen> {
     final bool isSinhala = lang == 'Sinhala';
 
     final int totalQty = data.items.fold(0, (sum, item) => sum + item.quantity);
+    double totalHappyHourDiscount = 0.0;
+    for (var item in data.items) {
+      final productList = controller.products.where((p) => p.id == item.productId).toList();
+      final product = productList.isNotEmpty ? productList.first : null;
+      double originalPrice = item.price;
+      if (product != null) {
+        originalPrice = product.price;
+        String? selectedSize;
+        if (item.notes != null && item.notes!.contains('Size: ')) {
+          final match = RegExp(r'Size:\s*([^|]+)').firstMatch(item.notes!);
+          if (match != null) {
+            selectedSize = match.group(1)?.trim();
+          }
+        }
+        if (selectedSize != null) {
+          final szList = product.sizes.where((s) => s.name.toLowerCase() == selectedSize!.toLowerCase()).toList();
+          if (szList.isNotEmpty) {
+            originalPrice = szList.first.price;
+          }
+        }
+        double extrasPriceSum = item.extras.fold(0.0, (sum, ext) => sum + ext.price);
+        originalPrice += extrasPriceSum;
+      }
+      if (originalPrice > item.price) {
+        totalHappyHourDiscount += (originalPrice - item.price) * item.quantity;
+      }
+    }
     
     return Container(
       padding: const EdgeInsets.all(16),
@@ -3940,6 +4070,29 @@ class _POSScreenState extends State<POSScreen> {
           const SizedBox(height: 6),
 
           ..._groupDuplicateOrderItems(data.items).map((item) {
+            final productList = controller.products.where((p) => p.id == item.productId).toList();
+            final product = productList.isNotEmpty ? productList.first : null;
+            double originalPrice = item.price;
+            if (product != null) {
+              originalPrice = product.price;
+              String? selectedSize;
+              if (item.notes != null && item.notes!.contains('Size: ')) {
+                final match = RegExp(r'Size:\s*([^|]+)').firstMatch(item.notes!);
+                if (match != null) {
+                  selectedSize = match.group(1)?.trim();
+                }
+              }
+              if (selectedSize != null) {
+                final szList = product.sizes.where((s) => s.name.toLowerCase() == selectedSize!.toLowerCase()).toList();
+                if (szList.isNotEmpty) {
+                  originalPrice = szList.first.price;
+                }
+              }
+              double extrasPriceSum = item.extras.fold(0.0, (sum, ext) => sum + ext.price);
+              originalPrice += extrasPriceSum;
+            }
+            final isDiscounted = originalPrice > item.price;
+
             return Padding(
               padding: const EdgeInsets.only(bottom: 6.0),
               child: Column(
@@ -3978,6 +4131,13 @@ class _POSScreenState extends State<POSScreen> {
                       ),
                     ],
                   ),
+                  if (isDiscounted) ...[
+                    const SizedBox(height: 1),
+                    Text(
+                      '  (Orig: LKR ${originalPrice.toStringAsFixed(2)} | Disc: LKR ${(originalPrice - item.price).toStringAsFixed(2)})',
+                      style: GoogleFonts.inter(fontSize: 8, color: Colors.red, fontStyle: FontStyle.italic, fontWeight: FontWeight.w500),
+                    ),
+                  ],
                   if (item.notes != null && item.notes!.isNotEmpty) ...[
                     const SizedBox(height: 2),
                     Text(
@@ -3994,60 +4154,105 @@ class _POSScreenState extends State<POSScreen> {
           _buildDashedLine(),
           const SizedBox(height: 6),
           
-          // Summary rows matching photo
+          // Summary rows divided into 3 columns
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Text('No of Items', style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF475569))),
-                  const SizedBox(width: 14),
-                  Text('$totalQty', style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
-                ],
+              // Column 1: Items & Payment Method
+              Expanded(
+                flex: 4,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text('Items', style: GoogleFonts.inter(fontSize: 8.5, color: const Color(0xFF475569))),
+                        const SizedBox(width: 6),
+                        Text('$totalQty', style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'PAID BY ${data.paymentMethod.toUpperCase()}',
+                      style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)),
+                    ),
+                  ],
+                ),
               ),
-              Row(
-                children: [
-                  Text('Total', style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF475569))),
-                  const SizedBox(width: 32),
-                  Text(':', style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF475569))),
-                  const SizedBox(width: 14),
-                  Text(data.total.toStringAsFixed(2), style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
-                ],
+              // Column 2: Total & Discounts
+              Expanded(
+                flex: 4,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        Text('Sub Total', style: GoogleFonts.inter(fontSize: 8.5, color: const Color(0xFF475569))),
+                        const SizedBox(width: 4),
+                        Text(':', style: GoogleFonts.inter(fontSize: 8.5, color: const Color(0xFF475569))),
+                        const SizedBox(width: 4),
+                        Text(data.subtotal.toStringAsFixed(2), style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
+                      ],
+                    ),
+                    if (data.discount > 0) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          Text('Discount', style: GoogleFonts.inter(fontSize: 8.5, color: const Color(0xFF475569))),
+                          const SizedBox(width: 4),
+                          Text(':', style: GoogleFonts.inter(fontSize: 8.5, color: const Color(0xFF475569))),
+                          const SizedBox(width: 4),
+                          Text('-${data.discount.toStringAsFixed(2)}', style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
+                        ],
+                      ),
+                    ],
+                    const SizedBox(height: 4),
+                    
+                  ],
+                ),
               ),
-            ],
-          ),
-          
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const SizedBox.shrink(),
-              Row(
-                children: [
-                  Text('Paid Amount', style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF475569))),
-                  const SizedBox(width: 8),
-                  Text(':', style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF475569))),
-                  const SizedBox(width: 14),
-                  Text(data.receivedAmount.toStringAsFixed(2), style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
-                ],
-              ),
-            ],
-          ),
-          
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'PAID BY ${data.paymentMethod.toUpperCase()}',
-                style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)),
-              ),
-              Row(
-                children: [
-                  Text('Balance', style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF475569))),
-                  const SizedBox(width: 22),
-                  Text(':', style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF475569))),
-                  const SizedBox(width: 14),
-                  Text(data.changeAmount.toStringAsFixed(2), style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
-                ],
+              // Column 3: Paid Amount & Balance
+              Expanded(
+                flex: 4,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        Text('Total', style: GoogleFonts.inter(fontSize: 8.5, color: const Color(0xFF475569))),
+                        const SizedBox(width: 4),
+                        Text(':', style: GoogleFonts.inter(fontSize: 8.5, color: const Color(0xFF475569))),
+                        const SizedBox(width: 4),
+                        Text(data.total.toStringAsFixed(2), style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        Text('Paid', style: GoogleFonts.inter(fontSize: 8.5, color: const Color(0xFF475569))),
+                        const SizedBox(width: 4),
+                        Text(':', style: GoogleFonts.inter(fontSize: 8.5, color: const Color(0xFF475569))),
+                        const SizedBox(width: 4),
+                        Text(data.receivedAmount.toStringAsFixed(2), style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        Text('Balance', style: GoogleFonts.inter(fontSize: 8.5, color: const Color(0xFF475569))),
+                        const SizedBox(width: 4),
+                        Text(':', style: GoogleFonts.inter(fontSize: 8.5, color: const Color(0xFF475569))),
+                        const SizedBox(width: 4),
+                        Text(data.changeAmount.toStringAsFixed(2), style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ],
           ),

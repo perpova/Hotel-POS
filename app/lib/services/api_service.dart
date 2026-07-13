@@ -629,22 +629,44 @@ class APIService {
     throw Exception('Failed to load ingredient stock logs');
   }
 
-  Future<void> configureHappyHour(int productId, double promoPrice, String startTime, String endTime, String days, String? name, int? categoryId) async {
+  Future<void> configureHappyHour(int? productId, double promoPrice, String startTime, String endTime, String days, String? name, int? categoryId, String? imageBase64) async {
     final response = await http.post(
       Uri.parse('$_baseUrl/api/happyhour'),
       headers: _getHeaders(),
       body: jsonEncode({
-        'product_id': productId,
+        'product_id': productId == 0 ? null : productId,
         'promo_price': promoPrice,
         'start_time': startTime,
         'end_time': endTime,
         'days_of_week': days,
         'name': name,
         'category_id': categoryId,
+        'image_base64': imageBase64,
       }),
     );
     if (response.statusCode != 200) {
       throw Exception('Failed to configure happy hour');
+    }
+  }
+
+  Future<void> updateHappyHour(int id, int? productId, double promoPrice, String startTime, String endTime, String days, String? name, int? categoryId, String? imageBase64, String status) async {
+    final response = await http.put(
+      Uri.parse('$_baseUrl/api/happyhour/$id'),
+      headers: _getHeaders(),
+      body: jsonEncode({
+        'product_id': productId == 0 ? null : productId,
+        'promo_price': promoPrice,
+        'start_time': startTime,
+        'end_time': endTime,
+        'days_of_week': days,
+        'name': name,
+        'category_id': categoryId,
+        'image_base64': imageBase64,
+        'status': status,
+      }),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to update happy hour');
     }
   }
 

@@ -71,6 +71,30 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
     return controller.offers.where((o) => o.status == 'active').toList();
   }
 
+  bool _isHappyHourCurrentlyActive(Map<String, dynamic> promo) {
+    try {
+      final now = DateTime.now();
+      final currentDay = now.weekday; // 1=Mon, 7=Sun
+      
+      final daysStr = promo['days_of_week'] ?? '1,2,3,4,5,6,7';
+      final days = daysStr.split(',').map((e) => int.tryParse(e.trim())).whereType<int>().toList();
+      if (!days.contains(currentDay)) return false;
+      
+      final startStr = promo['start_time'].toString().substring(0, 5); // HH:mm
+      final endStr = promo['end_time'].toString().substring(0, 5); // HH:mm
+      
+      final currentStr = DateFormat('HH:mm').format(now);
+      return currentStr.compareTo(startStr) >= 0 && currentStr.compareTo(endStr) <= 0;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  List<Map<String, dynamic>> _getActiveHappyHours() {
+    final controller = Provider.of<POSController>(context, listen: false);
+    return controller.happyHours.where((h) => _isHappyHourCurrentlyActive(h)).toList();
+  }
+
   String _formatTimeString(String timeStr) {
     try {
       final parts = timeStr.split(':');
@@ -110,7 +134,8 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
 
       final controller = Provider.of<POSController>(context, listen: false);
       final activeBanners = _getActiveBanners();
-      final hasPromos = activeBanners.isNotEmpty || controller.happyHours.isNotEmpty;
+      final activeHappyHours = _getActiveHappyHours();
+      final hasPromos = activeBanners.isNotEmpty || activeHappyHours.isNotEmpty;
 
       _ticks++;
       if (_isFullScreenPromo) {
@@ -155,7 +180,8 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
 
       final controller = Provider.of<POSController>(context, listen: false);
       final activeBanners = _getActiveBanners();
-      final totalSlides = activeBanners.length + controller.happyHours.length;
+      final activeHappyHours = _getActiveHappyHours();
+      final totalSlides = activeBanners.length + activeHappyHours.length;
       if (totalSlides <= 1) return;
 
       if (_isFullScreenPromo) {
@@ -244,7 +270,8 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
     });
 
     final activeBanners = _getActiveBanners();
-    final totalSlides = activeBanners.length + controller.happyHours.length;
+    final activeHappyHours = _getActiveHappyHours();
+    final totalSlides = activeBanners.length + activeHappyHours.length;
     final hasPromos = totalSlides > 0;
 
     return Scaffold(
@@ -289,7 +316,8 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
     final controller = Provider.of<POSController>(context, listen: false);
     final appSettings = Provider.of<AppSettingsController>(context);
     final activeBanners = _getActiveBanners();
-    final hasPromos = activeBanners.isNotEmpty || controller.happyHours.isNotEmpty;
+    final activeHappyHours = _getActiveHappyHours();
+    final hasPromos = activeBanners.isNotEmpty || activeHappyHours.isNotEmpty;
 
     return Column(
       children: [
@@ -518,7 +546,8 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
 
   Widget _buildBottomSlideshow(List<OfferModel> activeBanners) {
     final controller = Provider.of<POSController>(context, listen: false);
-    final totalSlides = activeBanners.length + controller.happyHours.length;
+    final activeHappyHours = _getActiveHappyHours();
+    final totalSlides = activeBanners.length + activeHappyHours.length;
 
     return Stack(
       children: [
@@ -534,7 +563,7 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
             if (index < activeBanners.length) {
               return _buildBottomBannerSlide(activeBanners[index]);
             } else {
-              return _buildBottomHappyHourSlide(controller.happyHours[index - activeBanners.length]);
+              return _buildBottomHappyHourSlide(activeHappyHours[index - activeBanners.length]);
             }
           },
         ),
@@ -565,7 +594,8 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
 
   Widget _buildPromotionsSlideshow(List<OfferModel> activeBanners) {
     final controller = Provider.of<POSController>(context, listen: false);
-    final totalSlides = activeBanners.length + controller.happyHours.length;
+    final activeHappyHours = _getActiveHappyHours();
+    final totalSlides = activeBanners.length + activeHappyHours.length;
 
     return Stack(
       key: const ValueKey('promo_slideshow'),
@@ -582,7 +612,7 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
             if (index < activeBanners.length) {
               return _buildBannerSlide(activeBanners[index]);
             } else {
-              return _buildHappyHourSlide(controller.happyHours[index - activeBanners.length]);
+              return _buildHappyHourSlide(activeHappyHours[index - activeBanners.length]);
             }
           },
         ),
@@ -607,6 +637,30 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
                     ),
                   );
                 }),
+              ),
+              // Current Time Display
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E293B).withOpacity(0.85),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.white.withOpacity(0.12), width: 1),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.access_time_rounded, color: Colors.white70, size: 16),
+                    const SizedBox(width: 8),
+                    Text(
+                      DateFormat('hh:mm a').format(DateTime.now()),
+                      style: GoogleFonts.outfit(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
               ),
               IconButton.filled(
                 icon: const Icon(Icons.close_rounded, color: Colors.white),
@@ -752,9 +806,13 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
   }
 
   Widget _buildBottomHappyHourSlide(Map<String, dynamic> promo) {
+    final categoryId = promo['category_id'];
+    final categoryName = promo['category_name'] ?? '';
+    final promoPrice = promo['promo_price'];
+    final promoPriceVal = double.tryParse(promoPrice.toString()) ?? 0.0;
+    
     final prodName = promo['product_name'] ?? '';
     final pModel = _getProductByName(prodName);
-    final promoPrice = promo['promo_price'];
     final originalPrice = promo['original_price'];
     final start = promo['start_time'].toString().substring(0, 5);
     final end = promo['end_time'].toString().substring(0, 5);
@@ -765,6 +823,133 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
       daysDesc = 'WEEKDAYS';
     } else if (daysStr == '6,7') {
       daysDesc = 'WEEKENDS';
+    }
+
+    if (categoryId != null) {
+      final hasImage = promo['image_base64'] != null && promo['image_base64'].toString().length > 200;
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+        color: const Color(0xFF064E3B).withOpacity(0.3), // Emerald Green tint
+        child: Row(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: SizedBox(
+                width: 200,
+                height: 148,
+                child: hasImage
+                    ? Base64ImageWidget(
+                        base64Str: promo['image_base64'].toString(),
+                        fit: BoxFit.cover,
+                      )
+                    : Container(
+                        color: AppTheme.accent.withOpacity(0.15),
+                        child: const Center(
+                          child: Icon(
+                            Icons.category_rounded,
+                            color: AppTheme.accent,
+                            size: 44,
+                          ),
+                        ),
+                      ),
+              ),
+            ),
+            const SizedBox(width: 24),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppTheme.accent.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: AppTheme.accent, width: 1),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.celebration, color: AppTheme.accent, size: 12),
+                            const SizedBox(width: 4),
+                            Text(
+                              promo['name'] != null && promo['name'].toString().isNotEmpty
+                                  ? promo['name'].toString().toUpperCase()
+                                  : 'HAPPY HOUR',
+                              style: GoogleFonts.outfit(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: AppTheme.accent,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.06),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          daysDesc,
+                          style: GoogleFonts.inter(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFFCBD5E1),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '$categoryName Category Special',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.outfit(
+                      fontSize: 26,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      height: 1.1,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Valid: ${_formatTimeString(start)} to ${_formatTimeString(end)}',
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      color: AppTheme.accent,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0F172A),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.white.withOpacity(0.08), width: 1),
+              ),
+              child: Text(
+                '${promoPriceVal.toStringAsFixed(0)}% OFF',
+                style: GoogleFonts.outfit(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w900,
+                  color: AppTheme.warning,
+                ),
+              ),
+            ),
+            const SizedBox(width: 48),
+          ],
+        ),
+      );
     }
 
     return Container(
@@ -1173,9 +1358,13 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
   }
 
   Widget _buildHappyHourSlide(Map<String, dynamic> promo) {
+    final categoryId = promo['category_id'];
+    final categoryName = promo['category_name'] ?? '';
+    final promoPrice = promo['promo_price'];
+    final promoPriceVal = double.tryParse(promoPrice.toString()) ?? 0.0;
+    
     final prodName = promo['product_name'] ?? '';
     final pModel = _getProductByName(prodName);
-    final promoPrice = promo['promo_price'];
     final originalPrice = promo['original_price'];
     final start = promo['start_time'].toString().substring(0, 5);
     final end = promo['end_time'].toString().substring(0, 5);
@@ -1188,15 +1377,10 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
       daysDesc = 'WEEKENDS';
     }
 
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xFF0F172A), Color(0xFF064E3B)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: Center(
+    if (categoryId != null) {
+      final hasImage = promo['image_base64'] != null && promo['image_base64'].toString().length > 200;
+      
+      Widget childContent = Center(
         child: Container(
           constraints: const BoxConstraints(maxWidth: 950),
           margin: const EdgeInsets.all(40),
@@ -1221,16 +1405,16 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
                   borderRadius: BorderRadius.circular(16),
                   child: AspectRatio(
                     aspectRatio: 1.1,
-                    child: pModel != null && pModel.imageBase64 != null && pModel.imageBase64!.length > 200
+                    child: hasImage
                         ? Base64ImageWidget(
-                            base64Str: pModel.imageBase64,
+                            base64Str: promo['image_base64'].toString(),
                             fit: BoxFit.cover,
                           )
                         : Container(
                             color: AppTheme.accent.withOpacity(0.15),
                             child: const Center(
                               child: Icon(
-                                Icons.restaurant_menu_rounded,
+                                Icons.category_rounded,
                                 color: AppTheme.accent,
                                 size: 80,
                               ),
@@ -1294,7 +1478,7 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
                     ),
                     const SizedBox(height: 24),
                     Text(
-                      prodName,
+                      '$categoryName Special',
                       style: GoogleFonts.outfit(
                         fontSize: 38,
                         fontWeight: FontWeight.bold,
@@ -1302,17 +1486,6 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
                         height: 1.2,
                       ),
                     ),
-                    if (pModel?.sinhalaName != null) ...[
-                      const SizedBox(height: 6),
-                      Text(
-                        pModel!.sinhalaName!,
-                        style: GoogleFonts.inter(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w500,
-                          color: const Color(0xFF94A3B8),
-                        ),
-                      ),
-                    ],
                     const SizedBox(height: 24),
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.end,
@@ -1321,7 +1494,7 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'HAPPY HOUR PRICE',
+                              'CATEGORY DISCOUNT',
                               style: GoogleFonts.inter(
                                 fontSize: 11,
                                 fontWeight: FontWeight.bold,
@@ -1330,7 +1503,7 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
                               ),
                             ),
                             Text(
-                              'LKR ${promoPrice.toString()}',
+                              '${promoPriceVal.toStringAsFixed(0)}% OFF',
                               style: GoogleFonts.outfit(
                                 fontSize: 44,
                                 fontWeight: FontWeight.w900,
@@ -1339,20 +1512,6 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
                               ),
                             ),
                           ],
-                        ),
-                        const SizedBox(width: 24),
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 4),
-                          child: Text(
-                            'LKR ${originalPrice.toString()}',
-                            style: GoogleFonts.outfit(
-                              fontSize: 22,
-                              color: Colors.white70,
-                              decoration: TextDecoration.lineThrough,
-                              decorationColor: Colors.red,
-                              decorationThickness: 2.0,
-                            ),
-                          ),
                         ),
                       ],
                     ),
@@ -1380,8 +1539,260 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
             ],
           ),
         ),
+      );
+
+      if (hasImage) {
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            Base64ImageWidget(
+              base64Str: promo['image_base64'].toString(),
+              fit: BoxFit.cover,
+            ),
+            ClipRect(
+              child: BackdropFilter(
+                filter: ui.ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
+                child: Container(
+                  color: Colors.black.withOpacity(0.6),
+                ),
+              ),
+            ),
+            childContent,
+          ],
+        );
+      } else {
+        return Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xFF0F172A), Color(0xFF064E3B)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+          child: childContent,
+        );
+      }
+    }
+
+    final hasImage = pModel != null && pModel.imageBase64 != null && pModel.imageBase64!.length > 200;
+
+    Widget childContent = Center(
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 950),
+        margin: const EdgeInsets.all(40),
+        padding: const EdgeInsets.all(32),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0F172A).withOpacity(0.9),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: AppTheme.accent.withOpacity(0.25), width: 1.5),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.6),
+              blurRadius: 30,
+              offset: const Offset(0, 15),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              flex: 5,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: AspectRatio(
+                  aspectRatio: 1.1,
+                  child: hasImage
+                      ? Base64ImageWidget(
+                          base64Str: pModel.imageBase64,
+                          fit: BoxFit.cover,
+                        )
+                      : Container(
+                          color: AppTheme.accent.withOpacity(0.15),
+                          child: const Center(
+                            child: Icon(
+                              Icons.restaurant_menu_rounded,
+                              color: AppTheme.accent,
+                              size: 80,
+                            ),
+                          ),
+                        ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 40),
+            Expanded(
+              flex: 6,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: AppTheme.accent.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(30),
+                          border: Border.all(color: AppTheme.accent, width: 1),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.celebration, color: AppTheme.accent, size: 16),
+                            const SizedBox(width: 6),
+                            Text(
+                              promo['name'] != null && promo['name'].toString().isNotEmpty
+                                  ? promo['name'].toString().toUpperCase()
+                                  : 'HAPPY HOUR',
+                              style: GoogleFonts.outfit(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: AppTheme.accent,
+                                letterSpacing: 1.0,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.06),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          daysDesc,
+                          style: GoogleFonts.inter(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFFCBD5E1),
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    prodName,
+                    style: GoogleFonts.outfit(
+                      fontSize: 38,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      height: 1.2,
+                    ),
+                  ),
+                  if (pModel?.sinhalaName != null) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      pModel!.sinhalaName!,
+                      style: GoogleFonts.inter(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w500,
+                        color: const Color(0xFF94A3B8),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 24),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'HAPPY HOUR PRICE',
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.warning,
+                              letterSpacing: 1.0,
+                            ),
+                          ),
+                          Text(
+                            'LKR ${promoPrice.toString()}',
+                            style: GoogleFonts.outfit(
+                              fontSize: 44,
+                              fontWeight: FontWeight.w900,
+                              color: AppTheme.warning,
+                              height: 1,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(width: 24),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Text(
+                          'LKR ${originalPrice.toString()}',
+                          style: GoogleFonts.outfit(
+                            fontSize: 22,
+                            color: Colors.white70,
+                            decoration: TextDecoration.lineThrough,
+                            decorationColor: Colors.red,
+                            decorationThickness: 2.0,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const Divider(color: Color(0xFF334155), height: 40),
+                  Row(
+                    children: [
+                      const Icon(Icons.access_time_filled, color: AppTheme.accent, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Valid: ${_formatTimeString(start)} to ${_formatTimeString(end)}',
+                          style: GoogleFonts.inter(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFFCBD5E1),
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
+
+    if (hasImage) {
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          Base64ImageWidget(
+            base64Str: pModel.imageBase64,
+            fit: BoxFit.cover,
+          ),
+          ClipRect(
+            child: BackdropFilter(
+              filter: ui.ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
+              child: Container(
+                color: Colors.black.withOpacity(0.6),
+              ),
+            ),
+          ),
+          childContent,
+        ],
+      );
+    } else {
+      return Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFF0F172A), Color(0xFF064E3B)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: childContent,
+      );
+    }
   }
 
   Widget _buildQueueToken(String token, bool isReady) {

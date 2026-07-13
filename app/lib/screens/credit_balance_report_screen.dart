@@ -721,7 +721,7 @@ class _CreditBalanceReportScreenState extends State<CreditBalanceReportScreen> {
                                                   ],
                                                 ),
                                                 ...localLedger.map((item) {
-                                                  final dateStr = DateFormat('yyyy-MM-dd HH:mm').format(DateTime.parse(item['date']));
+                                                  final dateStr = DateFormat('yyyy-MM-dd hh:mm a').format(DateTime.parse(item['date']).toLocal());
                                                   final debitStr = item['debit'] > 0 ? 'LKR ${item['debit'].toStringAsFixed(2)}' : '-';
                                                   final creditStr = item['credit'] > 0 ? 'LKR ${item['credit'].toStringAsFixed(2)}' : '-';
                                                   final balanceStr = 'LKR ${item['running_balance'].toStringAsFixed(2)}';
@@ -998,7 +998,7 @@ class _CreditBalanceReportScreenState extends State<CreditBalanceReportScreen> {
                     pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.end,
                       children: [
-                        pw.Text('Date: ${DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now())}', style: pw.TextStyle(font: font, fontSize: 10)),
+                        pw.Text('Date: ${DateFormat('yyyy-MM-dd hh:mm a').format(DateTime.now())}', style: pw.TextStyle(font: font, fontSize: 10)),
                       ],
                     ),
                   ],
@@ -1016,7 +1016,7 @@ class _CreditBalanceReportScreenState extends State<CreditBalanceReportScreen> {
                 pw.Table.fromTextArray(
                   headers: ['Date', 'Description', 'Credit Added (+)', 'Credit Paid (-)', 'Running Balance'],
                   data: ledger.map((item) {
-                    final dateStr = DateFormat('yyyy-MM-dd HH:mm').format(DateTime.parse(item['date']));
+                    final dateStr = DateFormat('yyyy-MM-dd hh:mm a').format(DateTime.parse(item['date']).toLocal());
                     final debitStr = item['debit'] > 0 ? item['debit'].toStringAsFixed(2) : '-';
                     final creditStr = item['credit'] > 0 ? item['credit'].toStringAsFixed(2) : '-';
                     final balanceStr = item['running_balance'].toStringAsFixed(2);
