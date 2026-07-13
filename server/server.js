@@ -1315,7 +1315,7 @@ app.delete('/api/offers/:id', authenticateToken, async (req, res) => {
 app.get('/api/users', authenticateToken, async (req, res) => {
     const { role } = req.query;
     try {
-        let sql = 'SELECT id, name, username, email, phone, role, status, branch, image_base64, created_at FROM users';
+        let sql = 'SELECT id, name, username, email, phone, role, status, branch, image_base64, category_id, created_at FROM users';
         let params = [];
         if (role) {
             if (role === 'admin_owner') {
@@ -1337,18 +1337,18 @@ app.post('/api/users', authenticateToken, async (req, res) => {
     if (req.user.role !== 'admin' && req.user.role !== 'owner') {
         return res.status(403).json({ error: 'Unauthorized' });
     }
-    const { name, username, password, role, status, email, phone, branch, image_base64 } = req.body;
+    const { name, username, password, role, status, email, phone, branch, image_base64, category_id } = req.body;
     if (!username || !password || !role) {
         return res.status(400).json({ error: 'Username, password, and role are required' });
     }
     try {
         const passHash = await bcrypt.hash(password, 10);
         const result = await db.query(
-            'INSERT INTO users (name, username, password_hash, role, status, email, phone, branch, image_base64) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [name, username, passHash, role, status || 'active', email || null, phone || null, branch || 'current', image_base64 || null]
+            'INSERT INTO users (name, username, password_hash, role, status, email, phone, branch, image_base64, category_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [name, username, passHash, role, status || 'active', email || null, phone || null, branch || 'current', image_base64 || null, category_id || null]
         );
         const newId = result.insertId;
-        const [newUser] = await db.query('SELECT id, name, username, email, phone, role, status, branch, image_base64 FROM users WHERE id = ?', [newId]);
+        const [newUser] = await db.query('SELECT id, name, username, email, phone, role, status, branch, image_base64, category_id FROM users WHERE id = ?', [newId]);
         
         await logAudit('modify_bill', 'users', newId, `User ${username} created.`, req.user.id);
         broadcast({ type: 'user_created', data: newUser });
@@ -1363,7 +1363,7 @@ app.put('/api/users/:id', authenticateToken, async (req, res) => {
     if (req.user.role !== 'admin' && req.user.role !== 'owner' && req.user.id !== Number(id)) {
         return res.status(403).json({ error: 'Unauthorized' });
     }
-    const { name, username, role, status, email, phone, branch, image_base64 } = req.body;
+    const { name, username, role, status, email, phone, branch, image_base64, category_id } = req.body;
     try {
         let updateFields = [];
         let params = [];
@@ -1376,14 +1376,15 @@ app.put('/api/users/:id', authenticateToken, async (req, res) => {
         if (phone !== undefined) { updateFields.push('phone = ?'); params.push(phone); }
         if (branch !== undefined) { updateFields.push('branch = ?'); params.push(branch); }
         if (image_base64 !== undefined) { updateFields.push('image_base64 = ?'); params.push(image_base64); }
-
+        if (category_id !== undefined) { updateFields.push('category_id = ?'); params.push(category_id); }
+ 
         if (updateFields.length === 0) {
             return res.status(400).json({ error: 'No fields provided to update' });
         }
-
+ 
         params.push(id);
         await db.query(`UPDATE users SET ${updateFields.join(', ')} WHERE id = ?`, params);
-        const [user] = await db.query('SELECT id, name, username, email, phone, role, status, branch, image_base64 FROM users WHERE id = ?', [id]);
+        const [user] = await db.query('SELECT id, name, username, email, phone, role, status, branch, image_base64, category_id FROM users WHERE id = ?', [id]);
         
         await logAudit('modify_bill', 'users', id, `User ${user.username} updated.`, req.user.id);
         broadcast({ type: 'user_updated', data: user });
@@ -1423,6 +1424,84 @@ app.delete('/api/users/:id', authenticateToken, async (req, res) => {
         await logAudit('modify_bill', 'users', id, `User ${user.username} deactivated.`, req.user.id);
         broadcast({ type: 'user_deactivated', data: { id } });
         res.json({ success: true, message: 'User deactivated successfully' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.get('/api/users/:id/prepared-items', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    try {
+        const users = await db.query('SELECT role, category_id FROM users WHERE id = ?', [id]);
+        if (users.length === 0) return res.status(404).json({ error: 'User not found' });
+        const user = users[0];
+        
+        if (user.role !== 'kitchen' || !user.category_id) {
+            return res.json([]);
+        }
+
+        // 1. Fetch sales order items matching this category (only for products that DO NOT track stock, i.e., made-to-order)
+        const salesItems = await db.query(`
+            SELECT 
+                oi.id,
+                o.order_number,
+                oi.quantity,
+                o.created_at,
+                p.name AS product_name,
+                p.sinhala_name AS product_sinhala_name,
+                p.ingredients,
+                oi.notes,
+                'sale' AS source_type
+            FROM order_items oi
+            JOIN orders o ON oi.order_id = o.id
+            JOIN products p ON oi.product_id = p.id
+            WHERE p.category_id = ? AND o.status != 'cancelled' AND p.track_stock = 0
+        `, [user.category_id]);
+
+        // 2. Fetch stock additions for products in this category (only for products that DO track stock, i.e., prepared in advance)
+        const stockAdditions = await db.query(`
+            SELECT 
+                sl.id,
+                CONCAT('STOCK_ADD-', sl.id) AS order_number,
+                sl.change_qty AS quantity,
+                sl.timestamp AS created_at,
+                p.name AS product_name,
+                p.sinhala_name AS product_sinhala_name,
+                p.ingredients,
+                sl.reason AS notes,
+                'stock_addition' AS source_type
+            FROM stock_logs sl
+            JOIN products p ON sl.product_id = p.id
+            WHERE p.category_id = ? AND sl.change_qty > 0 AND sl.type IN ('adjustment', 'purchase') AND p.track_stock = 1
+        `, [user.category_id]);
+
+        // Combine and parse ingredients
+        const combined = [...salesItems, ...stockAdditions].map(item => {
+            let parsedIngredients = [];
+            if (item.ingredients) {
+                try {
+                    parsedIngredients = typeof item.ingredients === 'string' 
+                        ? JSON.parse(item.ingredients) 
+                        : item.ingredients;
+                } catch (_) {}
+            }
+            return {
+                id: item.id,
+                order_number: item.order_number,
+                quantity: Number(item.quantity),
+                created_at: item.created_at,
+                product_name: item.product_name,
+                product_sinhala_name: item.product_sinhala_name,
+                notes: item.notes,
+                source_type: item.source_type,
+                ingredients: parsedIngredients
+            };
+        });
+
+        // Sort by date DESC
+        combined.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+        res.json(combined);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

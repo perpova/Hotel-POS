@@ -23,6 +23,8 @@ class UsersScreen extends StatefulWidget {
 
 class _UsersScreenState extends State<UsersScreen> {
   List<dynamic> _items = []; // Can be List<UserModel> or List<CustomerModel>
+  List<CategoryModel> _categories = [];
+  Map<int, String> _ingredientNames = {};
   bool _isLoading = false;
   String _errorMessage = '';
 
@@ -51,6 +53,7 @@ class _UsersScreenState extends State<UsersScreen> {
   bool _loadingAddresses = false;
   List<OrderModel> _userOrders = [];
   List<OrderModel> _rawUserOrders = [];
+  List<Map<String, dynamic>> _preparedItems = [];
   bool _loadingOrders = false;
 
   // Orders history filters
@@ -72,6 +75,7 @@ class _UsersScreenState extends State<UsersScreen> {
   String _roleVal = 'admin';
   String _statusVal = 'active';
   String _branchVal = 'current'; // 'current' or 'all'
+  int? _selectedCategoryId;
 
   // Customer Controllers
   final _custNameController = TextEditingController();
@@ -127,6 +131,14 @@ class _UsersScreenState extends State<UsersScreen> {
       _errorMessage = '';
     });
     try {
+      try {
+        _categories = await APIService.instance.getCategories();
+      } catch (_) {}
+      try {
+        final ings = await APIService.instance.getIngredients();
+        _ingredientNames = {for (var i in ings) i.id: i.name};
+      } catch (_) {}
+
       if (_isCustomerType) {
         final custs = await APIService.instance.getCustomers();
         if (mounted) {
@@ -200,6 +212,7 @@ class _UsersScreenState extends State<UsersScreen> {
       _loadingOrders = true;
       _userOrders = [];
       _rawUserOrders = [];
+      _preparedItems = [];
       _ordersFilterPreset = 'all';
       _ordersFilterStartDate = null;
       _ordersFilterEndDate = null;
@@ -209,25 +222,35 @@ class _UsersScreenState extends State<UsersScreen> {
       final isCust = item is CustomerModel;
       final id = isCust ? item.id : (item as UserModel).id;
       
-      final allOrders = await APIService.instance.getOrders();
-      final filtered = allOrders.where((o) {
-        if (isCust) {
-          return o.customerId == id;
-        } else {
-          final user = item as UserModel;
-          if (user.role.toLowerCase() == 'waiter') {
-            return o.stewardName != null && o.stewardName!.toLowerCase() == user.name.toLowerCase();
-          }
-          return o.cashierId == id;
+      if (!isCust && (item as UserModel).role.toLowerCase() == 'kitchen') {
+        final prepared = await APIService.instance.getPreparedItems(id);
+        if (mounted) {
+          setState(() {
+            _preparedItems = prepared;
+            _loadingOrders = false;
+          });
         }
-      }).toList();
-      
-      if (mounted) {
-        setState(() {
-          _rawUserOrders = filtered;
-          _userOrders = filtered;
-          _loadingOrders = false;
-        });
+      } else {
+        final allOrders = await APIService.instance.getOrders();
+        final filtered = allOrders.where((o) {
+          if (isCust) {
+            return o.customerId == id;
+          } else {
+            final user = item as UserModel;
+            if (user.role.toLowerCase() == 'waiter') {
+              return o.stewardName != null && o.stewardName!.toLowerCase() == user.name.toLowerCase();
+            }
+            return o.cashierId == id;
+          }
+        }).toList();
+        
+        if (mounted) {
+          setState(() {
+            _rawUserOrders = filtered;
+            _userOrders = filtered;
+            _loadingOrders = false;
+          });
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -244,6 +267,7 @@ class _UsersScreenState extends State<UsersScreen> {
     setState(() {
       _editingItem = item;
       _isDrawerOpen = true;
+      _selectedCategoryId = null;
 
       if (_isCustomerType) {
         if (item != null && item is CustomerModel) {
@@ -271,6 +295,7 @@ class _UsersScreenState extends State<UsersScreen> {
           _roleVal = item.role;
           _statusVal = item.status;
           _branchVal = item.branch;
+          _selectedCategoryId = item.categoryId;
         } else {
           _nameController.clear();
           _usernameController.clear();
@@ -352,6 +377,7 @@ class _UsersScreenState extends State<UsersScreen> {
         'role': _roleVal,
         'status': _statusVal,
         'branch': _branchVal,
+        'category_id': _selectedCategoryId,
       };
 
       if (_editingItem == null) {
@@ -2006,6 +2032,39 @@ class _UsersScreenState extends State<UsersScreen> {
     }).toList();
   }
 
+  List<Map<String, dynamic>> get _filteredPreparedItems {
+    final now = DateTime.now();
+    return _preparedItems.where((item) {
+      final itemDate = DateTime.tryParse(item['created_at']?.toString() ?? '')?.toLocal() ?? DateTime.now();
+      
+      if (_ordersFilterPreset == 'daily') {
+        return itemDate.year == now.year && itemDate.month == now.month && itemDate.day == now.day;
+      } else if (_ordersFilterPreset == 'weekly') {
+        final sevenDaysAgo = now.subtract(const Duration(days: 7));
+        return itemDate.isAfter(sevenDaysAgo);
+      } else if (_ordersFilterPreset == 'monthly') {
+        final thirtyDaysAgo = now.subtract(const Duration(days: 30));
+        return itemDate.isAfter(thirtyDaysAgo);
+      } else if (_ordersFilterPreset == 'single' && _ordersFilterSingleDate != null) {
+        return itemDate.year == _ordersFilterSingleDate!.year &&
+               itemDate.month == _ordersFilterSingleDate!.month &&
+               itemDate.day == _ordersFilterSingleDate!.day;
+      } else if (_ordersFilterPreset == 'custom') {
+        bool match = true;
+        if (_ordersFilterStartDate != null) {
+          final startOfDay = DateTime(_ordersFilterStartDate!.year, _ordersFilterStartDate!.month, _ordersFilterStartDate!.day);
+          match = match && (itemDate.isAfter(startOfDay) || itemDate.isAtSameMomentAs(startOfDay));
+        }
+        if (_ordersFilterEndDate != null) {
+          final endOfDay = DateTime(_ordersFilterEndDate!.year, _ordersFilterEndDate!.month, _ordersFilterEndDate!.day, 23, 59, 59);
+          match = match && (itemDate.isBefore(endOfDay) || itemDate.isAtSameMomentAs(endOfDay));
+        }
+        return match;
+      }
+      return true; // all
+    }).toList();
+  }
+
   Future<void> _printOrdersHistoryReport(List<OrderModel> orders) async {
     final name = _viewingItem is CustomerModel ? (_viewingItem as CustomerModel).name : (_viewingItem as UserModel).name;
     final role = _viewingItem is CustomerModel ? 'CUSTOMER' : (_viewingItem as UserModel).role.toUpperCase();
@@ -2104,14 +2163,139 @@ class _UsersScreenState extends State<UsersScreen> {
     );
   }
 
+  Future<void> _printPreparedItemsReport(List<Map<String, dynamic>> prepared) async {
+    final name = (_viewingItem as UserModel).name;
+    final role = (_viewingItem as UserModel).role.toUpperCase();
+
+    final doc = pw.Document();
+    double totalQty = prepared.fold(0.0, (sum, item) => sum + (double.tryParse(item['quantity']?.toString() ?? '1') ?? 1.0));
+
+    final headers = ['Item Name', 'Invoice / Type', 'Date & Time', 'Qty', 'Ingredients Used'];
+    final data = prepared.map((item) {
+      final dateFormatted = DateFormat('yyyy-MM-dd hh:mm a').format((DateTime.tryParse(item['created_at']?.toString() ?? '') ?? DateTime.now()).toLocal());
+      final isSale = item['source_type'] == 'sale';
+      final orderNum = item['order_number']?.toString() ?? '';
+      final double qty = double.tryParse(item['quantity']?.toString() ?? '1') ?? 1.0;
+      
+      // Parse size if kottu etc has notes like Size: Large
+      String? selectedSize;
+      final notes = item['notes']?.toString() ?? '';
+      if (notes.contains('Size: ')) {
+        final match = RegExp(r'Size:\s*([^|]+)').firstMatch(notes);
+        if (match != null && match.group(1) != null) {
+          selectedSize = match.group(1)!.trim();
+        }
+      }
+
+      final List ingList = item['ingredients'] ?? [];
+      final ingStrings = <String>[];
+      for (var ing in ingList) {
+        final ingId = ing['ingredient_id'] != null ? int.tryParse(ing['ingredient_id'].toString()) : null;
+        final ingQty = ing['qty'] != null ? double.tryParse(ing['qty'].toString()) : null;
+        final ingSize = ing['size']?.toString();
+        if (ingId != null && ingQty != null) {
+          if (ingSize != null && ingSize != selectedSize) {
+            continue;
+          }
+          final name = _ingredientNames[ingId] ?? 'Ingredient #$ingId';
+          final totalDeduct = ingQty * qty;
+          ingStrings.add('$name: ${totalDeduct.toStringAsFixed(1)}');
+        }
+      }
+      final ingredientsDisplay = ingStrings.isEmpty ? 'N/A' : ingStrings.join(', ');
+
+      return [
+        item['product_name']?.toString() ?? 'Unknown Product',
+        isSale ? orderNum : 'Stock Addition',
+        dateFormatted,
+        qty.toStringAsFixed(0),
+        ingredientsDisplay,
+      ];
+    }).toList();
+
+    doc.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        build: (pw.Context context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Center(
+                child: pw.Text(
+                  'MATARA HOTEL',
+                  style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold),
+                ),
+              ),
+              pw.Center(
+                child: pw.Text(
+                  'Chef Prepared Items History Report',
+                  style: pw.TextStyle(fontSize: 14, color: PdfColors.grey600),
+                ),
+              ),
+              pw.SizedBox(height: 20),
+              pw.Divider(),
+              pw.SizedBox(height: 10),
+              
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text('Chef Member: $name', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                      pw.Text('Role: $role'),
+                    ],
+                  ),
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.end,
+                    children: [
+                      pw.Text('Exported On: ${DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now())}'),
+                      pw.Text('Total Items Prepared: ${totalQty.toStringAsFixed(0)} items'),
+                    ],
+                  ),
+                ],
+              ),
+              pw.SizedBox(height: 20),
+              
+              pw.Table.fromTextArray(
+                headers: headers,
+                data: data,
+                border: pw.TableBorder.all(color: PdfColors.grey300),
+                headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8),
+                cellStyle: pw.TextStyle(fontSize: 8),
+                headerDecoration: const pw.BoxDecoration(color: PdfColors.grey100),
+                cellHeight: 25,
+                cellAlignments: {
+                  0: pw.Alignment.centerLeft,
+                  1: pw.Alignment.centerLeft,
+                  2: pw.Alignment.centerLeft,
+                  3: pw.Alignment.center,
+                  4: pw.Alignment.centerLeft,
+                },
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    await Printing.layoutPdf(
+      onLayout: (PdfPageFormat format) async => doc.save(),
+      name: 'Prepared_Items_Report_${name.replaceAll(" ", "_")}',
+    );
+  }
+
   // TAB 3: My Orders Tab content
   Widget _buildOrdersTab() {
-    final orders = _filteredUserOrders;
+    final isChef = _viewingItem is UserModel && (_viewingItem as UserModel).role.toLowerCase() == 'kitchen';
+    final orders = isChef ? <OrderModel>[] : _filteredUserOrders;
+    final prepared = isChef ? _filteredPreparedItems : <Map<String, dynamic>>[];
+    final bool isEmpty = isChef ? prepared.isEmpty : orders.isEmpty;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Orders History', style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
+        Text(isChef ? 'Prepared Items History' : 'Orders History', style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
         const SizedBox(height: 20),
 
         // Filters Row
@@ -2220,7 +2404,13 @@ class _UsersScreenState extends State<UsersScreen> {
             const Spacer(),
             
             ElevatedButton.icon(
-              onPressed: orders.isEmpty ? null : () => _printOrdersHistoryReport(orders),
+              onPressed: isEmpty ? null : () {
+                if (isChef) {
+                  _printPreparedItemsReport(prepared);
+                } else {
+                  _printOrdersHistoryReport(orders);
+                }
+              },
               icon: const Icon(Icons.picture_as_pdf, size: 14),
               label: const Text('Export PDF'),
               style: ElevatedButton.styleFrom(
@@ -2235,18 +2425,165 @@ class _UsersScreenState extends State<UsersScreen> {
 
         if (_loadingOrders)
           Center(child: CircularProgressIndicator(color: AppTheme.primary))
-        else if (orders.isEmpty)
+        else if (isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 40.0),
             child: Center(
               child: Text(
-                'No orders found matching the filter.',
+                isChef ? 'No prepared items found matching the filter.' : 'No orders found matching the filter.',
                 style: GoogleFonts.inter(color: const Color(0xFF64748B)),
               ),
             ),
           )
+        else if (isChef)
+          // Prepared items table layout
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Container(
+                  color: const Color(0xFFF8FAFC),
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                  child: Row(
+                    children: [
+                      Expanded(flex: 3, child: _buildTableHeaderText('ITEM NAME')),
+                      Expanded(flex: 1, child: _buildTableHeaderText('QTY')),
+                      Expanded(flex: 3, child: _buildTableHeaderText('DATE & TIME')),
+                      Expanded(flex: 3, child: _buildTableHeaderText('INVOICE / TYPE')),
+                      Expanded(flex: 5, child: _buildTableHeaderText('INGREDIENTS USED')),
+                      Expanded(flex: 2, child: _buildTableHeaderText('ACTION')),
+                    ],
+                  ),
+                ),
+                ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: prepared.length,
+                  separatorBuilder: (context, index) => const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                  itemBuilder: (context, index) {
+                    final item = prepared[index];
+                    final dateFormatted = DateFormat('hh:mm a, dd-MM-yyyy').format((DateTime.tryParse(item['created_at']?.toString() ?? '') ?? DateTime.now()).toLocal());
+                    
+                    // Format ingredients
+                    final List ingList = item['ingredients'] ?? [];
+                    final double qty = double.tryParse(item['quantity']?.toString() ?? '1') ?? 1.0;
+                    
+                    // Parse size if kottu etc has notes like Size: Large
+                    String? selectedSize;
+                    final notes = item['notes']?.toString() ?? '';
+                    if (notes.contains('Size: ')) {
+                      final match = RegExp(r'Size:\s*([^|]+)').firstMatch(notes);
+                      if (match != null && match.group(1) != null) {
+                        selectedSize = match.group(1)!.trim();
+                      }
+                    }
+
+                    final ingStrings = <String>[];
+                    for (var ing in ingList) {
+                      final ingId = ing['ingredient_id'] != null ? int.tryParse(ing['ingredient_id'].toString()) : null;
+                      final ingQty = ing['qty'] != null ? double.tryParse(ing['qty'].toString()) : null;
+                      final ingSize = ing['size']?.toString();
+                      if (ingId != null && ingQty != null) {
+                        if (ingSize != null && ingSize != selectedSize) {
+                          continue;
+                        }
+                        final name = _ingredientNames[ingId] ?? 'Ingredient #$ingId';
+                        final totalDeduct = ingQty * qty;
+                        ingStrings.add('$name: ${totalDeduct.toStringAsFixed(1)}');
+                      }
+                    }
+                    final ingredientsDisplay = ingStrings.isEmpty ? 'N/A' : ingStrings.join(', ');
+
+                    final orderNum = item['order_number']?.toString() ?? '';
+                    final isSale = item['source_type'] == 'sale';
+
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            flex: 3,
+                            child: Text(
+                              item['product_name']?.toString() ?? 'Unknown Product',
+                              style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 1,
+                            child: Text(
+                              '${qty.toStringAsFixed(0)}',
+                              style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF475569)),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 3,
+                            child: Text(
+                              dateFormatted,
+                              style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF475569)),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 3,
+                            child: Text(
+                              isSale ? orderNum : 'Stock Addition',
+                              style: GoogleFonts.inter(
+                                fontSize: 12, 
+                                fontWeight: FontWeight.w600,
+                                color: isSale ? Colors.indigo : Colors.teal,
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 5,
+                            child: Text(
+                              ingredientsDisplay,
+                              style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B), fontStyle: FontStyle.italic),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: isSale
+                                ? Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: GestureDetector(
+                                      onTap: () async {
+                                        try {
+                                          final fullOrder = await APIService.instance.getOrderByNumber(orderNum);
+                                          if (mounted) {
+                                            _showUserOrderDetailDialog(fullOrder);
+                                          }
+                                        } catch (e) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(content: Text('Failed: $e'), backgroundColor: AppTheme.danger),
+                                          );
+                                        }
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.all(6),
+                                        decoration: BoxDecoration(color: const Color(0xFFFFF0F5), borderRadius: BorderRadius.circular(6)),
+                                        child: Icon(Icons.visibility_outlined, color: AppTheme.primary, size: 14),
+                                      ),
+                                    ),
+                                  )
+                                : const SizedBox.shrink(),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          )
         else
-          // Orders Compact Table Layout
+          // General orders table layout
           Container(
             decoration: BoxDecoration(
               color: Colors.white,
@@ -2634,9 +2971,35 @@ class _UsersScreenState extends State<UsersScreen> {
                       DropdownMenuItem(value: 'delivery', child: Text('Delivery Rider')),
                       DropdownMenuItem(value: 'waiter', child: Text('Steward / Waiter')),
                     ],
-                    onChanged: (val) => setState(() => _roleVal = val!),
+                    onChanged: (val) => setState(() {
+                      _roleVal = val!;
+                      if (_roleVal != 'kitchen') {
+                        _selectedCategoryId = null;
+                      }
+                    }),
                   ),
                   const SizedBox(height: 20),
+
+                  if (_roleVal == 'kitchen') ...[
+                    _buildFieldLabel('ASSIGNED CATEGORY'),
+                    const SizedBox(height: 6),
+                    DropdownButtonFormField<int?>(
+                      value: _selectedCategoryId,
+                      hint: const Text('Select category (e.g. Koththu)'),
+                      items: [
+                        const DropdownMenuItem<int?>(
+                          value: null,
+                          child: Text('None'),
+                        ),
+                        ..._categories.map((c) => DropdownMenuItem<int?>(
+                              value: c.id,
+                              child: Text(c.name),
+                            )),
+                      ],
+                      onChanged: (val) => setState(() => _selectedCategoryId = val),
+                    ),
+                    const SizedBox(height: 20),
+                  ],
 
                   // Branch selector for Administrators only
                   if (widget.userType == 'Administrators') ...[

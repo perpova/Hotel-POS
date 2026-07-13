@@ -89,6 +89,10 @@ async function initializeDatabase() {
                 console.log("Migration: Added image_base64 to users table.");
             } catch (_) {}
             try {
+                await dbPool.query("ALTER TABLE users ADD COLUMN category_id INT NULL, ADD CONSTRAINT fk_users_category FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL");
+                console.log("Migration: Added category_id to users table.");
+            } catch (_) {}
+            try {
                 await dbPool.query("ALTER TABLE products ADD COLUMN image_base64 LONGTEXT NULL");
                 console.log("Migration: Added image_base64 to products table.");
             } catch (_) {}

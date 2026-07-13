@@ -933,6 +933,15 @@ class APIService {
     }
   }
 
+  Future<List<Map<String, dynamic>>> getPreparedItems(int userId) async {
+    final response = await http.get(Uri.parse('$_baseUrl/api/users/$userId/prepared-items'), headers: _getHeaders());
+    if (response.statusCode == 200) {
+      final List data = jsonDecode(response.body);
+      return List<Map<String, dynamic>>.from(data);
+    }
+    throw Exception('Failed to load prepared items');
+  }
+
   // Customer Management APIs
   Future<CustomerModel> updateCustomer(int id, Map<String, dynamic> customerData) async {
     final response = await http.put(

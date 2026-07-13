@@ -21,6 +21,7 @@ class UserModel {
   final String status; // 'active', 'inactive'
   final String branch; // 'current', 'all'
   final String? imageBase64;
+  final int? categoryId;
 
   UserModel({
     required this.id,
@@ -32,6 +33,7 @@ class UserModel {
     this.status = 'active',
     this.branch = 'current',
     this.imageBase64,
+    this.categoryId,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) => UserModel(
@@ -44,6 +46,7 @@ class UserModel {
     status: json['status'] ?? 'active',
     branch: json['branch'] ?? 'current',
     imageBase64: json['image_base64'],
+    categoryId: json['category_id'],
   );
 
   Map<String, dynamic> toJson() => {
@@ -56,6 +59,7 @@ class UserModel {
     'status': status,
     'branch': branch,
     'image_base64': imageBase64,
+    'category_id': categoryId,
   };
 }
 
