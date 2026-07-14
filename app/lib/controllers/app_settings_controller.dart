@@ -26,6 +26,14 @@ class AppSettingsController extends ChangeNotifier {
   bool _extendQueueScreen = false;
   bool _extendPosScreen = false;
 
+  // ── Queue Screen Background ────────────────────────────────────────────────
+  String _queueBgType = 'none'; // 'none' | 'image' | 'video'
+  String? _queueBgImageBase64;
+  String? _queueBgVideoUrl;
+  String _queueBgVideoSource = 'link'; // 'link' | 'file'
+  String? _queueBgVideoPath;
+  double _queueBgOpacity = 0.2;
+
   // ── Branches ───────────────────────────────────────────────────────────────
   List<BranchItem> _branches = [];
 
@@ -47,6 +55,13 @@ class AppSettingsController extends ChangeNotifier {
   bool get cartOnLeft        => _cartOnLeft;
   bool get extendQueueScreen => _extendQueueScreen;
   bool get extendPosScreen   => _extendPosScreen;
+
+  String get queueBgType => _queueBgType;
+  String? get queueBgImageBase64 => _queueBgImageBase64;
+  String? get queueBgVideoUrl => _queueBgVideoUrl;
+  String get queueBgVideoSource => _queueBgVideoSource;
+  String? get queueBgVideoPath => _queueBgVideoPath;
+  double get queueBgOpacity => _queueBgOpacity;
 
   List<BranchItem> get branches => List.unmodifiable(_branches);
 
@@ -75,6 +90,13 @@ class AppSettingsController extends ChangeNotifier {
     _cartOnLeft       = prefs.getBool('cart_on_left') ?? false;
     _extendQueueScreen = prefs.getBool('extend_queue_screen') ?? false;
     _extendPosScreen   = prefs.getBool('extend_pos_screen') ?? false;
+
+    _queueBgType       = prefs.getString('queue_bg_type') ?? 'none';
+    _queueBgImageBase64 = prefs.getString('queue_bg_image');
+    _queueBgVideoUrl   = prefs.getString('queue_bg_video_url');
+    _queueBgVideoSource = prefs.getString('queue_bg_video_source') ?? 'link';
+    _queueBgVideoPath   = prefs.getString('queue_bg_video_path');
+    _queueBgOpacity    = prefs.getDouble('queue_bg_opacity') ?? 0.2;
 
     final branchJson = prefs.getString('branches_json');
     if (branchJson != null) {
@@ -147,6 +169,38 @@ class AppSettingsController extends ChangeNotifier {
     if (faviconBase64  != null) _faviconBase64      = faviconBase64;
     if (footerLogoBase64 != null) _footerLogoBase64 = footerLogoBase64;
     await _save();
+    notifyListeners();
+  }
+
+  // ── Queue Screen Background update ──────────────────────────────────────────
+  Future<void> saveQueueBackground({
+    required String type,
+    String? imageBase64,
+    String? videoUrl,
+    String? videoSource,
+    String? videoPath,
+    double? opacity,
+  }) async {
+    _queueBgType = type;
+    if (imageBase64 != null) _queueBgImageBase64 = imageBase64;
+    if (videoUrl != null) _queueBgVideoUrl = videoUrl;
+    if (videoSource != null) _queueBgVideoSource = videoSource;
+    if (videoPath != null) _queueBgVideoPath = videoPath;
+    if (opacity != null) _queueBgOpacity = opacity;
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('queue_bg_type', _queueBgType);
+    if (_queueBgImageBase64 != null) {
+      await prefs.setString('queue_bg_image', _queueBgImageBase64!);
+    }
+    if (_queueBgVideoUrl != null) {
+      await prefs.setString('queue_bg_video_url', _queueBgVideoUrl!);
+    }
+    await prefs.setString('queue_bg_video_source', _queueBgVideoSource);
+    if (_queueBgVideoPath != null) {
+      await prefs.setString('queue_bg_video_path', _queueBgVideoPath!);
+    }
+    await prefs.setDouble('queue_bg_opacity', _queueBgOpacity);
     notifyListeners();
   }
 

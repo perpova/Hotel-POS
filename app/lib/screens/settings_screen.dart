@@ -34,12 +34,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _newPasswordController     = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   final _apiUrlController = TextEditingController();
+  final _queueVideoUrlController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _apiUrlController.text = APIService.instance.baseUrl;
     _loadUserData();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final appSettings = Provider.of<AppSettingsController>(context, listen: false);
+      _queueVideoUrlController.text = appSettings.queueBgVideoUrl ?? '';
+    });
   }
 
   void _loadUserData() {
@@ -63,6 +68,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _newPasswordController.dispose();
     _confirmPasswordController.dispose();
     _apiUrlController.dispose();
+    _queueVideoUrlController.dispose();
     super.dispose();
   }
 
@@ -391,6 +397,283 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const SizedBox(height: 12),
         Text('When enabled, the Order Queue screen will automatically open as a separate independent window when the system starts.',
             style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B))),
+
+        const SizedBox(height: 32),
+        const Divider(color: Color(0xFFE2E8F0)),
+        const SizedBox(height: 20),
+
+        // Queue Screen Background Media
+        Text('Queue Screen Background Media', style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
+        const SizedBox(height: 8),
+        Text('Upload a background image or paste a video/YouTube link to display behind the Order Queue status boards.',
+            style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
+        const SizedBox(height: 20),
+
+        // Dropdown selection
+        Row(
+          children: [
+            Text('Background Type: ', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textLightPrimary)),
+            const SizedBox(width: 16),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(
+                border: Border.all(color: const Color(0xFFCBD5E1)),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: appSettings.queueBgType,
+                  items: const [
+                    DropdownMenuItem(value: 'none', child: Text('None (Default Dark)')),
+                    DropdownMenuItem(value: 'image', child: Text('Custom Image (Upload)')),
+                    DropdownMenuItem(value: 'video', child: Text('Video / YouTube Link')),
+                  ],
+                  onChanged: (val) async {
+                    if (val != null) {
+                      await appSettings.saveQueueBackground(type: val);
+                    }
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 20),
+
+        // Conditional display based on selected background type
+        if (appSettings.queueBgType == 'image') ...[
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ElevatedButton.icon(
+                onPressed: () async {
+                  try {
+                    final result = await FilePicker.platform.pickFiles(
+                      type: FileType.custom,
+                      allowedExtensions: ['png', 'jpg', 'jpeg', 'webp'],
+                      withData: true,
+                    );
+                    if (result != null && result.files.single.path != null) {
+                      final fileBytes = await File(result.files.single.path!).readAsBytes();
+                      final base64Str = base64Encode(fileBytes);
+                      await appSettings.saveQueueBackground(
+                        type: 'image',
+                        imageBase64: base64Str,
+                      );
+                      _snack('Background image uploaded successfully!');
+                    }
+                  } catch (e) {
+                    _snack('Failed to upload image: $e', isError: true);
+                  }
+                },
+                icon: const Icon(Icons.upload_file_outlined),
+                label: const Text('Upload Background Image'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF1E293B),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                ),
+              ),
+              const SizedBox(width: 16),
+              if (appSettings.queueBgImageBase64 != null)
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    width: 120,
+                    height: 80,
+                    color: Colors.grey.shade100,
+                    child: Base64ImageWidget(
+                      base64Str: appSettings.queueBgImageBase64,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ] else if (appSettings.queueBgType == 'video') ...[
+          // Video Source Selector
+          Row(
+            children: [
+              Text('Video Source: ', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textLightPrimary)),
+              const SizedBox(width: 16),
+              ChoiceChip(
+                label: const Text('Paste Video / YouTube Link'),
+                selected: appSettings.queueBgVideoSource == 'link',
+                selectedColor: AppTheme.primary.withOpacity(0.15),
+                onSelected: (selected) async {
+                  if (selected) {
+                    await appSettings.saveQueueBackground(type: 'video', videoSource: 'link');
+                  }
+                },
+              ),
+              const SizedBox(width: 12),
+              ChoiceChip(
+                label: const Text('Upload Local Video File'),
+                selected: appSettings.queueBgVideoSource == 'file',
+                selectedColor: AppTheme.primary.withOpacity(0.15),
+                onSelected: (selected) async {
+                  if (selected) {
+                    await appSettings.saveQueueBackground(type: 'video', videoSource: 'file');
+                  }
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          if (appSettings.queueBgVideoSource == 'link') ...[
+            Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    constraints: const BoxConstraints(maxWidth: 450),
+                    child: TextField(
+                      controller: _queueVideoUrlController,
+                      decoration: InputDecoration(
+                        hintText: 'Enter YouTube URL or Video Link (e.g. https://youtu.be/...)',
+                        labelText: 'Video URL',
+                        labelStyle: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary),
+                        hintStyle: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8)),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        prefixIcon: const Icon(Icons.link, size: 20),
+                      ),
+                      style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                ElevatedButton(
+                  onPressed: () async {
+                    final val = _queueVideoUrlController.text.trim();
+                    await appSettings.saveQueueBackground(type: 'video', videoUrl: val);
+                    _snack('Video / YouTube link saved!');
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                  ),
+                  child: const Text('Save Link'),
+                ),
+                const SizedBox(width: 12),
+                IconButton(
+                  icon: const Icon(Icons.open_in_browser_rounded, color: AppTheme.accent),
+                  tooltip: 'Test URL in browser',
+                  onPressed: () async {
+                    final url = _queueVideoUrlController.text.trim();
+                    if (url.isNotEmpty) {
+                      try {
+                        await Process.run('cmd', ['/c', 'start', '', url]);
+                      } catch (_) {}
+                    } else {
+                      _snack('Please enter a video URL first!', isError: true);
+                    }
+                  },
+                ),
+              ],
+            ),
+          ] else ...[
+            Row(
+              children: [
+                ElevatedButton.icon(
+                  onPressed: () async {
+                    try {
+                      final result = await FilePicker.platform.pickFiles(
+                        type: FileType.custom,
+                        allowedExtensions: ['mp4', 'mkv', 'avi', 'mov', 'webm'],
+                        withData: false,
+                      );
+                      if (result != null && result.files.single.path != null) {
+                        final pickedPath = result.files.single.path!;
+                        final extension = pickedPath.substring(pickedPath.lastIndexOf('.'));
+                        final tempDir = Directory.systemTemp;
+                        final savedFile = File('${tempDir.path}${Platform.pathSeparator}queue_background_video$extension');
+                        
+                        if (await savedFile.exists()) {
+                          try {
+                            await savedFile.delete();
+                          } catch (_) {}
+                        }
+                        
+                        await File(pickedPath).copy(savedFile.path);
+                        
+                        await appSettings.saveQueueBackground(
+                          type: 'video',
+                          videoSource: 'file',
+                          videoPath: savedFile.path,
+                        );
+                        _snack('Background video uploaded successfully!');
+                      }
+                    } catch (e) {
+                      _snack('Failed to copy video: $e', isError: true);
+                    }
+                  },
+                  icon: const Icon(Icons.video_call_outlined),
+                  label: const Text('Upload Video File'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1E293B),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                if (appSettings.queueBgVideoPath != null) ...[
+                  const Icon(Icons.check_circle, color: AppTheme.accent, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'File: ${appSettings.queueBgVideoPath!.split(Platform.pathSeparator).last}',
+                      style: GoogleFonts.inter(fontSize: 12, fontStyle: FontStyle.italic, color: AppTheme.textLightSecondary),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.open_in_browser_rounded, color: AppTheme.accent),
+                    tooltip: 'Test local video playback',
+                    onPressed: () async {
+                      if (await File(appSettings.queueBgVideoPath!).exists()) {
+                        try {
+                          await Process.run('cmd', ['/c', 'start', '', appSettings.queueBgVideoPath!]);
+                        } catch (_) {}
+                      } else {
+                        _snack('Uploaded file does not exist on disk!', isError: true);
+                      }
+                    },
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ],
+
+        if (appSettings.queueBgType != 'none') ...[
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Text('Overlay Opacity: ${(appSettings.queueBgOpacity * 100).toStringAsFixed(0)}%',
+                  style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textLightPrimary)),
+              Expanded(
+                child: Container(
+                  constraints: const BoxConstraints(maxWidth: 350),
+                  child: Slider(
+                    value: appSettings.queueBgOpacity,
+                    min: 0.05,
+                    max: 0.80,
+                    divisions: 15,
+                    activeColor: AppTheme.primary,
+                    inactiveColor: const Color(0xFFE2E8F0),
+                    onChanged: (val) async {
+                      await appSettings.saveQueueBackground(type: appSettings.queueBgType, opacity: val);
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
+          Text('Higher opacity makes the overlay darker, making order tokens more readable.',
+              style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B))),
+        ],
 
         const SizedBox(height: 32),
         const Divider(color: Color(0xFFE2E8F0)),

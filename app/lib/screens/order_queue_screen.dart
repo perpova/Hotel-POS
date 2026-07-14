@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'dart:async';
 import 'dart:ui' as ui;
+import 'package:video_player/video_player.dart';
+import 'package:youtube_explode_dart/youtube_explode_dart.dart' as yt_exp;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:barcode_widget/barcode_widget.dart';
@@ -36,6 +38,221 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
   PageController? _bottomPageController;
   PageController? _fullPageController;
 
+  VideoPlayerController? _videoPlayerController;
+  String? _currentVideoPath;
+
+  int _batchIndex = 0;
+  static const int _batchSize = 4;
+
+  String? _getYoutubeId(String url) {
+    final regExp = RegExp(
+      r'^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*',
+      caseSensitive: false,
+      multiLine: false,
+    );
+    final match = regExp.firstMatch(url);
+    return (match != null && match.groupCount >= 2) ? match.group(2) : null;
+  }
+
+  List<dynamic> _getCombinedActivePromos() {
+    final activeBanners = _getActiveBanners();
+    final activeHappyHours = _getActiveHappyHours();
+    return [...activeBanners, ...activeHappyHours];
+  }
+
+  List<dynamic> _getCurrentBatchPromos() {
+    final allPromos = _getCombinedActivePromos();
+    if (allPromos.isEmpty) return [];
+    
+    final int numBatches = (allPromos.length / _batchSize).ceil();
+    final currentBatch = _batchIndex % numBatches;
+    final sliceStart = currentBatch * _batchSize;
+    final sliceEnd = (sliceStart + _batchSize).clamp(0, allPromos.length);
+    return allPromos.sublist(sliceStart, sliceEnd);
+  }
+
+  void _logDebug(String message) {
+    try {
+      final file = File('debug_log.txt');
+      file.writeAsStringSync('${DateTime.now().toIso8601String()}: $message\n', mode: FileMode.append);
+    } catch (e) {
+      print('Failed to write debug log: $e');
+    }
+  }
+
+  void _initializeBackgroundVideo() async {
+    _logDebug('--- _initializeBackgroundVideo started ---');
+    final appSettings = Provider.of<AppSettingsController>(context, listen: false);
+    final type = appSettings.queueBgType;
+    final source = appSettings.queueBgVideoSource;
+    final path = appSettings.queueBgVideoPath;
+    final url = appSettings.queueBgVideoUrl;
+
+    _logDebug('BgType: $type, Source: $source, Path: $path, Url: $url');
+
+    if (type != 'video') {
+      _logDebug('BgType is not video, disposing controller');
+      _videoPlayerController?.dispose();
+      _videoPlayerController = null;
+      _currentVideoPath = null;
+      return;
+    }
+
+    if (source == 'file' && path != null) {
+      _logDebug('Source is file. Path: $path');
+      if (_currentVideoPath == path) {
+        _logDebug('Path matches current. Skipping init.');
+        return;
+      }
+      final file = File(path);
+      if (file.existsSync()) {
+        _videoPlayerController?.dispose();
+        _videoPlayerController = null;
+        _currentVideoPath = path;
+        _logDebug('Initializing local file controller...');
+        _videoPlayerController = VideoPlayerController.file(file)
+          ..initialize().then((_) {
+            _logDebug('Local file initialized successfully.');
+            if (mounted && _currentVideoPath == path) {
+              _videoPlayerController!.setLooping(true);
+              _videoPlayerController!.setVolume(0.0);
+              _videoPlayerController!.play();
+              _logDebug('Local file playback started.');
+              setState(() {});
+            }
+          }).catchError((e) {
+            _logDebug('Error initializing local file: $e');
+            if (mounted && _currentVideoPath == path) {
+              setState(() {
+                _videoPlayerController = null;
+                _currentVideoPath = null;
+              });
+            }
+          });
+      } else {
+        _logDebug('Local file does not exist at path: $path');
+      }
+    } else if (source == 'link' && url != null && url.isNotEmpty) {
+      final cacheKey = 'link_$url';
+      _logDebug('Source is link. CacheKey: $cacheKey');
+      if (_currentVideoPath == cacheKey) {
+        _logDebug('Link already initializing or initialized. Skipping init.');
+        return;
+      }
+
+      _logDebug('Disposing old controller and initializing for link...');
+      _videoPlayerController?.dispose();
+      _videoPlayerController = null;
+      _currentVideoPath = cacheKey;
+      setState(() {});
+
+      final youtubeId = _getYoutubeId(url);
+      _logDebug('Extracted YouTube ID: $youtubeId');
+      String? streamUrl;
+
+      if (youtubeId != null) {
+        try {
+          final tempDir = Directory.systemTemp;
+          final targetFile = File('${tempDir.path}${Platform.pathSeparator}queue_background_youtube_$youtubeId.mp4');
+
+          if (await targetFile.exists() && await targetFile.length() > 1024) {
+            _logDebug('Cached video found at: ${targetFile.path}. Skipping download.');
+            streamUrl = targetFile.path;
+          } else {
+            final yt = yt_exp.YoutubeExplode();
+            _logDebug('Fetching manifest for YouTube ID: $youtubeId');
+            final manifest = await yt.videos.streamsClient.getManifest(youtubeId);
+            _logDebug('Manifest fetched. Muxed count: ${manifest.muxed.length}, VideoOnly count: ${manifest.videoOnly.length}');
+            
+            yt_exp.VideoStreamInfo? streamInfo;
+            if (manifest.muxed.isNotEmpty) {
+              streamInfo = manifest.muxed.withHighestBitrate();
+              _logDebug('Selected Muxed highest bitrate: ${streamInfo.videoQuality}');
+            } else if (manifest.videoOnly.isNotEmpty) {
+              final mp4Streams = manifest.videoOnly.where((s) => s.container.name == 'mp4').toList();
+              if (mp4Streams.isNotEmpty) {
+                mp4Streams.sort((a, b) => b.bitrate.bitsPerSecond.compareTo(a.bitrate.bitsPerSecond));
+                streamInfo = mp4Streams.first;
+                _logDebug('Selected VideoOnly MP4: ${streamInfo.videoQuality}');
+              } else {
+                streamInfo = manifest.videoOnly.withHighestBitrate();
+                _logDebug('Selected VideoOnly highest bitrate: ${streamInfo.videoQuality}');
+              }
+            }
+
+            if (streamInfo != null) {
+              _logDebug('Downloading YouTube stream to local file: ${targetFile.path}');
+              if (await targetFile.exists()) {
+                try {
+                  await targetFile.delete();
+                } catch (_) {}
+              }
+              final stream = yt.videos.streamsClient.get(streamInfo);
+              final fileStream = targetFile.openWrite();
+              await stream.pipe(fileStream);
+              _logDebug('Download complete. File size: ${await targetFile.length()} bytes');
+              streamUrl = targetFile.path;
+            } else {
+              _logDebug('No suitable stream found for YouTube ID: $youtubeId');
+            }
+            yt.close();
+          }
+        } catch (e) {
+          _logDebug('YouTube stream download/extraction error: $e');
+          if (mounted && _currentVideoPath == cacheKey) {
+            setState(() {
+              _videoPlayerController = null;
+              _currentVideoPath = null;
+            });
+          }
+          return;
+        }
+      } else {
+        _logDebug('Not a YouTube ID. Using URL directly.');
+        streamUrl = url;
+      }
+
+      _logDebug('Extracted Stream URL: $streamUrl');
+
+      if (streamUrl != null && mounted && _currentVideoPath == cacheKey) {
+        final isLocalFile = !streamUrl.startsWith('http://') && !streamUrl.startsWith('https://');
+        _logDebug('Creating VideoPlayerController (isLocalFile=$isLocalFile)...');
+        _videoPlayerController = isLocalFile
+            ? VideoPlayerController.file(File(streamUrl))
+            : VideoPlayerController.networkUrl(Uri.parse(streamUrl));
+
+        _videoPlayerController!.initialize().then((_) {
+          _logDebug('Controller initialized successfully.');
+          if (mounted && _currentVideoPath == cacheKey) {
+            _videoPlayerController!.setLooping(true);
+            _videoPlayerController!.setVolume(0.0);
+            _videoPlayerController!.play();
+            _logDebug('Playback started.');
+            setState(() {});
+          } else {
+            _logDebug('Initialization done but mounted=$mounted or currentPath changed.');
+          }
+        }).catchError((e, s) {
+          _logDebug('Error initializing Controller: $e');
+          _logDebug('Stacktrace: $s');
+          if (mounted && _currentVideoPath == cacheKey) {
+            setState(() {
+              _videoPlayerController = null;
+              _currentVideoPath = null;
+            });
+          }
+        });
+      } else {
+        _logDebug('Will not initialize: streamUrl=$streamUrl, mounted=$mounted, pathMatch=${_currentVideoPath == cacheKey}');
+      }
+    } else {
+      _logDebug('Resetting background video player');
+      _videoPlayerController?.dispose();
+      _videoPlayerController = null;
+      _currentVideoPath = null;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -50,6 +267,7 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
         final controller = Provider.of<POSController>(context, listen: false);
         await controller.reloadEnvironment();
         controller.setupEventSubscription();
+        _initializeBackgroundVideo();
       } catch (e) {
         print('OrderQueueScreen init controller error: $e');
       }
@@ -62,6 +280,7 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
     _promoSlideTimer?.cancel();
     _bottomPageController?.dispose();
     _fullPageController?.dispose();
+    _videoPlayerController?.dispose();
     HardwareKeyboard.instance.removeHandler(_handleKeyEvent);
     super.dispose();
   }
@@ -125,31 +344,30 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
             _ticks = 0;
           });
         }
-        // Force state updates to keep ready orders fresh even when paused
         if (DateTime.now().second % 30 == 0) {
           setState(() {});
         }
         return;
       }
 
-      final controller = Provider.of<POSController>(context, listen: false);
-      final activeBanners = _getActiveBanners();
-      final activeHappyHours = _getActiveHappyHours();
-      final hasPromos = activeBanners.isNotEmpty || activeHappyHours.isNotEmpty;
+      final allPromos = _getCombinedActivePromos();
+      final hasPromos = allPromos.isNotEmpty;
 
       _ticks++;
       if (_isFullScreenPromo) {
-        // Return to normal split-view after 15 seconds
         if (_ticks >= 15 || !hasPromos) {
           setState(() {
             _isFullScreenPromo = false;
             _ticks = 0;
             _bottomSlideIndex = 0;
+            final int numBatches = (allPromos.length / _batchSize).ceil();
+            if (numBatches > 1) {
+              _batchIndex = (_batchIndex + 1) % numBatches;
+            }
           });
           _bottomPageController = PageController(initialPage: 0);
         }
       } else {
-        // Go full screen with promotions after 45 seconds
         if (_ticks >= 45 && hasPromos) {
           setState(() {
             _isFullScreenPromo = true;
@@ -158,11 +376,10 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
           });
           _fullPageController = PageController(initialPage: 0);
         } else if (_ticks >= 45 && !hasPromos) {
-          _ticks = 0; // remain in normal split-view, reset counter
+          _ticks = 0;
         }
       }
 
-      // Rebuild periodically to evaluate relative timestamps for ready orders
       if (_ticks % 5 == 0) {
         setState(() {});
       }
@@ -178,30 +395,32 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
       }
       if (_isAutoplayPaused) return;
 
-      final controller = Provider.of<POSController>(context, listen: false);
-      final activeBanners = _getActiveBanners();
-      final activeHappyHours = _getActiveHappyHours();
-      final totalSlides = activeBanners.length + activeHappyHours.length;
+      final batchPromos = _getCurrentBatchPromos();
+      final totalSlides = batchPromos.length;
       if (totalSlides <= 1) return;
 
       if (_isFullScreenPromo) {
         setState(() {
           _fullSlideIndex = (_fullSlideIndex + 1) % totalSlides;
         });
-        _fullPageController?.animateToPage(
-          _fullSlideIndex,
-          duration: const Duration(milliseconds: 800),
-          curve: Curves.easeInOutCubic,
-        );
+        if (_fullPageController != null && _fullPageController!.hasClients) {
+          _fullPageController!.animateToPage(
+            _fullSlideIndex,
+            duration: const Duration(milliseconds: 800),
+            curve: Curves.easeInOutCubic,
+          );
+        }
       } else {
         setState(() {
           _bottomSlideIndex = (_bottomSlideIndex + 1) % totalSlides;
         });
-        _bottomPageController?.animateToPage(
-          _bottomSlideIndex,
-          duration: const Duration(milliseconds: 800),
-          curve: Curves.easeInOutCubic,
-        );
+        if (_bottomPageController != null && _bottomPageController!.hasClients) {
+          _bottomPageController!.animateToPage(
+            _bottomSlideIndex,
+            duration: const Duration(milliseconds: 800),
+            curve: Curves.easeInOutCubic,
+          );
+        }
       }
     });
   }
@@ -231,6 +450,24 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
   @override
   Widget build(BuildContext context) {
     final controller = Provider.of<POSController>(context);
+    final appSettings = Provider.of<AppSettingsController>(context);
+
+    final isVideo = appSettings.queueBgType == 'video';
+    if (isVideo) {
+      final expectedCacheKey = appSettings.queueBgVideoSource == 'file'
+          ? appSettings.queueBgVideoPath
+          : 'link_${appSettings.queueBgVideoUrl}';
+      if (_currentVideoPath != expectedCacheKey) {
+        Future.microtask(() => _initializeBackgroundVideo());
+      }
+    } else if (_videoPlayerController != null) {
+      Future.microtask(() {
+        _videoPlayerController?.dispose();
+        _videoPlayerController = null;
+        _currentVideoPath = null;
+        setState(() {});
+      });
+    }
 
     bool hasKotItems(OrderModel o) {
       return o.items.any((item) {
@@ -242,7 +479,6 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
       });
     }
 
-    // Sort preparing orders: newest first
     final preparingOrders = controller.activeOrders
         .where((o) => (o.status == 'pending' || o.status == 'preparing') && hasKotItems(o))
         .toList();
@@ -252,7 +488,6 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
       return bTime.compareTo(aTime);
     });
 
-    // Filter ready orders: only prepared orders that are less than 20 minutes old
     final now = DateTime.now();
     final readyOrders = controller.activeOrders.where((o) {
       if (o.status != 'prepared') return false;
@@ -262,50 +497,108 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
       return now.difference(time).inMinutes < 20;
     }).toList();
 
-    // Sort ready orders: newest first
     readyOrders.sort((a, b) {
       final aTime = DateTime.tryParse(a.updatedAt ?? a.createdAt) ?? now;
       final bTime = DateTime.tryParse(b.updatedAt ?? b.createdAt) ?? now;
       return bTime.compareTo(aTime);
     });
 
-    final activeBanners = _getActiveBanners();
-    final activeHappyHours = _getActiveHappyHours();
-    final totalSlides = activeBanners.length + activeHappyHours.length;
-    final hasPromos = totalSlides > 0;
+    final batchPromos = _getCurrentBatchPromos();
+    final hasPromos = batchPromos.isNotEmpty;
+
+    Widget mainContent = AnimatedSwitcher(
+      duration: const Duration(milliseconds: 800),
+      switchInCurve: Curves.easeInOut,
+      switchOutCurve: Curves.easeInOut,
+      transitionBuilder: (Widget child, Animation<double> animation) {
+        return FadeTransition(opacity: animation, child: child);
+      },
+      child: _isFullScreenPromo && hasPromos
+          ? _buildPromotionsSlideshow(batchPromos)
+          : _buildSplitLayout(preparingOrders, readyOrders, batchPromos, hasPromos),
+    );
+
+    Widget bodyContent = mainContent;
+    if (!_isFullScreenPromo && appSettings.queueBgType != 'none') {
+      Widget? bgWidget;
+      if (appSettings.queueBgType == 'image' && appSettings.queueBgImageBase64 != null) {
+        bgWidget = Positioned.fill(
+          child: Opacity(
+            opacity: appSettings.queueBgOpacity,
+            child: Base64ImageWidget(
+              base64Str: appSettings.queueBgImageBase64,
+              fit: BoxFit.cover,
+            ),
+          ),
+        );
+      } else if (appSettings.queueBgType == 'video') {
+        bgWidget = Positioned.fill(
+          child: Container(
+            color: const Color(0xFF0F172A),
+            child: Opacity(
+              opacity: appSettings.queueBgOpacity,
+              child: _videoPlayerController != null && _videoPlayerController!.value.isInitialized
+                  ? SizedBox.expand(
+                      child: FittedBox(
+                        fit: BoxFit.cover,
+                        clipBehavior: Clip.hardEdge,
+                        child: SizedBox(
+                          width: _videoPlayerController!.value.size.width,
+                          height: _videoPlayerController!.value.size.height,
+                          child: VideoPlayer(_videoPlayerController!),
+                        ),
+                      ),
+                    )
+                  : (appSettings.queueBgVideoSource == 'link' && appSettings.queueBgVideoUrl != null)
+                      ? Builder(builder: (context) {
+                          final videoId = _getYoutubeId(appSettings.queueBgVideoUrl!);
+                          return videoId != null
+                              ? Image.network(
+                                  'https://img.youtube.com/vi/$videoId/hqdefault.jpg',
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (c, e, s) => Container(color: const Color(0xFF0F172A)),
+                                )
+                              : const Center(
+                                  child: Icon(Icons.video_library_outlined, size: 200, color: Colors.white10),
+                                );
+                        })
+                      : const Center(
+                          child: Icon(Icons.video_file_outlined, size: 200, color: Colors.white10),
+                        ),
+            ),
+          ),
+        );
+      }
+
+      if (bgWidget != null) {
+        bodyContent = Stack(
+          children: [
+            bgWidget,
+            mainContent,
+          ],
+        );
+      }
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFF0F172A),
-      body: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 800),
-        switchInCurve: Curves.easeInOut,
-        switchOutCurve: Curves.easeInOut,
-        transitionBuilder: (Widget child, Animation<double> animation) {
-          return FadeTransition(opacity: animation, child: child);
-        },
-        child: _isFullScreenPromo && hasPromos
-            ? _buildPromotionsSlideshow(activeBanners)
-            : _buildSplitLayout(preparingOrders, readyOrders, activeBanners, hasPromos),
-      ),
+      body: bodyContent,
     );
   }
 
-  Widget _buildSplitLayout(List<OrderModel> preparingOrders, List<OrderModel> readyOrders, List<OfferModel> activeBanners, bool hasPromos) {
+  Widget _buildSplitLayout(List<OrderModel> preparingOrders, List<OrderModel> readyOrders, List<dynamic> batchPromos, bool hasPromos) {
     return Column(
       key: const ValueKey('split_layout'),
       children: [
-        // Order columns status view
         Expanded(
           child: _buildQueueScreen(preparingOrders, readyOrders),
         ),
-        
-        // Promotional bottom slideshow
         if (hasPromos) ...[
           const Divider(height: 1, color: Color(0xFF334155)),
           Container(
             height: 180,
             color: const Color(0xFF0F172A),
-            child: _buildBottomSlideshow(activeBanners),
+            child: _buildBottomSlideshow(batchPromos),
           ),
         ],
       ],
@@ -413,7 +706,7 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
               // Preparing Column (Left)
               Expanded(
                 child: Container(
-                  color: const Color(0xFF0F172A),
+                  color: appSettings.queueBgType != 'none' ? const Color(0xFF0F172A).withOpacity(0.85) : const Color(0xFF0F172A),
                   padding: const EdgeInsets.all(24),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -477,7 +770,7 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
               // Ready Column (Right)
               Expanded(
                 child: Container(
-                  color: const Color(0xFF0F172A),
+                  color: appSettings.queueBgType != 'none' ? const Color(0xFF0F172A).withOpacity(0.85) : const Color(0xFF0F172A),
                   padding: const EdgeInsets.all(24),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -544,10 +837,8 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
 
   // --- SLIDESHOW BUILDERS ---
 
-  Widget _buildBottomSlideshow(List<OfferModel> activeBanners) {
-    final controller = Provider.of<POSController>(context, listen: false);
-    final activeHappyHours = _getActiveHappyHours();
-    final totalSlides = activeBanners.length + activeHappyHours.length;
+  Widget _buildBottomSlideshow(List<dynamic> batchPromos) {
+    final totalSlides = batchPromos.length;
 
     return Stack(
       children: [
@@ -560,15 +851,15 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
             });
           },
           itemBuilder: (context, index) {
-            if (index < activeBanners.length) {
-              return _buildBottomBannerSlide(activeBanners[index]);
+            final promo = batchPromos[index];
+            if (promo is OfferModel) {
+              return _buildBottomBannerSlide(promo);
             } else {
-              return _buildBottomHappyHourSlide(activeHappyHours[index - activeBanners.length]);
+              return _buildBottomHappyHourSlide(promo);
             }
           },
         ),
 
-        // Indicator dots overlay
         if (totalSlides > 1)
           Positioned(
             bottom: 12,
@@ -592,10 +883,8 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
     );
   }
 
-  Widget _buildPromotionsSlideshow(List<OfferModel> activeBanners) {
-    final controller = Provider.of<POSController>(context, listen: false);
-    final activeHappyHours = _getActiveHappyHours();
-    final totalSlides = activeBanners.length + activeHappyHours.length;
+  Widget _buildPromotionsSlideshow(List<dynamic> batchPromos) {
+    final totalSlides = batchPromos.length;
 
     return Stack(
       key: const ValueKey('promo_slideshow'),
@@ -609,10 +898,11 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
             });
           },
           itemBuilder: (context, index) {
-            if (index < activeBanners.length) {
-              return _buildBannerSlide(activeBanners[index]);
+            final promo = batchPromos[index];
+            if (promo is OfferModel) {
+              return _buildBannerSlide(promo);
             } else {
-              return _buildHappyHourSlide(activeHappyHours[index - activeBanners.length]);
+              return _buildHappyHourSlide(promo);
             }
           },
         ),

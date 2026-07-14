@@ -9,8 +9,20 @@ import 'screens/login_screen.dart';
 import 'screens/main_layout.dart';
 import 'screens/order_queue_screen.dart';
 
+import 'package:flutter/foundation.dart';
+import 'package:video_player_win/video_player_win_plugin.dart';
+
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Register Windows Video Player platform implementation
+  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+    try {
+      WindowsVideoPlayer.registerWith();
+    } catch (e) {
+      print('WindowsVideoPlayer registration error: $e');
+    }
+  }
 
   // Initialize services
   final api = APIService.instance;
