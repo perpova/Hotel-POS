@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -18,7 +19,7 @@ class SettingsScreen extends StatefulWidget {
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
-enum _SettingsTab { company, theme, branches, editProfile, changePassword, rolesPermissions, connection, externalDisplay }
+enum _SettingsTab { company, theme, branches, editProfile, changePassword, rolesPermissions, connection, externalDisplay, kotSound }
 
 class _SettingsScreenState extends State<SettingsScreen> {
   _SettingsTab _activeTab = _SettingsTab.company;
@@ -120,6 +121,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       _section('SYSTEM'),
                       _item(Icons.settings_ethernet,     'API Connection',   _SettingsTab.connection),
                       _item(Icons.monitor,               'External Display', _SettingsTab.externalDisplay),
+                      _item(Icons.volume_up_outlined,    'KOT Sound',        _SettingsTab.kotSound),
                     ],
                   ),
                 ),
@@ -190,6 +192,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _SettingsTab.rolesPermissions => 'Roles & Permissions',
     _SettingsTab.connection       => 'API Connection',
     _SettingsTab.externalDisplay  => 'External Display',
+    _SettingsTab.kotSound         => 'KOT Sound Settings',
   };
 
   Widget _buildContent() => switch (_activeTab) {
@@ -201,6 +204,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _SettingsTab.rolesPermissions => const RolesPermissionsContent(showHeader: false),
     _SettingsTab.connection       => _buildConnection(),
     _SettingsTab.externalDisplay  => _buildExternalDisplay(),
+    _SettingsTab.kotSound         => const _KotSoundTab(),
   };
 
   // ── Edit Profile ─────────────────────────────────────────────────────────
@@ -1442,6 +1446,490 @@ class _BranchDialogState extends State<_BranchDialog> {
               ]),
             ]),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// KOT SOUND TAB
+// ════════════════════════════════════════════════════════════════════════════
+class _KotSoundTab extends StatefulWidget {
+  const _KotSoundTab({Key? key}) : super(key: key);
+
+  @override
+  State<_KotSoundTab> createState() => _KotSoundTabState();
+}
+
+class _KotSoundTabState extends State<_KotSoundTab> {
+  Future<void> _pickSoundFile(int categoryId, POSController controller) async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['mp3', 'wav', 'm4a', 'aac', 'ogg', 'wma', 'flac'],
+        withData: true,
+      );
+      if (result != null && result.files.single.path != null) {
+        final filePath = result.files.single.path!;
+        final filename = result.files.single.name;
+        final fileBytes = await File(filePath).readAsBytes();
+        final base64Str = base64Encode(fileBytes);
+        await controller.saveKotSoundSetting(categoryId, 'custom', soundBase64: base64Str, filename: filename);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Custom sound uploaded for ${result.files.single.name} successfully!'),
+            backgroundColor: AppTheme.accent,
+          ));
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Failed to pick sound file: $e'),
+          backgroundColor: AppTheme.danger,
+        ));
+      }
+    }
+  }
+
+  void _showRecordDialog(int categoryId, String categoryName, POSController controller) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => _RecordSoundDialog(
+        categoryId: categoryId,
+        categoryName: categoryName,
+        controller: controller,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = context.watch<POSController>();
+    final categories = controller.categories;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Header
+        Text(
+          'KOT Category Sound Configuration',
+          style: GoogleFonts.outfit(
+            fontSize: 17,
+            fontWeight: FontWeight.bold,
+            color: AppTheme.textLightPrimary,
+          ),
+        ),
+        const Divider(color: Color(0xFFE2E8F0)),
+        const SizedBox(height: 8),
+        Text(
+          'Map custom voice alerts or audio sound files to specific product categories. Custom sounds override the default text-to-speech engine when items from mapped categories are added to kitchen orders.',
+          style: GoogleFonts.inter(
+            fontSize: 12,
+            color: AppTheme.textLightSecondary,
+          ),
+        ),
+        const SizedBox(height: 24),
+
+        // List of Categories
+        Expanded(
+          child: categories.isEmpty
+              ? Center(
+                  child: Text(
+                    'No categories found. Please pull catalog from API.',
+                    style: GoogleFonts.inter(color: AppTheme.textLightSecondary),
+                  ),
+                )
+              : ListView.separated(
+                  itemCount: categories.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  itemBuilder: (context, index) {
+                    final cat = categories[index];
+                    final soundSetting = controller.categorySounds[cat.id];
+                    final isCustom = soundSetting != null && soundSetting['soundType'] == 'custom';
+                    final filename = soundSetting?['filename']?.toString();
+
+                    return Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.01),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          )
+                        ],
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                      child: Row(
+                        children: [
+                          // Category Image or Icon
+                          Container(
+                            width: 48,
+                            height: 48,
+                            decoration: BoxDecoration(
+                              color: AppTheme.primary.withOpacity(0.05),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            clipBehavior: Clip.antiAlias,
+                            child: cat.imageBase64 != null && cat.imageBase64!.isNotEmpty
+                                ? Base64ImageWidget(
+                                    base64Str: cat.imageBase64!,
+                                    fit: BoxFit.cover,
+                                  )
+                                : Icon(
+                                    Icons.restaurant_menu_outlined,
+                                    color: AppTheme.primary,
+                                    size: 22,
+                                  ),
+                          ),
+                          const SizedBox(width: 16),
+
+                          // Info
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  cat.name,
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppTheme.textLightPrimary,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Row(
+                                  children: [
+                                    Container(
+                                      width: 8,
+                                      height: 8,
+                                      decoration: BoxDecoration(
+                                        color: isCustom
+                                            ? (soundSetting['soundBase64'] != null
+                                                ? AppTheme.accent
+                                                : Colors.orange)
+                                            : Colors.grey.shade400,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      isCustom
+                                          ? (soundSetting['soundBase64'] != null
+                                              ? 'Custom Audio Sound Mapped'
+                                              : 'Custom Sound (No file selected)')
+                                          : 'Default Speech (Sinhala TTS)',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 11,
+                                        color: isCustom
+                                            ? (soundSetting['soundBase64'] != null
+                                                ? AppTheme.accent
+                                                : Colors.orange.shade700)
+                                            : AppTheme.textLightSecondary,
+                                        fontWeight: isCustom
+                                            ? FontWeight.w600
+                                            : FontWeight.normal,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if (isCustom) ...[
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    filename != null
+                                        ? 'File: $filename'
+                                        : 'Click upload or mic icon to add sound',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 10,
+                                      color: const Color(0xFF64748B),
+                                      fontStyle: FontStyle.italic,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+
+                          // Controls / Settings Toggle
+                          Row(
+                            children: [
+                              // Playback preview if custom sound exists
+                              if (isCustom && soundSetting['soundBase64'] != null) ...[
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.play_circle_outline_rounded,
+                                    color: AppTheme.accent,
+                                    size: 26,
+                                  ),
+                                  tooltip: 'Preview Sound',
+                                  onPressed: () => controller.playCustomSoundForCategory(cat.id),
+                                ),
+                                const SizedBox(width: 4),
+                              ],
+
+                              // Dropdown choice
+                              DropdownButtonHideUnderline(
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    border: Border.all(color: const Color(0xFFCBD5E1)),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: DropdownButton<String>(
+                                    value: isCustom ? 'custom' : 'default',
+                                    style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightPrimary),
+                                    items: const [
+                                      DropdownMenuItem(
+                                        value: 'default',
+                                        child: Text('Default Voice'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: 'custom',
+                                        child: Text('Custom Sound'),
+                                      ),
+                                    ],
+                                    onChanged: (val) {
+                                      if (val == 'default') {
+                                        controller.removeKotSoundSetting(cat.id);
+                                      } else {
+                                        controller.saveKotSoundSetting(cat.id, 'custom');
+                                      }
+                                    },
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+
+                              // Quick upload/record action buttons when custom sound is enabled
+                              if (isCustom) ...[
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.upload_file_outlined,
+                                    color: Color(0xFF64748B),
+                                    size: 20,
+                                  ),
+                                  tooltip: 'Upload Sound File',
+                                  onPressed: () => _pickSoundFile(cat.id, controller),
+                                ),
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.mic_outlined,
+                                    color: Color(0xFF64748B),
+                                    size: 20,
+                                  ),
+                                  tooltip: 'Record Sound',
+                                  onPressed: () => _showRecordDialog(cat.id, cat.name, controller),
+                                ),
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.delete_outline_rounded,
+                                    color: AppTheme.danger,
+                                    size: 20,
+                                  ),
+                                  tooltip: 'Reset to Default',
+                                  onPressed: () => controller.removeKotSoundSetting(cat.id),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// RECORD SOUND DIALOG
+// ════════════════════════════════════════════════════════════════════════════
+class _RecordSoundDialog extends StatefulWidget {
+  final int categoryId;
+  final String categoryName;
+  final POSController controller;
+
+  const _RecordSoundDialog({
+    Key? key,
+    required this.categoryId,
+    required this.categoryName,
+    required this.controller,
+  }) : super(key: key);
+
+  @override
+  State<_RecordSoundDialog> createState() => _RecordSoundDialogState();
+}
+
+class _RecordSoundDialogState extends State<_RecordSoundDialog> {
+  bool _recording = false;
+  int _seconds = 0;
+  Timer? _timer;
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    if (_recording) {
+      widget.controller.stopRecording();
+    }
+    super.dispose();
+  }
+
+  void _start() async {
+    setState(() {
+      _recording = true;
+      _seconds = 0;
+    });
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      setState(() {
+        _seconds++;
+      });
+    });
+    await widget.controller.startRecording();
+  }
+
+  void _stop() async {
+    _timer?.cancel();
+    setState(() {
+      _recording = false;
+    });
+    final base64Str = await widget.controller.stopRecording();
+    if (base64Str != null) {
+      final nowStr = DateTime.now().toString().substring(0, 19).replaceAll(':', '-');
+      final filename = 'recording_$nowStr.wav';
+      await widget.controller.saveKotSoundSetting(
+        widget.categoryId,
+        'custom',
+        soundBase64: base64Str,
+        filename: filename,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Voice recording saved successfully!'),
+          backgroundColor: AppTheme.accent,
+        ));
+        Navigator.pop(context);
+        widget.controller.playCustomSoundForCategory(widget.categoryId);
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Failed to record audio.'),
+          backgroundColor: AppTheme.danger,
+        ));
+        Navigator.pop(context);
+      }
+    }
+  }
+
+  void _cancel() async {
+    _timer?.cancel();
+    setState(() {
+      _recording = false;
+    });
+    await widget.controller.stopRecording();
+    if (mounted) {
+      Navigator.pop(context);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        width: 380,
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Record Voice Alert',
+              style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Category: ${widget.categoryName}',
+              style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary),
+            ),
+            const SizedBox(height: 32),
+            
+            Container(
+              width: 100,
+              height: 100,
+              decoration: BoxDecoration(
+                color: _recording ? AppTheme.danger.withOpacity(0.08) : Colors.grey.shade100,
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: _recording ? AppTheme.danger : Colors.grey.shade300,
+                  width: 2,
+                ),
+              ),
+              child: Icon(
+                _recording ? Icons.mic : Icons.mic_none,
+                size: 44,
+                color: _recording ? AppTheme.danger : Colors.grey.shade600,
+              ),
+            ),
+            const SizedBox(height: 20),
+            
+            // Timer
+            Text(
+              _recording
+                  ? 'Recording: ${_seconds ~/ 60}:${(_seconds % 60).toString().padLeft(2, '0')}'
+                  : 'Ready to record',
+              style: GoogleFonts.inter(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: _recording ? AppTheme.danger : AppTheme.textLightPrimary,
+              ),
+            ),
+            const SizedBox(height: 32),
+            
+            // Action Buttons
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (!_recording) ...[
+                  OutlinedButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancel'),
+                  ),
+                  const SizedBox(width: 16),
+                  ElevatedButton.icon(
+                    onPressed: _start,
+                    icon: const Icon(Icons.circle, color: Colors.white, size: 12),
+                    label: const Text('Start Recording'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.danger,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ] else ...[
+                  OutlinedButton(
+                    onPressed: _cancel,
+                    child: const Text('Cancel'),
+                  ),
+                  const SizedBox(width: 16),
+                  ElevatedButton.icon(
+                    onPressed: _stop,
+                    icon: const Icon(Icons.stop, size: 16),
+                    label: const Text('Stop & Save'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primary,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ],
         ),
       ),
     );

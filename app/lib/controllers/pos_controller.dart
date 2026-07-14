@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
@@ -6,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:hotel_pos/models/models.dart';
 import 'package:hotel_pos/services/api_service.dart';
 import 'package:hotel_pos/services/local_db.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class POSController extends ChangeNotifier {
   final APIService _api = APIService.instance;
@@ -56,6 +58,16 @@ class POSController extends ChangeNotifier {
   Map<int, String?> tableStewards = {};
   Map<int, int> tableActiveOrderIds = {};
   List<dynamic> drawerLogs = [];
+
+  // KOT Custom Sound Settings per Category
+  // Map of categoryId -> { 'soundType': 'default'|'custom', 'soundBase64': '...', 'filename': '...' }
+  Map<int, Map<String, dynamic>> categorySounds = {};
+
+  // Audio Recording Process references
+  Process? _recordingProcess;
+  String? _recordingTempPath;
+
+  bool get isRecording => _recordingProcess != null;
 
   // Pre-orders and Notifications States
   List<dynamic> preOrders = [];
@@ -130,6 +142,7 @@ class POSController extends ChangeNotifier {
   // Constructor
   POSController() {
     _initTts();
+    loadKotSoundSettings();
   }
 
   void _initTts() async {
@@ -219,13 +232,170 @@ class POSController extends ChangeNotifier {
 
   Future<void> _playMp3Windows(String filePath) async {
     try {
-      // Escape backslashes for PowerShell double quotes
-      final escapedPath = filePath.replaceAll(r'\', r'\\');
-      final script = 'Add-Type -AssemblyName presentationCore; \$m = New-Object System.Windows.Media.MediaPlayer; \$m.Open("$escapedPath"); \$m.Play(); Start-Sleep -s 12';
-      await Process.run('powershell', ['-c', script]);
+      final tempDir = Directory.systemTemp;
+      final playScriptFile = File('${tempDir.path}${Platform.pathSeparator}kot_play_${DateTime.now().millisecondsSinceEpoch}.ps1');
+      
+      final playScriptContent = 
+        'Add-Type -AssemblyName presentationCore; '
+        '\$m = New-Object System.Windows.Media.MediaPlayer; '
+        '\$m.Open(\'$filePath\'); '
+        '\$m.Play(); '
+        'Start-Sleep -s 12; ';
+        
+      await playScriptFile.writeAsString(playScriptContent);
+      await Process.run('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', playScriptFile.path]);
+      try {
+        await playScriptFile.delete();
+      } catch (_) {}
     } catch (e) {
       print('Error playing audio via PowerShell: $e');
     }
+  }
+
+  Future<void> loadKotSoundSettings() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final keys = prefs.getKeys();
+      categorySounds.clear();
+      for (var key in keys) {
+        if (key.startsWith('kot_sound_cat_')) {
+          final parts = key.split('_');
+          if (parts.length == 4) {
+            final catId = int.tryParse(parts[3]);
+            if (catId != null) {
+              final jsonStr = prefs.getString(key);
+              if (jsonStr != null) {
+                categorySounds[catId] = Map<String, dynamic>.from(jsonDecode(jsonStr));
+              }
+            }
+          }
+        }
+      }
+      notifyListeners();
+    } catch (e) {
+      print('Error loading KOT sound settings: $e');
+    }
+  }
+
+  Future<void> saveKotSoundSetting(int categoryId, String soundType, {String? soundBase64, String? filename}) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = 'kot_sound_cat_$categoryId';
+      final Map<String, dynamic> setting = {
+        'soundType': soundType,
+        'soundBase64': soundBase64,
+        'filename': filename,
+      };
+      categorySounds[categoryId] = setting;
+      await prefs.setString(key, jsonEncode(setting));
+      notifyListeners();
+    } catch (e) {
+      print('Error saving KOT sound setting: $e');
+    }
+  }
+
+  Future<void> removeKotSoundSetting(int categoryId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = 'kot_sound_cat_$categoryId';
+      categorySounds.remove(categoryId);
+      await prefs.remove(key);
+      notifyListeners();
+    } catch (e) {
+      print('Error removing KOT sound setting: $e');
+    }
+  }
+
+  Future<void> playCustomSoundForCategory(int categoryId) async {
+    final setting = categorySounds[categoryId];
+    if (setting != null && setting['soundType'] == 'custom' && setting['soundBase64'] != null) {
+      try {
+        final tempDir = Directory.systemTemp;
+        final filename = setting['filename']?.toString() ?? 'sound.wav';
+        final extIndex = filename.lastIndexOf('.');
+        final extension = extIndex != -1 ? filename.substring(extIndex) : '.wav';
+        
+        final tempFile = File('${tempDir.path}${Platform.pathSeparator}kot_cat_${categoryId}_${DateTime.now().millisecondsSinceEpoch}$extension');
+        await tempFile.writeAsBytes(base64Decode(setting['soundBase64']));
+        await _playMp3Windows(tempFile.path);
+        
+        Future.delayed(const Duration(seconds: 15), () async {
+          try {
+            if (await tempFile.exists()) {
+              await tempFile.delete();
+            }
+          } catch (_) {}
+        });
+      } catch (e) {
+        print('Error playing custom category sound: $e');
+      }
+    }
+  }
+
+  Future<void> startRecording() async {
+    try {
+      final tempDir = Directory.systemTemp;
+      _recordingTempPath = '${tempDir.path}${Platform.pathSeparator}kot_record.wav';
+      final file = File(_recordingTempPath!);
+      if (await file.exists()) {
+        try {
+          await file.delete();
+        } catch (_) {}
+      }
+
+      final scriptFile = File('${tempDir.path}${Platform.pathSeparator}kot_recorder.ps1');
+      final nativePath = _recordingTempPath!;
+      final scriptContent = 
+        '\$outputPath = \'$nativePath\';\n' +
+        r'''
+        $dynAssembly = New-Object System.Reflection.AssemblyName('Win32')
+        $assemblyBuilder = [AppDomain]::CurrentDomain.DefineDynamicAssembly($dynAssembly, [System.Reflection.Emit.AssemblyBuilderAccess]::Run)
+        $moduleBuilder = $assemblyBuilder.DefineDynamicModule('Win32')
+        $typeBuilder = $moduleBuilder.DefineType('AudioRecorder', 'Public, Class')
+        $mciSignature = $typeBuilder.DefineMethod('mciSendString', [System.Reflection.MethodAttributes]'Public, Static, PinvokeImpl', [long], [type[]]@([string], [System.Text.StringBuilder], [int], [IntPtr]))
+        $dllImportAttr = [System.Runtime.InteropServices.DllImportAttribute].GetConstructor([string])
+        $attrBuilder = New-Object System.Reflection.Emit.CustomAttributeBuilder($dllImportAttr, @('winmm.dll'))
+        $mciSignature.SetCustomAttribute($attrBuilder)
+        $type = $typeBuilder.CreateType()
+
+        $type::mciSendString("open new Type waveaudio Alias recsound", $null, 0, [IntPtr]::Zero)
+        $type::mciSendString("record recsound", $null, 0, [IntPtr]::Zero)
+        $null = Read-Host
+        $type::mciSendString("save recsound `"$outputPath`"", $null, 0, [IntPtr]::Zero)
+        $type::mciSendString("close recsound", $null, 0, [IntPtr]::Zero)
+        ''';
+
+      await scriptFile.writeAsString(scriptContent);
+      _recordingProcess = await Process.start('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptFile.path]);
+      notifyListeners();
+    } catch (e) {
+      print('Error starting recording: $e');
+    }
+  }
+
+  Future<String?> stopRecording() async {
+    try {
+      if (_recordingProcess != null && _recordingTempPath != null) {
+        _recordingProcess!.stdin.writeln();
+        await _recordingProcess!.exitCode;
+        _recordingProcess = null;
+        notifyListeners();
+
+        final file = File(_recordingTempPath!);
+        if (await file.exists()) {
+          final bytes = await file.readAsBytes();
+          try {
+            await file.delete();
+          } catch (_) {}
+          return base64Encode(bytes);
+        }
+      }
+    } catch (e) {
+      print('Error stopping recording: $e');
+    }
+    _recordingProcess = null;
+    notifyListeners();
+    return null;
   }
 
   String buildSinhalaKOTVoiceMessage(List<dynamic> items, {String? orderType, String? tableName}) {
@@ -485,8 +655,34 @@ class POSController extends ChangeNotifier {
           }).toList();
           
           if (kotItems.isNotEmpty) {
-            final msg = buildSinhalaKOTVoiceMessage(kotItems, orderType: orderType, tableName: tableName);
-            speakVoiceMessage(msg);
+            final Map<int, List<dynamic>> itemsByCategory = {};
+            for (var item in kotItems) {
+              final productId = int.tryParse(item['product_id']?.toString() ?? '') ?? 0;
+              final p = products.firstWhere((prod) => prod.id == productId, orElse: () => products.first);
+              if (p.id != 0) {
+                itemsByCategory.putIfAbsent(p.categoryId, () => []).add(item);
+              }
+            }
+
+            final List<dynamic> ttsItems = [];
+            
+            Future.sync(() async {
+              for (var entry in itemsByCategory.entries) {
+                final catId = entry.key;
+                final catItems = entry.value;
+                final soundSetting = categorySounds[catId];
+                if (soundSetting != null && soundSetting['soundType'] == 'custom' && soundSetting['soundBase64'] != null) {
+                  await playCustomSoundForCategory(catId);
+                } else {
+                  ttsItems.addAll(catItems);
+                }
+              }
+
+              if (ttsItems.isNotEmpty) {
+                final msg = buildSinhalaKOTVoiceMessage(ttsItems, orderType: orderType, tableName: tableName);
+                await speakVoiceMessage(msg);
+              }
+            });
           }
           break;
         case 'order_created':
