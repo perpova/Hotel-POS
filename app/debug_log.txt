@@ -804,3 +804,317 @@
 2026-07-15T17:18:45.152312: Creating VideoPlayerController (isLocalFile=true)...
 2026-07-15T17:18:46.018763: Controller initialized successfully.
 2026-07-15T17:18:46.020267: Playback started.
+2026-07-15T17:44:39.442967: --- _initializeBackgroundVideo started ---
+2026-07-15T17:44:39.445965: BgType: video, Source: link, Path: C:\Users\sahan\AppData\Local\Temp\queue_background_video.mp4, Url: https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T17:44:39.459518: Source is link. CacheKey: link_https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T17:44:39.468729: Disposing old controller and initializing for link...
+2026-07-15T17:44:39.482302: Extracted YouTube ID: vYjrGxlKjYo
+2026-07-15T17:44:39.788336: Cached video found at: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo.mp4. Skipping download.
+2026-07-15T17:44:39.790349: Copied YouTube file for separate window: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo_extend.mp4
+2026-07-15T17:44:39.808874: Extracted Stream URL: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo_extend.mp4
+2026-07-15T17:44:39.821395: Creating VideoPlayerController (isLocalFile=true)...
+2026-07-15T17:44:40.584006: Controller initialized successfully.
+2026-07-15T17:44:40.589828: Playback started.
+2026-07-15T17:44:40.996550: --- _initializeBackgroundVideo started ---
+2026-07-15T17:44:40.996550: BgType: video, Source: link, Path: C:\Users\sahan\AppData\Local\Temp\queue_background_video.mp4, Url: https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T17:44:41.024697: Source is link. CacheKey: link_https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T17:44:41.041251: Disposing old controller and initializing for link...
+2026-07-15T17:44:41.095458: Extracted YouTube ID: vYjrGxlKjYo
+2026-07-15T17:44:41.151574: Cached video found at: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo.mp4. Skipping download.
+2026-07-15T17:44:41.153586: Copied YouTube file for separate window: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo_extend.mp4
+2026-07-15T17:44:41.166614: Extracted Stream URL: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo_extend.mp4
+2026-07-15T17:44:41.180124: Creating VideoPlayerController (isLocalFile=true)...
+2026-07-15T17:44:41.417433: Controller initialized successfully.
+2026-07-15T17:44:41.417965: Playback started.
+2026-07-15T17:44:53.043390: --- _initializeBackgroundVideo started ---
+2026-07-15T17:44:53.044392: BgType: video, Source: link, Path: C:\Users\sahan\AppData\Local\Temp\queue_background_video.mp4, Url: https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T17:44:53.057472: Source is link. CacheKey: link_https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T17:44:53.067145: Disposing old controller and initializing for link...
+2026-07-15T17:44:53.077143: Extracted YouTube ID: vYjrGxlKjYo
+2026-07-15T17:44:53.092648: Cached video found at: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo.mp4. Skipping download.
+2026-07-15T17:44:53.099692: Extracted Stream URL: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo.mp4
+2026-07-15T17:44:53.110202: Creating VideoPlayerController (isLocalFile=true)...
+2026-07-15T17:44:53.483513: --- _initializeBackgroundVideo started ---
+2026-07-15T17:44:53.484505: BgType: video, Source: link, Path: C:\Users\sahan\AppData\Local\Temp\queue_background_video.mp4, Url: https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T17:44:53.494578: Source is link. CacheKey: link_https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T17:44:53.504083: Disposing old controller and initializing for link...
+2026-07-15T17:44:53.521554: Extracted YouTube ID: vYjrGxlKjYo
+2026-07-15T17:44:53.540594: Cached video found at: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo.mp4. Skipping download.
+2026-07-15T17:44:53.544111: Extracted Stream URL: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo.mp4
+2026-07-15T17:44:53.555104: Creating VideoPlayerController (isLocalFile=true)...
+2026-07-15T17:44:54.271698: Controller initialized successfully.
+2026-07-15T17:44:54.273737: Playback started.
+2026-07-15T17:48:29.409276: --- _initializeBackgroundVideo started ---
+2026-07-15T17:48:29.414272: BgType: video, Source: link, Path: C:\Users\sahan\AppData\Local\Temp\queue_background_video.mp4, Url: https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T17:48:29.447121: Source is link. CacheKey: link_https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T17:48:29.472412: Disposing old controller and initializing for link...
+2026-07-15T17:48:29.492575: Extracted YouTube ID: vYjrGxlKjYo
+2026-07-15T17:48:29.828237: Cached video found at: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo.mp4. Skipping download.
+2026-07-15T17:48:29.829238: Copied YouTube file for separate window: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo_extend.mp4
+2026-07-15T17:48:29.843007: Extracted Stream URL: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo_extend.mp4
+2026-07-15T17:48:29.857667: Creating VideoPlayerController (isLocalFile=true)...
+2026-07-15T17:48:30.677385: --- _initializeBackgroundVideo started ---
+2026-07-15T17:48:30.677385: BgType: video, Source: link, Path: C:\Users\sahan\AppData\Local\Temp\queue_background_video.mp4, Url: https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T17:48:30.698429: Source is link. CacheKey: link_https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T17:48:30.714669: Disposing old controller and initializing for link...
+2026-07-15T17:48:30.734323: Extracted YouTube ID: vYjrGxlKjYo
+2026-07-15T17:48:30.803999: Cached video found at: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo.mp4. Skipping download.
+2026-07-15T17:48:30.804965: Copied YouTube file for separate window: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo_extend.mp4
+2026-07-15T17:48:30.818832: Extracted Stream URL: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo_extend.mp4
+2026-07-15T17:48:30.831914: Creating VideoPlayerController (isLocalFile=true)...
+2026-07-15T17:48:31.400124: Controller initialized successfully.
+2026-07-15T17:48:31.401627: Playback started.
+2026-07-15T17:48:39.636303: --- _initializeBackgroundVideo started ---
+2026-07-15T17:48:39.637306: BgType: video, Source: link, Path: C:\Users\sahan\AppData\Local\Temp\queue_background_video.mp4, Url: https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T17:48:39.647765: Source is link. CacheKey: link_https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T17:48:39.657347: Disposing old controller and initializing for link...
+2026-07-15T17:48:39.669105: Extracted YouTube ID: vYjrGxlKjYo
+2026-07-15T17:48:39.688324: Cached video found at: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo.mp4. Skipping download.
+2026-07-15T17:48:39.693902: Extracted Stream URL: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo.mp4
+2026-07-15T17:48:39.711496: Creating VideoPlayerController (isLocalFile=true)...
+2026-07-15T17:48:40.090382: Controller initialized successfully.
+2026-07-15T17:48:40.092396: Playback started.
+2026-07-15T17:48:40.173530: --- _initializeBackgroundVideo started ---
+2026-07-15T17:48:40.173530: BgType: video, Source: link, Path: C:\Users\sahan\AppData\Local\Temp\queue_background_video.mp4, Url: https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T17:48:40.186537: Source is link. CacheKey: link_https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T17:48:40.200079: Disposing old controller and initializing for link...
+2026-07-15T17:48:40.225731: Extracted YouTube ID: vYjrGxlKjYo
+2026-07-15T17:48:40.257617: Cached video found at: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo.mp4. Skipping download.
+2026-07-15T17:48:40.258298: Extracted Stream URL: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo.mp4
+2026-07-15T17:48:40.272862: Creating VideoPlayerController (isLocalFile=true)...
+2026-07-15T17:48:40.479760: Controller initialized successfully.
+2026-07-15T17:48:40.480173: Playback started.
+2026-07-15T17:48:48.221664: --- _initializeBackgroundVideo started ---
+2026-07-15T17:48:48.223658: BgType: video, Source: link, Path: C:\Users\sahan\AppData\Local\Temp\queue_background_video.mp4, Url: https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T17:48:48.240631: Source is link. CacheKey: link_https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T17:48:48.251040: Disposing old controller and initializing for link...
+2026-07-15T17:48:48.261548: Extracted YouTube ID: vYjrGxlKjYo
+2026-07-15T17:48:48.530476: Cached video found at: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo.mp4. Skipping download.
+2026-07-15T17:48:48.531437: Copied YouTube file for separate window: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo_extend.mp4
+2026-07-15T17:48:48.546595: Extracted Stream URL: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo_extend.mp4
+2026-07-15T17:48:48.556686: Creating VideoPlayerController (isLocalFile=true)...
+2026-07-15T17:48:49.382601: Controller initialized successfully.
+2026-07-15T17:48:49.384602: Playback started.
+2026-07-15T17:48:49.709185: --- _initializeBackgroundVideo started ---
+2026-07-15T17:48:49.711556: BgType: video, Source: link, Path: C:\Users\sahan\AppData\Local\Temp\queue_background_video.mp4, Url: https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T17:48:49.728102: Source is link. CacheKey: link_https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T17:48:49.741698: Disposing old controller and initializing for link...
+2026-07-15T17:48:49.753693: Extracted YouTube ID: vYjrGxlKjYo
+2026-07-15T17:48:49.823812: Cached video found at: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo.mp4. Skipping download.
+2026-07-15T17:48:49.824812: Copied YouTube file for separate window: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo_extend.mp4
+2026-07-15T17:48:49.842809: Extracted Stream URL: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo_extend.mp4
+2026-07-15T17:48:49.854083: Creating VideoPlayerController (isLocalFile=true)...
+2026-07-15T17:48:50.104692: Controller initialized successfully.
+2026-07-15T17:48:50.106205: Playback started.
+2026-07-15T17:51:44.860205: --- _initializeBackgroundVideo started ---
+2026-07-15T17:51:44.862206: BgType: video, Source: link, Path: C:\Users\sahan\AppData\Local\Temp\queue_background_video.mp4, Url: https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T17:51:44.876252: Source is link. CacheKey: link_https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T17:51:44.889210: Disposing old controller and initializing for link...
+2026-07-15T17:51:44.903419: Extracted YouTube ID: vYjrGxlKjYo
+2026-07-15T17:51:45.136660: Cached video found at: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo.mp4. Skipping download.
+2026-07-15T17:51:45.137796: Copied YouTube file for separate window: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo_extend.mp4
+2026-07-15T17:51:45.148616: Extracted Stream URL: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo_extend.mp4
+2026-07-15T17:51:45.163431: Creating VideoPlayerController (isLocalFile=true)...
+2026-07-15T17:51:45.925129: Controller initialized successfully.
+2026-07-15T17:51:45.928636: Playback started.
+2026-07-15T17:51:46.379040: --- _initializeBackgroundVideo started ---
+2026-07-15T17:51:46.380040: BgType: video, Source: link, Path: C:\Users\sahan\AppData\Local\Temp\queue_background_video.mp4, Url: https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T17:51:46.398102: Source is link. CacheKey: link_https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T17:51:46.414185: Disposing old controller and initializing for link...
+2026-07-15T17:51:46.430150: Extracted YouTube ID: vYjrGxlKjYo
+2026-07-15T17:51:46.494608: Cached video found at: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo.mp4. Skipping download.
+2026-07-15T17:51:46.494608: Copied YouTube file for separate window: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo_extend.mp4
+2026-07-15T17:51:46.510124: Extracted Stream URL: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo_extend.mp4
+2026-07-15T17:51:46.522640: Creating VideoPlayerController (isLocalFile=true)...
+2026-07-15T17:51:46.764947: Controller initialized successfully.
+2026-07-15T17:51:46.764947: Playback started.
+2026-07-15T17:54:26.173117: --- _initializeBackgroundVideo started ---
+2026-07-15T17:54:26.176117: BgType: video, Source: link, Path: C:\Users\sahan\AppData\Local\Temp\queue_background_video.mp4, Url: https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T17:54:26.190166: Source is link. CacheKey: link_https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T17:54:26.201242: Disposing old controller and initializing for link...
+2026-07-15T17:54:26.217209: Extracted YouTube ID: vYjrGxlKjYo
+2026-07-15T17:54:26.451246: Cached video found at: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo.mp4. Skipping download.
+2026-07-15T17:54:26.452244: Copied YouTube file for separate window: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo_extend.mp4
+2026-07-15T17:54:26.463472: Extracted Stream URL: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo_extend.mp4
+2026-07-15T17:54:26.473968: Creating VideoPlayerController (isLocalFile=true)...
+2026-07-15T17:54:27.153737: Controller initialized successfully.
+2026-07-15T17:54:27.154746: Playback started.
+2026-07-15T17:54:27.390252: --- _initializeBackgroundVideo started ---
+2026-07-15T17:54:27.392771: BgType: video, Source: link, Path: C:\Users\sahan\AppData\Local\Temp\queue_background_video.mp4, Url: https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T17:54:27.420571: Source is link. CacheKey: link_https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T17:54:27.434081: Disposing old controller and initializing for link...
+2026-07-15T17:54:27.451679: Extracted YouTube ID: vYjrGxlKjYo
+2026-07-15T17:54:27.500059: Cached video found at: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo.mp4. Skipping download.
+2026-07-15T17:54:27.501059: Copied YouTube file for separate window: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo_extend.mp4
+2026-07-15T17:54:27.518197: Extracted Stream URL: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo_extend.mp4
+2026-07-15T17:54:27.533713: Creating VideoPlayerController (isLocalFile=true)...
+2026-07-15T17:54:27.745690: Controller initialized successfully.
+2026-07-15T17:54:27.746693: Playback started.
+2026-07-15T17:57:06.038205: --- _initializeBackgroundVideo started ---
+2026-07-15T17:57:06.071051: BgType: video, Source: link, Path: C:\Users\sahan\AppData\Local\Temp\queue_background_video.mp4, Url: https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T17:57:06.191636: Source is link. CacheKey: link_https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T17:57:06.270974: Disposing old controller and initializing for link...
+2026-07-15T17:57:06.331501: Extracted YouTube ID: vYjrGxlKjYo
+2026-07-15T17:57:06.827608: Cached video found at: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo.mp4. Skipping download.
+2026-07-15T17:57:06.829542: Copied YouTube file for separate window: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo_extend.mp4
+2026-07-15T17:57:06.846063: Extracted Stream URL: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo_extend.mp4
+2026-07-15T17:57:06.863715: Creating VideoPlayerController (isLocalFile=true)...
+2026-07-15T17:57:07.515931: Controller initialized successfully.
+2026-07-15T17:57:07.517932: Playback started.
+2026-07-15T17:57:07.798973: --- _initializeBackgroundVideo started ---
+2026-07-15T17:57:07.798973: BgType: video, Source: link, Path: C:\Users\sahan\AppData\Local\Temp\queue_background_video.mp4, Url: https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T17:57:07.819380: Source is link. CacheKey: link_https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T17:57:07.834154: Disposing old controller and initializing for link...
+2026-07-15T17:57:07.851159: Extracted YouTube ID: vYjrGxlKjYo
+2026-07-15T17:57:07.866181: Cached video found at: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo.mp4. Skipping download.
+2026-07-15T17:57:07.878411: Copied YouTube file for separate window: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo_extend.mp4
+2026-07-15T17:57:07.891927: Extracted Stream URL: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo_extend.mp4
+2026-07-15T17:57:07.905369: Creating VideoPlayerController (isLocalFile=true)...
+2026-07-15T17:57:08.177058: Controller initialized successfully.
+2026-07-15T17:57:08.177058: Playback started.
+2026-07-15T17:57:12.239380: --- _initializeBackgroundVideo started ---
+2026-07-15T17:57:12.240380: BgType: video, Source: link, Path: C:\Users\sahan\AppData\Local\Temp\queue_background_video.mp4, Url: https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T17:57:12.252038: Source is link. CacheKey: link_https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T17:57:12.261717: Disposing old controller and initializing for link...
+2026-07-15T17:57:12.274298: Extracted YouTube ID: vYjrGxlKjYo
+2026-07-15T17:57:12.309478: Cached video found at: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo.mp4. Skipping download.
+2026-07-15T17:57:12.310478: Extracted Stream URL: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo.mp4
+2026-07-15T17:57:12.324592: Creating VideoPlayerController (isLocalFile=true)...
+2026-07-15T17:57:12.696792: Controller initialized successfully.
+2026-07-15T17:57:12.699235: Playback started.
+2026-07-15T17:57:12.789981: --- _initializeBackgroundVideo started ---
+2026-07-15T17:57:12.791487: BgType: video, Source: link, Path: C:\Users\sahan\AppData\Local\Temp\queue_background_video.mp4, Url: https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T17:57:12.809907: Source is link. CacheKey: link_https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T17:57:12.823248: Disposing old controller and initializing for link...
+2026-07-15T17:57:12.835766: Extracted YouTube ID: vYjrGxlKjYo
+2026-07-15T17:57:12.856497: Cached video found at: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo.mp4. Skipping download.
+2026-07-15T17:57:12.859497: Extracted Stream URL: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo.mp4
+2026-07-15T17:57:12.879502: Creating VideoPlayerController (isLocalFile=true)...
+2026-07-15T17:57:13.124379: Controller initialized successfully.
+2026-07-15T17:57:13.125116: Playback started.
+2026-07-15T17:57:44.905958: --- _initializeBackgroundVideo started ---
+2026-07-15T17:57:44.912437: BgType: video, Source: link, Path: C:\Users\sahan\AppData\Local\Temp\queue_background_video.mp4, Url: https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T17:57:44.945631: Source is link. CacheKey: link_https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T17:57:44.971473: Disposing old controller and initializing for link...
+2026-07-15T17:57:45.006201: Extracted YouTube ID: vYjrGxlKjYo
+2026-07-15T17:57:45.463091: Cached video found at: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo.mp4. Skipping download.
+2026-07-15T17:57:45.464095: Copied YouTube file for separate window: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo_extend.mp4
+2026-07-15T17:57:45.480076: Extracted Stream URL: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo_extend.mp4
+2026-07-15T17:57:45.494965: Creating VideoPlayerController (isLocalFile=true)...
+2026-07-15T17:57:46.186735: Controller initialized successfully.
+2026-07-15T17:57:46.191461: Playback started.
+2026-07-15T17:57:46.462064: --- _initializeBackgroundVideo started ---
+2026-07-15T17:57:46.463066: BgType: video, Source: link, Path: C:\Users\sahan\AppData\Local\Temp\queue_background_video.mp4, Url: https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T17:57:46.476311: Source is link. CacheKey: link_https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T17:57:46.488005: Disposing old controller and initializing for link...
+2026-07-15T17:57:46.501742: Extracted YouTube ID: vYjrGxlKjYo
+2026-07-15T17:57:46.543881: Cached video found at: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo.mp4. Skipping download.
+2026-07-15T17:57:46.543881: Copied YouTube file for separate window: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo_extend.mp4
+2026-07-15T17:57:46.558423: Extracted Stream URL: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo_extend.mp4
+2026-07-15T17:57:46.572303: Creating VideoPlayerController (isLocalFile=true)...
+2026-07-15T17:57:46.801969: Controller initialized successfully.
+2026-07-15T17:57:46.804282: Playback started.
+2026-07-15T17:57:50.763683: --- _initializeBackgroundVideo started ---
+2026-07-15T17:57:50.765678: BgType: video, Source: link, Path: C:\Users\sahan\AppData\Local\Temp\queue_background_video.mp4, Url: https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T17:57:50.777369: Source is link. CacheKey: link_https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T17:57:50.789635: Disposing old controller and initializing for link...
+2026-07-15T17:57:50.800218: Extracted YouTube ID: vYjrGxlKjYo
+2026-07-15T17:57:50.819123: Cached video found at: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo.mp4. Skipping download.
+2026-07-15T17:57:50.828656: Extracted Stream URL: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo.mp4
+2026-07-15T17:57:50.838637: Creating VideoPlayerController (isLocalFile=true)...
+2026-07-15T17:57:51.196575: Controller initialized successfully.
+2026-07-15T17:57:51.197575: Playback started.
+2026-07-15T17:57:51.258347: --- _initializeBackgroundVideo started ---
+2026-07-15T17:57:51.258347: BgType: video, Source: link, Path: C:\Users\sahan\AppData\Local\Temp\queue_background_video.mp4, Url: https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T17:57:51.268900: Source is link. CacheKey: link_https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T17:57:51.279428: Disposing old controller and initializing for link...
+2026-07-15T17:57:51.293524: Extracted YouTube ID: vYjrGxlKjYo
+2026-07-15T17:57:51.327317: Cached video found at: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo.mp4. Skipping download.
+2026-07-15T17:57:51.328408: Extracted Stream URL: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo.mp4
+2026-07-15T17:57:51.346082: Creating VideoPlayerController (isLocalFile=true)...
+2026-07-15T17:57:51.563846: Controller initialized successfully.
+2026-07-15T17:57:51.564857: Playback started.
+2026-07-15T17:58:22.143473: --- _initializeBackgroundVideo started ---
+2026-07-15T17:58:22.147975: BgType: video, Source: link, Path: C:\Users\sahan\AppData\Local\Temp\queue_background_video.mp4, Url: https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T17:58:22.168285: Source is link. CacheKey: link_https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T17:58:22.187820: Disposing old controller and initializing for link...
+2026-07-15T17:58:22.206026: Extracted YouTube ID: vYjrGxlKjYo
+2026-07-15T17:58:22.496466: Cached video found at: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo.mp4. Skipping download.
+2026-07-15T17:58:22.497063: Copied YouTube file for separate window: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo_extend.mp4
+2026-07-15T17:58:22.513713: Extracted Stream URL: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo_extend.mp4
+2026-07-15T17:58:22.528620: Creating VideoPlayerController (isLocalFile=true)...
+2026-07-15T17:58:23.181316: Controller initialized successfully.
+2026-07-15T17:58:23.183848: Playback started.
+2026-07-15T17:58:23.448383: --- _initializeBackgroundVideo started ---
+2026-07-15T17:58:23.449382: BgType: video, Source: link, Path: C:\Users\sahan\AppData\Local\Temp\queue_background_video.mp4, Url: https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T17:58:23.475630: Source is link. CacheKey: link_https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T17:58:23.495935: Disposing old controller and initializing for link...
+2026-07-15T17:58:23.513427: Extracted YouTube ID: vYjrGxlKjYo
+2026-07-15T17:58:23.585576: Cached video found at: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo.mp4. Skipping download.
+2026-07-15T17:58:23.586576: Copied YouTube file for separate window: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo_extend.mp4
+2026-07-15T17:58:23.640253: Extracted Stream URL: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo_extend.mp4
+2026-07-15T17:58:23.657899: Creating VideoPlayerController (isLocalFile=true)...
+2026-07-15T17:58:23.899464: Controller initialized successfully.
+2026-07-15T17:58:23.899464: Playback started.
+2026-07-15T18:01:19.212029: --- _initializeBackgroundVideo started ---
+2026-07-15T18:01:19.214100: BgType: video, Source: link, Path: C:\Users\sahan\AppData\Local\Temp\queue_background_video.mp4, Url: https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T18:01:19.238235: Source is link. CacheKey: link_https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T18:01:19.247999: Disposing old controller and initializing for link...
+2026-07-15T18:01:19.259860: Extracted YouTube ID: vYjrGxlKjYo
+2026-07-15T18:01:19.681243: Cached video found at: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo.mp4. Skipping download.
+2026-07-15T18:01:19.681243: Copied YouTube file for separate window: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo_extend.mp4
+2026-07-15T18:01:19.704524: Extracted Stream URL: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo_extend.mp4
+2026-07-15T18:01:19.716594: Creating VideoPlayerController (isLocalFile=true)...
+2026-07-15T18:01:20.294800: Controller initialized successfully.
+2026-07-15T18:01:20.297798: Playback started.
+2026-07-15T18:01:20.566740: --- _initializeBackgroundVideo started ---
+2026-07-15T18:01:20.566740: BgType: video, Source: link, Path: C:\Users\sahan\AppData\Local\Temp\queue_background_video.mp4, Url: https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T18:01:20.577512: Source is link. CacheKey: link_https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T18:01:20.588017: Disposing old controller and initializing for link...
+2026-07-15T18:01:20.599143: Extracted YouTube ID: vYjrGxlKjYo
+2026-07-15T18:01:20.661757: Cached video found at: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo.mp4. Skipping download.
+2026-07-15T18:01:20.662757: Copied YouTube file for separate window: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo_extend.mp4
+2026-07-15T18:01:20.674459: Extracted Stream URL: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo_extend.mp4
+2026-07-15T18:01:20.686041: Creating VideoPlayerController (isLocalFile=true)...
+2026-07-15T18:01:20.888832: Controller initialized successfully.
+2026-07-15T18:01:20.889831: Playback started.
+2026-07-15T18:02:10.333734: --- _initializeBackgroundVideo started ---
+2026-07-15T18:02:10.362078: BgType: video, Source: link, Path: C:\Users\sahan\AppData\Local\Temp\queue_background_video.mp4, Url: https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T18:02:10.500377: Source is link. CacheKey: link_https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T18:02:10.622680: Disposing old controller and initializing for link...
+2026-07-15T18:02:10.730578: Extracted YouTube ID: vYjrGxlKjYo
+2026-07-15T18:02:14.155750: Cached video found at: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo.mp4. Skipping download.
+2026-07-15T18:02:14.163752: Copied YouTube file for separate window: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo_extend.mp4
+2026-07-15T18:02:14.295959: Extracted Stream URL: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo_extend.mp4
+2026-07-15T18:02:14.390623: Creating VideoPlayerController (isLocalFile=true)...
+2026-07-15T18:02:14.977330: --- _initializeBackgroundVideo started ---
+2026-07-15T18:02:14.980332: BgType: video, Source: link, Path: C:\Users\sahan\AppData\Local\Temp\queue_background_video.mp4, Url: https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T18:02:15.106558: Source is link. CacheKey: link_https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T18:02:15.211694: Disposing old controller and initializing for link...
+2026-07-15T18:02:15.321111: Extracted YouTube ID: vYjrGxlKjYo
+2026-07-15T18:02:15.668739: Cached video found at: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo.mp4. Skipping download.
+2026-07-15T18:02:15.673259: Copied YouTube file for separate window: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo_extend.mp4
+2026-07-15T18:02:15.801872: Extracted Stream URL: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo_extend.mp4
+2026-07-15T18:02:15.938021: Creating VideoPlayerController (isLocalFile=true)...
+2026-07-15T18:02:19.939135: Controller initialized successfully.
+2026-07-15T18:02:19.954123: Playback started.
+2026-07-15T18:02:24.801218: --- _initializeBackgroundVideo started ---
+2026-07-15T18:02:24.810099: BgType: video, Source: link, Path: C:\Users\sahan\AppData\Local\Temp\queue_background_video.mp4, Url: https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T18:02:24.900911: Source is link. CacheKey: link_https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T18:02:24.967211: Disposing old controller and initializing for link...
+2026-07-15T18:02:25.038333: Extracted YouTube ID: vYjrGxlKjYo
+2026-07-15T18:02:25.119835: Cached video found at: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo.mp4. Skipping download.
+2026-07-15T18:02:25.156314: Extracted Stream URL: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo.mp4
+2026-07-15T18:02:25.212519: Creating VideoPlayerController (isLocalFile=true)...
+2026-07-15T18:02:26.118170: Controller initialized successfully.
+2026-07-15T18:02:26.123105: Playback started.
+2026-07-15T18:02:26.282320: --- _initializeBackgroundVideo started ---
+2026-07-15T18:02:26.283309: BgType: video, Source: link, Path: C:\Users\sahan\AppData\Local\Temp\queue_background_video.mp4, Url: https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T18:02:26.305888: Source is link. CacheKey: link_https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-15T18:02:26.325922: Disposing old controller and initializing for link...
+2026-07-15T18:02:26.347699: Extracted YouTube ID: vYjrGxlKjYo
+2026-07-15T18:02:26.403682: Cached video found at: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo.mp4. Skipping download.
+2026-07-15T18:02:26.404675: Extracted Stream URL: C:\Users\sahan\AppData\Local\Temp\queue_background_youtube_v4_vYjrGxlKjYo.mp4
+2026-07-15T18:02:26.425597: Creating VideoPlayerController (isLocalFile=true)...
+2026-07-15T18:02:26.708815: Controller initialized successfully.
+2026-07-15T18:02:26.709816: Playback started.

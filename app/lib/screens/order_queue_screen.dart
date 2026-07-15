@@ -832,21 +832,77 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
   }
 
   Widget _buildSplitLayout(List<OrderModel> preparingOrders, List<OrderModel> readyOrders, List<dynamic> batchPromos, bool hasPromos) {
-    return Column(
-      key: const ValueKey('split_layout'),
+    return Stack(
       children: [
-        Expanded(
-          child: _buildQueueScreen(preparingOrders, readyOrders),
+        Column(
+          key: const ValueKey('split_layout'),
+          children: [
+            Expanded(
+              child: _buildQueueScreen(preparingOrders, readyOrders),
+            ),
+            if (hasPromos) ...[
+              const Divider(height: 1, color: Color(0xFF334155)),
+              Container(
+                height: 180,
+                color: const Color(0xFF0F172A),
+                child: _buildBottomSlideshow(batchPromos),
+              ),
+            ],
+          ],
         ),
-        if (hasPromos) ...[
-          const Divider(height: 1, color: Color(0xFF334155)),
-          Container(
-            height: 180,
-            color: const Color(0xFF0F172A),
-            child: _buildBottomSlideshow(batchPromos),
+        Positioned(
+          bottom: hasPromos ? 196 : 16,
+          right: 24,
+          child: _buildPerpovaBranding(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPerpovaBranding() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0F172A).withOpacity(0.75),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.12),
+          width: 1.0,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.25),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
           ),
         ],
-      ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Image.asset(
+            'assets/images/perpova logo.png',
+            height: 28,
+            fit: BoxFit.contain,
+            errorBuilder: (context, error, stackTrace) => const Icon(
+              Icons.phone_android_rounded,
+              color: Colors.white70,
+              size: 18,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '+94 71 3 55 55 66',
+            style: GoogleFonts.inter(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: Colors.white.withOpacity(0.95),
+              letterSpacing: 0.5,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -2394,10 +2450,12 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
   Widget _buildQueueToken(String token, bool isReady) {
     return Container(
       decoration: BoxDecoration(
-        color: isReady ? AppTheme.accent.withOpacity(0.1) : const Color(0xFF1E293B),
+        color: isReady 
+            ? AppTheme.accent.withOpacity(0.18) 
+            : const Color(0xFF1E293B).withOpacity(0.4),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isReady ? AppTheme.accent : const Color(0xFF334155),
+          color: isReady ? AppTheme.accent : const Color(0xFF334155).withOpacity(0.7),
           width: 2,
         ),
       ),
@@ -2407,7 +2465,7 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
           style: GoogleFonts.outfit(
             fontSize: 24,
             fontWeight: FontWeight.bold,
-            color: isReady ? AppTheme.accent : Colors.white,
+            color: isReady ? AppTheme.accent : Colors.white.withOpacity(0.9),
           ),
         ),
       ),

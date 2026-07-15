@@ -50,6 +50,7 @@ flutter:
   # Custom logo and Sinhala font assets
   assets:
     - assets/images/mhb_logo.png
+    - assets/images/perpova logo.png
     - assets/fonts/NotoSansSinhala-Regular.ttf
     - assets/fonts/Isiagni.ttf
 
