@@ -389,7 +389,7 @@ app.get('/api/ingredients/logs', authenticateToken, async (req, res) => {
 });
 
 app.post('/api/ingredients', authenticateToken, async (req, res) => {
-    const { name, unit } = req.body;
+    const { name, unit, min_stock_level } = req.body;
     if (req.user.role !== 'admin' && req.user.role !== 'owner') {
         return res.status(403).json({ error: 'Unauthorized. Only admins or owners can add ingredients.' });
     }
@@ -398,12 +398,75 @@ app.post('/api/ingredients', authenticateToken, async (req, res) => {
     }
     try {
         const result = await db.query(
-            'INSERT INTO ingredients (name, stock_qty, unit) VALUES (?, 0.00, ?)',
-            [name, unit]
+            'INSERT INTO ingredients (name, stock_qty, unit, min_stock_level) VALUES (?, 0.00, ?, ?)',
+            [name, unit, min_stock_level || 0.00]
         );
         await logAudit('edit_stock', 'ingredients', result.insertId, `Ingredient ${name} created manually.`, req.user.id);
         const [newIng] = await db.query('SELECT * FROM ingredients WHERE id = ?', [result.insertId]);
         res.json(newIng);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.put('/api/ingredients/:id', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    const { name, unit, min_stock_level } = req.body;
+    if (req.user.role !== 'admin' && req.user.role !== 'owner') {
+        return res.status(403).json({ error: 'Unauthorized. Only admins or owners can edit ingredients.' });
+    }
+    if (!name || !unit) {
+        return res.status(400).json({ error: 'Name and unit are required.' });
+    }
+    try {
+        await db.query(
+            'UPDATE ingredients SET name = ?, unit = ?, min_stock_level = ? WHERE id = ?',
+            [name, unit, min_stock_level || 0.00, id]
+        );
+        await logAudit('edit_stock', 'ingredients', id, `Ingredient ${name} details updated.`, req.user.id);
+        const [updated] = await db.query('SELECT * FROM ingredients WHERE id = ?', [id]);
+        
+        // Broadcast WebSocket update
+        if (req.app.get('wss')) {
+            const wsMsg = JSON.stringify({ type: 'ingredient_stock_updated', data: { ingredientId: id } });
+            req.app.get('wss').clients.forEach(client => {
+                if (client.readyState === 1) {
+                    client.send(wsMsg);
+                }
+            });
+        }
+        
+        res.json(updated);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.delete('/api/ingredients/:id', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    if (req.user.role !== 'admin' && req.user.role !== 'owner') {
+        return res.status(403).json({ error: 'Unauthorized. Only admins or owners can delete ingredients.' });
+    }
+    try {
+        const [ing] = await db.query('SELECT name FROM ingredients WHERE id = ?', [id]);
+        if (!ing) {
+            return res.status(404).json({ error: 'Ingredient not found.' });
+        }
+        
+        await db.query('DELETE FROM ingredients WHERE id = ?', [id]);
+        await logAudit('edit_stock', 'ingredients', id, `Ingredient ${ing.name} deleted.`, req.user.id);
+        
+        // Broadcast WebSocket update
+        if (req.app.get('wss')) {
+            const wsMsg = JSON.stringify({ type: 'ingredient_stock_updated', data: { ingredientId: id } });
+            req.app.get('wss').clients.forEach(client => {
+                if (client.readyState === 1) {
+                    client.send(wsMsg);
+                }
+            });
+        }
+        
+        res.json({ message: 'Ingredient deleted successfully.' });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

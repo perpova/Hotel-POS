@@ -32,6 +32,7 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
 
   // New Ingredient Creation Controllers
   final _newIngNameController = TextEditingController();
+  final _newIngMinStockController = TextEditingController();
   String _newIngUnit = 'kg'; // 'kg', 'units', 'liters', 'grams'
   
   bool _loading = false;
@@ -59,6 +60,7 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
     _ingChangeController.dispose();
     _ingReasonController.dispose();
     _newIngNameController.dispose();
+    _newIngMinStockController.dispose();
     _filterIngredientController.dispose();
     _filterDateController.dispose();
     super.dispose();
@@ -261,7 +263,7 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
     final hasSeniorAccess = userRole == 'admin' || userRole == 'owner';
 
     final displayLogs = _filteredLogs.take(_entriesLimit).toList();
-    final lowStockIngredients = _ingredients.where((i) => i.stockQty <= 0).toList();
+    final lowStockIngredients = _ingredients.where((i) => i.stockQty <= i.minStockLevel).toList();
 
     return Scaffold(
       backgroundColor: AppTheme.bgLight,
@@ -391,7 +393,7 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
             _buildWarningBanner(lowStockIngredients),
 
             // Top overview circles/row
-            _buildOverviewRow(),
+            _buildOverviewRow(hasSeniorAccess),
             const SizedBox(height: 24),
 
             // Collapsible advanced filters
@@ -447,7 +449,7 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
   // ----------------------------------------------------
   // OVERVIEW CARDS ROW
   // ----------------------------------------------------
-  Widget _buildOverviewRow() {
+  Widget _buildOverviewRow(bool hasSeniorAccess) {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
@@ -481,49 +483,52 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
               icon = Icons.shopping_basket_outlined;
           }
    
-          final isDepleted = i.stockQty <= 0;
-          return Container(
-            width: 180,
-            margin: const EdgeInsets.only(right: 12),
-            child: Card(
-              elevation: 0,
-              color: isDepleted ? const Color(0xFFFEF2F2) : Colors.white,
-              shape: RoundedRectangleBorder(
-                side: BorderSide(color: isDepleted ? const Color(0xFFFCA5A5) : const Color(0xFFE2E8F0), width: isDepleted ? 1.5 : 1.0),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: cardColor.withOpacity(0.08),
-                        borderRadius: BorderRadius.circular(8),
+          final isDepleted = i.stockQty <= i.minStockLevel;
+          return GestureDetector(
+            onTap: hasSeniorAccess ? () => _showEditIngredientDialog(i) : null,
+            child: Container(
+              width: 180,
+              margin: const EdgeInsets.only(right: 12),
+              child: Card(
+                elevation: 0,
+                color: isDepleted ? const Color(0xFFFEF2F2) : Colors.white,
+                shape: RoundedRectangleBorder(
+                  side: BorderSide(color: isDepleted ? const Color(0xFFFCA5A5) : const Color(0xFFE2E8F0), width: isDepleted ? 1.5 : 1.0),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: cardColor.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(icon, color: cardColor, size: 22),
                       ),
-                      child: Icon(icon, color: cardColor, size: 22),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(i.name, style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
-                          const SizedBox(height: 6),
-                          Text(
-                            '${i.stockQty.toStringAsFixed(1)} ${i.unit}',
-                            style: GoogleFonts.outfit(
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                              color: isDepleted ? const Color(0xFFDC2626) : AppTheme.textLightPrimary,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(i.name, style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
+                            const SizedBox(height: 6),
+                            Text(
+                              '${i.stockQty.toStringAsFixed(1)} ${i.unit}',
+                              style: GoogleFonts.outfit(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                                color: isDepleted ? const Color(0xFFDC2626) : AppTheme.textLightPrimary,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -829,6 +834,14 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
               ],
               onChanged: (val) => setState(() => _newIngUnit = val!),
             ),
+            _buildFieldLabel('LOW STOCK ALERT COUNT *'),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _newIngMinStockController,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(hintText: 'e.g. 10.0, 50.0'),
+              style: GoogleFonts.inter(fontSize: 13),
+            ),
             const SizedBox(height: 24),
 
             ElevatedButton(
@@ -1039,12 +1052,15 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
 
   void _handleCreateIngredient() async {
     final name = _newIngNameController.text.trim();
+    final minStockStr = _newIngMinStockController.text.trim();
     if (name.isEmpty) return;
+    final minStock = double.tryParse(minStockStr) ?? 0.0;
 
     try {
-      await APIService.instance.createIngredient(name, _newIngUnit);
+      await APIService.instance.createIngredient(name, _newIngUnit, minStockLevel: minStock);
       
       _newIngNameController.clear();
+      _newIngMinStockController.clear();
       setState(() => _newIngUnit = 'kg');
       await _loadData();
       
@@ -1058,5 +1074,165 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
         SnackBar(content: Text(e.toString()), backgroundColor: AppTheme.danger),
       );
     }
+  }
+
+  void _showEditIngredientDialog(IngredientModel ingredient) {
+    final nameCtrl = TextEditingController(text: ingredient.name);
+    final minStockCtrl = TextEditingController(text: ingredient.minStockLevel.toStringAsFixed(1));
+    String selectedUnit = ingredient.unit;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Row(
+                children: [
+                  Icon(Icons.edit_outlined, color: AppTheme.primary),
+                  const SizedBox(width: 8),
+                  Text('Edit Ingredient', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildFieldLabel('INGREDIENT NAME *'),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: nameCtrl,
+                      decoration: const InputDecoration(hintText: 'e.g. Sugar, Cardamom'),
+                      style: GoogleFonts.inter(fontSize: 13),
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    _buildFieldLabel('MEASUREMENT UNIT *'),
+                    const SizedBox(height: 6),
+                    DropdownButtonFormField<String>(
+                      value: selectedUnit,
+                      items: const [
+                        DropdownMenuItem(value: 'kg', child: Text('Kilogram (kg)')),
+                        DropdownMenuItem(value: 'units', child: Text('Units / Pieces')),
+                        DropdownMenuItem(value: 'liters', child: Text('Liters (L)')),
+                        DropdownMenuItem(value: 'grams', child: Text('Grams (g)')),
+                      ],
+                      onChanged: (val) => setDialogState(() => selectedUnit = val!),
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    _buildFieldLabel('LOW STOCK ALERT COUNT *'),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: minStockCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(hintText: 'e.g. 10.0, 50.0'),
+                      style: GoogleFonts.inter(fontSize: 13),
+                    ),
+                  ],
+                ),
+              ),
+              actionsPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              actions: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    TextButton.icon(
+                      onPressed: () {
+                        showDialog(
+                          context: context,
+                          builder: (confirmContext) {
+                            return AlertDialog(
+                              title: const Text('Delete Ingredient'),
+                              content: Text('Are you sure you want to delete ${ingredient.name}? This will permanently remove it from stock records.'),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(confirmContext),
+                                  child: const Text('Cancel'),
+                                ),
+                                ElevatedButton(
+                                  onPressed: () async {
+                                    Navigator.pop(confirmContext); // Close confirm
+                                    Navigator.pop(context); // Close edit dialog
+                                    setState(() => _loading = true);
+                                    try {
+                                      await APIService.instance.deleteIngredient(ingredient.id);
+                                      await _loadData();
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(content: Text('${ingredient.name} deleted successfully.'), backgroundColor: AppTheme.danger),
+                                        );
+                                      }
+                                    } catch (e) {
+                                      setState(() => _loading = false);
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(content: Text('Failed to delete ingredient: $e'), backgroundColor: AppTheme.danger),
+                                        );
+                                      }
+                                    }
+                                  },
+                                  style: ElevatedButton.styleFrom(backgroundColor: AppTheme.danger),
+                                  child: const Text('Delete', style: TextStyle(color: Colors.white)),
+                                ),
+                              ],
+                            );
+                          },
+                        );
+                      },
+                      icon: const Icon(Icons.delete_outline, color: AppTheme.danger, size: 18),
+                      label: Text('Delete', style: GoogleFonts.inter(color: AppTheme.danger, fontWeight: FontWeight.bold)),
+                    ),
+                    Row(
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Cancel'),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton(
+                          onPressed: () async {
+                            final name = nameCtrl.text.trim();
+                            final minStockStr = minStockCtrl.text.trim();
+                            if (name.isEmpty) return;
+                            final minStock = double.tryParse(minStockStr) ?? 0.0;
+
+                            Navigator.pop(context); // Close dialog
+                            setState(() => _loading = true);
+                            try {
+                              await APIService.instance.updateIngredient(ingredient.id, name, selectedUnit, minStock);
+                              await _loadData();
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Ingredient updated successfully!'), backgroundColor: AppTheme.accent),
+                                );
+                              }
+                            } catch (e) {
+                              setState(() => _loading = false);
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Failed to update ingredient: $e'), backgroundColor: AppTheme.danger),
+                                );
+                              }
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.primary,
+                            foregroundColor: Colors.white,
+                          ),
+                          child: const Text('Save'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 }

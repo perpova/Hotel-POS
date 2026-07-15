@@ -844,12 +844,14 @@ class IngredientModel {
   final String name;
   final double stockQty;
   final String unit;
+  final double minStockLevel;
 
   IngredientModel({
     required this.id,
     required this.name,
     required this.stockQty,
     required this.unit,
+    required this.minStockLevel,
   });
 
   factory IngredientModel.fromJson(Map<String, dynamic> json) => IngredientModel(
@@ -857,6 +859,7 @@ class IngredientModel {
         name: json['name'],
         stockQty: double.tryParse(json['stock_qty'].toString()) ?? 0.0,
         unit: json['unit'] ?? 'kg',
+        minStockLevel: double.tryParse(json['min_stock_level']?.toString() ?? '0.0') ?? 0.0,
       );
 
   Map<String, dynamic> toJson() => {
@@ -864,6 +867,7 @@ class IngredientModel {
         'name': name,
         'stock_qty': stockQty,
         'unit': unit,
+        'min_stock_level': minStockLevel,
       };
 }
 

@@ -279,14 +279,38 @@ class AppSettingsController extends ChangeNotifier {
   }
 
   void updateFromMap(Map<String, dynamic> map) async {
-    if (map.containsKey('queueBgType')) _queueBgType = map['queueBgType'] ?? 'none';
-    if (map.containsKey('queueBgImageBase64')) _queueBgImageBase64 = map['queueBgImageBase64'];
-    if (map.containsKey('queueBgVideoUrl')) _queueBgVideoUrl = map['queueBgVideoUrl'];
-    if (map.containsKey('queueBgVideoSource')) _queueBgVideoSource = map['queueBgVideoSource'] ?? 'link';
-    if (map.containsKey('queueBgVideoPath')) _queueBgVideoPath = map['queueBgVideoPath'];
-    if (map.containsKey('queueBgOpacity')) {
-      _queueBgOpacity = double.tryParse(map['queueBgOpacity'].toString()) ?? 0.8;
+    bool changed = false;
+
+    if (map.containsKey('queueBgType') && _queueBgType != map['queueBgType']) {
+      _queueBgType = map['queueBgType'] ?? 'none';
+      changed = true;
     }
+    if (map.containsKey('queueBgImageBase64') && _queueBgImageBase64 != map['queueBgImageBase64']) {
+      _queueBgImageBase64 = map['queueBgImageBase64'];
+      changed = true;
+    }
+    if (map.containsKey('queueBgVideoUrl') && _queueBgVideoUrl != map['queueBgVideoUrl']) {
+      _queueBgVideoUrl = map['queueBgVideoUrl'];
+      changed = true;
+    }
+    if (map.containsKey('queueBgVideoSource') && _queueBgVideoSource != map['queueBgVideoSource']) {
+      _queueBgVideoSource = map['queueBgVideoSource'] ?? 'link';
+      changed = true;
+    }
+    if (map.containsKey('queueBgVideoPath') && _queueBgVideoPath != map['queueBgVideoPath']) {
+      _queueBgVideoPath = map['queueBgVideoPath'];
+      changed = true;
+    }
+    if (map.containsKey('queueBgOpacity')) {
+      final double newOpacity = double.tryParse(map['queueBgOpacity'].toString()) ?? 0.8;
+      if (_queueBgOpacity != newOpacity) {
+        _queueBgOpacity = newOpacity;
+        changed = true;
+      }
+    }
+
+    if (!changed) return;
+
     notifyListeners();
 
     try {

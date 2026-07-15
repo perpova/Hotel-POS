@@ -297,6 +297,12 @@ async function initializeDatabase() {
                 console.error("Migration: Creating ingredients table failed:", err.message);
             }
 
+            // Migration: Add min_stock_level to ingredients table
+            try {
+                await dbPool.query("ALTER TABLE ingredients ADD COLUMN min_stock_level DECIMAL(10, 2) DEFAULT 0.00");
+                console.log("Migration: Added min_stock_level column to ingredients table.");
+            } catch (_) {}
+
             // Migration: Add ingredients column to products table
             try {
                 await dbPool.query("ALTER TABLE products ADD COLUMN ingredients TEXT NULL");

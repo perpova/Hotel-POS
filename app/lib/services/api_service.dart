@@ -586,18 +586,46 @@ class APIService {
     throw Exception('Failed to load raw ingredients');
   }
 
-  Future<void> createIngredient(String name, String unit) async {
+  Future<void> createIngredient(String name, String unit, {double minStockLevel = 0.0}) async {
     final response = await http.post(
       Uri.parse('$_baseUrl/api/ingredients'),
       headers: _getHeaders(),
       body: jsonEncode({
         'name': name,
         'unit': unit,
+        'min_stock_level': minStockLevel,
       }),
     );
     if (response.statusCode != 200) {
       final errData = jsonDecode(response.body);
       throw Exception(errData['error'] ?? 'Failed to create ingredient');
+    }
+  }
+
+  Future<void> updateIngredient(int id, String name, String unit, double minStockLevel) async {
+    final response = await http.put(
+      Uri.parse('$_baseUrl/api/ingredients/$id'),
+      headers: _getHeaders(),
+      body: jsonEncode({
+        'name': name,
+        'unit': unit,
+        'min_stock_level': minStockLevel,
+      }),
+    );
+    if (response.statusCode != 200) {
+      final errData = jsonDecode(response.body);
+      throw Exception(errData['error'] ?? 'Failed to update ingredient');
+    }
+  }
+
+  Future<void> deleteIngredient(int id) async {
+    final response = await http.delete(
+      Uri.parse('$_baseUrl/api/ingredients/$id'),
+      headers: _getHeaders(),
+    );
+    if (response.statusCode != 200) {
+      final errData = jsonDecode(response.body);
+      throw Exception(errData['error'] ?? 'Failed to delete ingredient');
     }
   }
 

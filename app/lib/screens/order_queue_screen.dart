@@ -1436,7 +1436,7 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
                   style: GoogleFonts.outfit(
                     fontSize: 36,
                     fontWeight: FontWeight.w900,
-                    color: AppTheme.primary,
+                    color: AppTheme.warning,
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -1849,7 +1849,7 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
                           style: GoogleFonts.outfit(
                             fontSize: 68,
                             fontWeight: FontWeight.w900,
-                            color: AppTheme.primary,
+                            color: AppTheme.warning,
                             height: 1,
                           ),
                         ),
@@ -1976,7 +1976,7 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
                     style: GoogleFonts.outfit(
                       fontSize: 72,
                       fontWeight: FontWeight.w900,
-                      color: AppTheme.primary,
+                      color: AppTheme.warning,
                     ),
                   ),
                   const SizedBox(width: 16),

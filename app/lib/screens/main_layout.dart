@@ -1,9 +1,11 @@
 import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../pos_controller.dart';
+import '../models/models.dart';
 import '../controllers/dashboard_controller.dart';
 import '../controllers/app_settings_controller.dart';
 import '../services/translation_service.dart';
@@ -44,6 +46,7 @@ class _MainLayoutState extends State<MainLayout> {
   static bool _hasLaunchedQueueWindow = false;
   int _selectedIndex = 0;
   bool _isSidebarCollapsed = false;
+  bool _hasShownLowStockWarning = false;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   final List<String> _titles = [
@@ -823,7 +826,7 @@ class _MainLayoutState extends State<MainLayout> {
     final isPosExtended = _selectedIndex == 1 && appSettings.extendPosScreen;
     final isFullScreenMode = isQueueExtended || isPosExtended;
 
-    return Scaffold(
+    final Widget scaffold = Scaffold(
       key: _scaffoldKey,
       drawer: (!isDesktop && !isFullScreenMode) ? Drawer(child: buildSidebarContent()) : null,
       body: Row(
@@ -1091,6 +1094,84 @@ class _MainLayoutState extends State<MainLayout> {
                           },
                         ),
                         const SizedBox(width: 16),
+                      ],
+
+                      // Low Stock Raw Materials Warning Icon Badge with popup
+                      if (posController.lowStockIngredientsCount > 0) ...[
+                        PopupMenuButton<dynamic>(
+                          offset: const Offset(0, 50),
+                          icon: Badge(
+                            label: Text(
+                              '${posController.lowStockIngredientsCount}',
+                              style: const TextStyle(fontSize: 8, color: Colors.white),
+                            ),
+                            isLabelVisible: true,
+                            backgroundColor: Colors.amber.shade700,
+                            child: Icon(Icons.warning_amber_rounded, color: Colors.amber.shade700, size: 20),
+                          ),
+                          tooltip: 'Low Stock Ingredients',
+                          itemBuilder: (BuildContext context) {
+                            final List<IngredientModel> lowStockIngs = posController.ingredients.where((i) => i.stockQty <= i.minStockLevel).toList();
+                            return [
+                              PopupMenuItem<dynamic>(
+                                enabled: false,
+                                child: Container(
+                                  width: 320,
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Icon(Icons.warning_amber_rounded, color: Colors.amber.shade700, size: 18),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            'Low Stock Raw Materials'.tr(context),
+                                            style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+                                          ),
+                                        ],
+                                      ),
+                                      const Divider(height: 8, color: Color(0xFFE2E8F0)),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              ...lowStockIngs.map((i) {
+                                return PopupMenuItem<dynamic>(
+                                  enabled: false,
+                                  child: Container(
+                                    width: 320,
+                                    padding: const EdgeInsets.symmetric(vertical: 4),
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            i.name,
+                                            style: GoogleFonts.inter(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.bold,
+                                              color: const Color(0xFF1E293B),
+                                            ),
+                                          ),
+                                        ),
+                                        Text(
+                                          '${i.stockQty.toStringAsFixed(1)} ${i.unit}',
+                                          style: GoogleFonts.inter(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.red.shade600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                            ];
+                          },
+                        ),
+                        const SizedBox(width: 8),
                       ],
 
                       // Notification Bell with dynamic badge and dropdown menu
@@ -1402,6 +1483,153 @@ class _MainLayoutState extends State<MainLayout> {
                   ),
                 ),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+
+    return Stack(
+      children: [
+        scaffold,
+        if (!_hasShownLowStockWarning && posController.lowStockIngredientsCount > 0)
+          _buildLowStockWarningOverlay(posController),
+      ],
+    );
+  }
+
+  Widget _buildLowStockWarningOverlay(POSController posController) {
+    final lowStockIngs = posController.ingredients.where((i) => i.stockQty <= i.minStockLevel).toList();
+    final names = lowStockIngs.map((i) => '${i.name} (${i.stockQty.toStringAsFixed(1)} ${i.unit})').join(', ');
+    
+    return Material(
+      color: Colors.transparent,
+      child: Stack(
+        children: [
+          // Blurred background
+          Positioned.fill(
+            child: ClipRect(
+              child: BackdropFilter(
+                filter: ui.ImageFilter.blur(sigmaX: 5.0, sigmaY: 5.0),
+                child: Container(
+                  color: Colors.black.withOpacity(0.55),
+                ),
+              ),
+            ),
+          ),
+          
+          // Warning Card
+          Center(
+            child: Container(
+              width: 480,
+              margin: const EdgeInsets.symmetric(horizontal: 24),
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFFBEB), // Soft yellow/amber background
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.amber.shade300, width: 2),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.3),
+                    blurRadius: 20,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Icon
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.shade100,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.warning_amber_rounded,
+                      color: Colors.amber.shade800,
+                      size: 40,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // Header
+                  Text(
+                    'Depleted / Negative Stock Warning!'.tr(context),
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.outfit(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.amber.shade900,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  
+                  // Message
+                  Text(
+                    'The following ingredients are out of stock or negative: $names. Please update stock level immediately to prevent recipe deduction errors.'.tr(context),
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      height: 1.5,
+                      color: Colors.amber.shade900.withOpacity(0.85),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  
+                  // Buttons
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () {
+                            setState(() {
+                              _selectedIndex = 20; // Navigate to Raw Materials
+                              _hasShownLowStockWarning = true;
+                            });
+                          },
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(color: Colors.amber.shade700),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                          child: Text(
+                            'Update Stock'.tr(context),
+                            style: GoogleFonts.inter(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.amber.shade800,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () {
+                            setState(() {
+                              _hasShownLowStockWarning = true;
+                            });
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.amber.shade600,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            elevation: 0,
+                          ),
+                          child: Text(
+                            'Dismiss'.tr(context),
+                            style: GoogleFonts.inter(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ],

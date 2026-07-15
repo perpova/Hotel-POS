@@ -19,6 +19,11 @@ class POSController extends ChangeNotifier {
   List<DiningTableModel> diningTables = [];
   List<CustomerModel> customers = [];
   List<UserModel> waiters = [];
+  List<IngredientModel> ingredients = [];
+
+  int get lowStockIngredientsCount {
+    return ingredients.where((i) => i.stockQty <= i.minStockLevel).length;
+  }
 
   // Local System States
   bool isOnline = false;
@@ -543,6 +548,7 @@ class POSController extends ChangeNotifier {
         activeShift = await _api.getCurrentShift();
         offers = await _api.getOffers();
         happyHours = await _api.getHappyHours();
+        ingredients = await _api.getIngredients();
         await _fetchActiveOrders();
         await fetchDrawerLogs();
         await fetchPreOrders();
@@ -571,6 +577,7 @@ class POSController extends ChangeNotifier {
         case 'happy_hour_updated':
         case 'database_synchronized':
         case 'shift_updated':
+        case 'ingredient_stock_updated':
           reloadEnvironment();
           break;
         case 'stock_updated':
