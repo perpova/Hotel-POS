@@ -1266,4 +1266,12 @@ class APIService {
       });
     }
   }
+
+  void sendWebSocketMessage(Map<String, dynamic> data) {
+    if (_wsChannel != null) {
+      _wsChannel!.sink.add(jsonEncode(data));
+    } else {
+      print('Cannot send WebSocket message: not connected.');
+    }
+  }
 }

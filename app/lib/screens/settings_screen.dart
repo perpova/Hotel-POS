@@ -658,9 +658,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   constraints: const BoxConstraints(maxWidth: 350),
                   child: Slider(
                     value: appSettings.queueBgOpacity,
-                    min: 0.05,
-                    max: 0.80,
-                    divisions: 15,
+                    min: 0.0,
+                    max: 1.0,
+                    divisions: 20,
                     activeColor: AppTheme.primary,
                     inactiveColor: const Color(0xFFE2E8F0),
                     onChanged: (val) async {

@@ -1,7 +1,8 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
-class Base64ImageWidget extends StatelessWidget {
+class Base64ImageWidget extends StatefulWidget {
   final String? base64Str;
   final double? width;
   final double? height;
@@ -18,35 +19,73 @@ class Base64ImageWidget extends StatelessWidget {
   }) : super(key: key);
 
   @override
-  Widget build(BuildContext context) {
-    // Treat base64 strings shorter than 200 characters as placeholders and show fallback.
-    if (base64Str == null || base64Str!.trim().isEmpty || base64Str!.trim().length < 200) {
-      return _buildFallback();
-    }
+  State<Base64ImageWidget> createState() => _Base64ImageWidgetState();
+}
 
-    try {
-      String cleanStr = base64Str!;
-      if (cleanStr.contains(',')) {
-        cleanStr = cleanStr.split(',')[1];
-      }
+class _Base64ImageWidgetState extends State<Base64ImageWidget> {
+  Uint8List? _cachedBytes;
+  String? _lastBase64Str;
 
-      return Image.memory(
-        base64Decode(cleanStr.trim()),
-        width: width,
-        height: height,
-        fit: fit,
-        errorBuilder: (context, error, stackTrace) => _buildFallback(),
-      );
-    } catch (e) {
-      return _buildFallback();
+  @override
+  void initState() {
+    super.initState();
+    _decodeImage();
+  }
+
+  @override
+  void didUpdateWidget(Base64ImageWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.base64Str != oldWidget.base64Str) {
+      _decodeImage();
     }
   }
 
+  void _decodeImage() {
+    final str = widget.base64Str;
+    if (str == null || str.trim().isEmpty || str.trim().length < 200) {
+      _cachedBytes = null;
+      _lastBase64Str = str;
+      return;
+    }
+
+    if (str == _lastBase64Str && _cachedBytes != null) {
+      return;
+    }
+
+    try {
+      String cleanStr = str;
+      if (cleanStr.contains(',')) {
+        cleanStr = cleanStr.split(',')[1];
+      }
+      _cachedBytes = base64Decode(cleanStr.trim());
+      _lastBase64Str = str;
+    } catch (_) {
+      _cachedBytes = null;
+      _lastBase64Str = str;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_cachedBytes == null) {
+      return _buildFallback();
+    }
+
+    return Image.memory(
+      _cachedBytes!,
+      width: widget.width,
+      height: widget.height,
+      fit: widget.fit,
+      gaplessPlayback: true,
+      errorBuilder: (context, error, stackTrace) => _buildFallback(),
+    );
+  }
+
   Widget _buildFallback() {
-    return fallback ??
+    return widget.fallback ??
         Container(
-          width: width,
-          height: height,
+          width: widget.width,
+          height: widget.height,
           color: const Color(0xFFFFF0F5), // FoodKing light pink background
           child: const Center(
             child: Icon(

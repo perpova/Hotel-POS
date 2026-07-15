@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:barcode_widget/barcode_widget.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:path/path.dart' as p;
 import '../pos_controller.dart';
 import '../controllers/app_settings_controller.dart';
 import '../theme.dart';
@@ -40,6 +41,9 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
 
   VideoPlayerController? _videoPlayerController;
   String? _currentVideoPath;
+  String? _initializingVideoPath;
+  StreamSubscription<List<int>>? _downloadSubscription;
+  String? _downloadProgressPercent;
 
   int _batchIndex = 0;
   static const int _batchSize = 4;
@@ -95,25 +99,48 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
       _videoPlayerController?.dispose();
       _videoPlayerController = null;
       _currentVideoPath = null;
+      _initializingVideoPath = null;
       return;
     }
 
-    if (source == 'file' && path != null) {
+    if (source == 'file' && path != null && path.isNotEmpty) {
       _logDebug('Source is file. Path: $path');
-      if (_currentVideoPath == path) {
-        _logDebug('Path matches current. Skipping init.');
-        return;
+      if (_downloadSubscription != null) {
+        _logDebug('Cancelling YouTube download due to source change to file.');
+        _downloadSubscription!.cancel();
+        _downloadSubscription = null;
       }
+      _downloadProgressPercent = null;
+      _initializingVideoPath = path;
       final file = File(path);
       if (file.existsSync()) {
         _videoPlayerController?.dispose();
         _videoPlayerController = null;
-        _currentVideoPath = path;
-        _logDebug('Initializing local file controller...');
-        _videoPlayerController = VideoPlayerController.file(file)
+        
+        String playPath = path;
+        if (widget.isSeparateWindow) {
+          try {
+            final dir = file.parent;
+            final name = p.basenameWithoutExtension(file.path);
+            final ext = p.extension(file.path);
+            final copyFile = File('${dir.path}${Platform.pathSeparator}${name}_extend$ext');
+            if (!copyFile.existsSync() || copyFile.lengthSync() != file.lengthSync()) {
+              file.copySync(copyFile.path);
+            }
+            playPath = copyFile.path;
+            _logDebug('Copied local file for separate window: $playPath');
+          } catch (e) {
+            _logDebug('Failed to copy file for separate window: $e');
+          }
+        }
+
+        _logDebug('Initializing local file controller with path: $playPath...');
+        _videoPlayerController = VideoPlayerController.file(File(playPath))
           ..initialize().then((_) {
             _logDebug('Local file initialized successfully.');
-            if (mounted && _currentVideoPath == path) {
+            if (mounted && _initializingVideoPath == path) {
+              _currentVideoPath = path;
+              _initializingVideoPath = null;
               _videoPlayerController!.setLooping(true);
               _videoPlayerController!.setVolume(0.0);
               _videoPlayerController!.play();
@@ -122,28 +149,36 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
             }
           }).catchError((e) {
             _logDebug('Error initializing local file: $e');
-            if (mounted && _currentVideoPath == path) {
+            if (mounted && _initializingVideoPath == path) {
               setState(() {
                 _videoPlayerController = null;
                 _currentVideoPath = null;
+                _initializingVideoPath = null;
               });
             }
           });
       } else {
         _logDebug('Local file does not exist at path: $path');
+        if (mounted && _initializingVideoPath == path) {
+          setState(() {
+            _initializingVideoPath = null;
+          });
+        }
       }
     } else if (source == 'link' && url != null && url.isNotEmpty) {
       final cacheKey = 'link_$url';
       _logDebug('Source is link. CacheKey: $cacheKey');
-      if (_currentVideoPath == cacheKey) {
-        _logDebug('Link already initializing or initialized. Skipping init.');
-        return;
-      }
 
       _logDebug('Disposing old controller and initializing for link...');
       _videoPlayerController?.dispose();
       _videoPlayerController = null;
-      _currentVideoPath = cacheKey;
+      if (_downloadSubscription != null) {
+        _logDebug('Cancelling active YouTube download due to link change.');
+        _downloadSubscription!.cancel();
+        _downloadSubscription = null;
+      }
+      _downloadProgressPercent = null;
+      _initializingVideoPath = cacheKey;
       setState(() {});
 
       final youtubeId = _getYoutubeId(url);
@@ -151,14 +186,23 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
       String? streamUrl;
 
       if (youtubeId != null) {
-        try {
-          final tempDir = Directory.systemTemp;
-          final targetFile = File('${tempDir.path}${Platform.pathSeparator}queue_background_youtube_$youtubeId.mp4');
+        final tempDir = Directory.systemTemp;
+        // Use v4 prefix to clear any corrupted v3 cache files!
+        final targetFile = File('${tempDir.path}${Platform.pathSeparator}queue_background_youtube_v4_$youtubeId.mp4');
+        final timestamp = DateTime.now().millisecondsSinceEpoch;
+        final tmpFile = File('${tempDir.path}${Platform.pathSeparator}queue_background_youtube_v4_${youtubeId}_$timestamp.mp4.tmp');
 
-          if (await targetFile.exists() && await targetFile.length() > 1024) {
-            _logDebug('Cached video found at: ${targetFile.path}. Skipping download.');
-            streamUrl = targetFile.path;
-          } else {
+        if (await targetFile.exists() && await targetFile.length() > 1024) {
+          _logDebug('Cached video found at: ${targetFile.path}. Skipping download.');
+          streamUrl = targetFile.path;
+        } else {
+          _logDebug('Starting download for YouTube ID: $youtubeId');
+          setState(() {
+            _downloadProgressPercent = '0';
+          });
+
+          IOSink? fileStream;
+          try {
             final yt = yt_exp.YoutubeExplode();
             _logDebug('Fetching manifest for YouTube ID: $youtubeId');
             final manifest = await yt.videos.streamsClient.getManifest(youtubeId);
@@ -166,13 +210,39 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
             
             yt_exp.VideoStreamInfo? streamInfo;
             if (manifest.muxed.isNotEmpty) {
-              streamInfo = manifest.muxed.withHighestBitrate();
-              _logDebug('Selected Muxed highest bitrate: ${streamInfo.videoQuality}');
+              try {
+                streamInfo = manifest.muxed.firstWhere(
+                  (s) => s.videoQuality.toString().contains('360')
+                );
+                _logDebug('Selected Muxed 360p stream: ${streamInfo.videoQuality}');
+              } catch (_) {
+                try {
+                  streamInfo = manifest.muxed.firstWhere(
+                    (s) => s.videoQuality.toString().contains('480')
+                  );
+                  _logDebug('Selected Muxed 480p stream: ${streamInfo.videoQuality}');
+                } catch (_) {
+                  streamInfo = manifest.muxed.withHighestBitrate();
+                  _logDebug('Selected Muxed highest bitrate: ${streamInfo.videoQuality}');
+                }
+              }
             } else if (manifest.videoOnly.isNotEmpty) {
               final mp4Streams = manifest.videoOnly.where((s) => s.container.name == 'mp4').toList();
               if (mp4Streams.isNotEmpty) {
-                mp4Streams.sort((a, b) => b.bitrate.bitsPerSecond.compareTo(a.bitrate.bitsPerSecond));
-                streamInfo = mp4Streams.first;
+                mp4Streams.sort((a, b) => a.bitrate.bitsPerSecond.compareTo(b.bitrate.bitsPerSecond));
+                try {
+                  streamInfo = mp4Streams.firstWhere(
+                    (s) => s.videoQuality.toString().contains('360') || s.videoQuality.toString().contains('480')
+                  );
+                } catch (_) {
+                  try {
+                    streamInfo = mp4Streams.firstWhere(
+                      (s) => s.videoQuality.toString().contains('720')
+                    );
+                  } catch (_) {
+                    streamInfo = mp4Streams.first;
+                  }
+                }
                 _logDebug('Selected VideoOnly MP4: ${streamInfo.videoQuality}');
               } else {
                 streamInfo = manifest.videoOnly.withHighestBitrate();
@@ -181,31 +251,143 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
             }
 
             if (streamInfo != null) {
-              _logDebug('Downloading YouTube stream to local file: ${targetFile.path}');
-              if (await targetFile.exists()) {
+              _logDebug('Downloading YouTube stream to temp file: ${tmpFile.path}');
+              if (await tmpFile.exists()) {
                 try {
-                  await targetFile.delete();
+                  await tmpFile.delete();
                 } catch (_) {}
               }
+              
               final stream = yt.videos.streamsClient.get(streamInfo);
-              final fileStream = targetFile.openWrite();
-              await stream.pipe(fileStream);
-              _logDebug('Download complete. File size: ${await targetFile.length()} bytes');
-              streamUrl = targetFile.path;
+              fileStream = tmpFile.openWrite();
+              
+              final totalBytes = streamInfo.size.totalBytes;
+              _logDebug('Total video stream size: $totalBytes bytes');
+              
+              int downloadedBytes = 0;
+              DateTime lastLogTime = DateTime.now();
+              final completer = Completer<void>();
+              bool isSuccess = false;
+              
+              final streamWithTimeout = stream.timeout(
+                const Duration(seconds: 45),
+                onTimeout: (sink) {
+                  _logDebug('Stream download timed out after 45 seconds of inactivity.');
+                  sink.addError(TimeoutException('YouTube stream download timed out'));
+                  sink.close();
+                },
+              );
+
+              _downloadSubscription = streamWithTimeout.listen(
+                (chunk) {
+                  fileStream?.add(chunk);
+                  downloadedBytes += chunk.length;
+                  
+                  final now = DateTime.now();
+                  if (now.difference(lastLogTime).inSeconds >= 2) {
+                    final pct = totalBytes > 0 ? (downloadedBytes / totalBytes * 100).toStringAsFixed(0) : null;
+                    _logDebug('Download progress: ${(downloadedBytes / (1024 * 1024)).toStringAsFixed(2)} MB / ${(totalBytes / (1024 * 1024)).toStringAsFixed(2)} MB ($pct%)');
+                    if (mounted && pct != _downloadProgressPercent) {
+                      setState(() {
+                        _downloadProgressPercent = pct;
+                      });
+                    }
+                    lastLogTime = now;
+                  }
+                },
+                onError: (err) {
+                  _logDebug('Stream listener error: $err');
+                  if (!completer.isCompleted) completer.completeError(err);
+                },
+                onDone: () {
+                  _logDebug('Stream listener completed successfully.');
+                  if (downloadedBytes >= totalBytes) {
+                    isSuccess = true;
+                  } else {
+                    _logDebug('Stream closed prematurely. Downloaded $downloadedBytes of $totalBytes bytes.');
+                  }
+                  if (!completer.isCompleted) completer.complete();
+                },
+                cancelOnError: true,
+              );
+
+              await completer.future;
+              await _downloadSubscription?.cancel();
+              _downloadSubscription = null;
+              await fileStream.close();
+              fileStream = null;
+
+              if (isSuccess) {
+                _logDebug('Download complete. Renaming temp file to target file.');
+                if (await targetFile.exists()) {
+                  try {
+                    await targetFile.delete();
+                  } catch (_) {}
+                }
+                await tmpFile.rename(targetFile.path);
+                _logDebug('Rename complete. File size: ${await targetFile.length()} bytes');
+                streamUrl = targetFile.path;
+              } else {
+                _logDebug('Download did not complete successfully. Deleting temp file.');
+                if (await tmpFile.exists()) {
+                  try {
+                    await tmpFile.delete();
+                  } catch (_) {}
+                }
+                throw Exception('Download incomplete');
+              }
             } else {
               _logDebug('No suitable stream found for YouTube ID: $youtubeId');
             }
             yt.close();
+          } catch (e) {
+            _logDebug('YouTube stream download/extraction error: $e');
+            await _downloadSubscription?.cancel();
+            _downloadSubscription = null;
+            if (fileStream != null) {
+              try {
+                await fileStream.close();
+              } catch (_) {}
+            }
+            if (await tmpFile.exists()) {
+              try {
+                await tmpFile.delete();
+              } catch (_) {}
+            }
+            if (mounted && _initializingVideoPath == cacheKey) {
+              setState(() {
+                _downloadProgressPercent = null;
+                _videoPlayerController = null;
+                _currentVideoPath = null;
+                _initializingVideoPath = null;
+              });
+            }
+            return;
+          } finally {
+            _downloadSubscription = null;
+            if (mounted) {
+              setState(() {
+                _downloadProgressPercent = null;
+              });
+            }
           }
-        } catch (e) {
-          _logDebug('YouTube stream download/extraction error: $e');
-          if (mounted && _currentVideoPath == cacheKey) {
-            setState(() {
-              _videoPlayerController = null;
-              _currentVideoPath = null;
-            });
+        }
+        
+        // Copy YouTube file for separate window to avoid sharing locks on Windows WMF
+        if (streamUrl != null && widget.isSeparateWindow) {
+          try {
+            final tFile = File(streamUrl);
+            final extendFile = File('${tempDir.path}${Platform.pathSeparator}queue_background_youtube_v4_${youtubeId}_extend.mp4');
+            if (tFile.existsSync()) {
+              if (!extendFile.existsSync() || extendFile.lengthSync() != tFile.lengthSync()) {
+                tFile.copySync(extendFile.path);
+              }
+              streamUrl = extendFile.path;
+              _logDebug('Copied YouTube file for separate window: $streamUrl');
+            }
+          } catch (e) {
+            _logDebug('Failed to copy YouTube file for separate window: $e');
           }
-          return;
         }
       } else {
         _logDebug('Not a YouTube ID. Using URL directly.');
@@ -214,7 +396,7 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
 
       _logDebug('Extracted Stream URL: $streamUrl');
 
-      if (streamUrl != null && mounted && _currentVideoPath == cacheKey) {
+      if (streamUrl != null && mounted && _initializingVideoPath == cacheKey) {
         final isLocalFile = !streamUrl.startsWith('http://') && !streamUrl.startsWith('https://');
         _logDebug('Creating VideoPlayerController (isLocalFile=$isLocalFile)...');
         _videoPlayerController = isLocalFile
@@ -223,33 +405,51 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
 
         _videoPlayerController!.initialize().then((_) {
           _logDebug('Controller initialized successfully.');
-          if (mounted && _currentVideoPath == cacheKey) {
+          if (mounted && _initializingVideoPath == cacheKey) {
+            _currentVideoPath = cacheKey;
+            _initializingVideoPath = null;
             _videoPlayerController!.setLooping(true);
             _videoPlayerController!.setVolume(0.0);
             _videoPlayerController!.play();
             _logDebug('Playback started.');
             setState(() {});
           } else {
-            _logDebug('Initialization done but mounted=$mounted or currentPath changed.');
+            _logDebug('Initialization done but mounted=$mounted or initializingPath changed.');
           }
         }).catchError((e, s) {
           _logDebug('Error initializing Controller: $e');
           _logDebug('Stacktrace: $s');
-          if (mounted && _currentVideoPath == cacheKey) {
+          if (mounted && _initializingVideoPath == cacheKey) {
+            if (youtubeId != null) {
+              final targetFile = File('${Directory.systemTemp.path}${Platform.pathSeparator}queue_background_youtube_v4_$youtubeId.mp4');
+              if (targetFile.existsSync()) {
+                try {
+                  targetFile.deleteSync();
+                  _logDebug('Deleted failed cache file to force redownload: ${targetFile.path}');
+                } catch (_) {}
+              }
+            }
             setState(() {
               _videoPlayerController = null;
               _currentVideoPath = null;
+              _initializingVideoPath = null;
             });
           }
         });
       } else {
-        _logDebug('Will not initialize: streamUrl=$streamUrl, mounted=$mounted, pathMatch=${_currentVideoPath == cacheKey}');
+        _logDebug('Will not initialize: streamUrl=$streamUrl, mounted=$mounted, pathMatch=${_initializingVideoPath == cacheKey}');
+        if (mounted && _initializingVideoPath == cacheKey) {
+          setState(() {
+            _initializingVideoPath = null;
+          });
+        }
       }
     } else {
       _logDebug('Resetting background video player');
       _videoPlayerController?.dispose();
       _videoPlayerController = null;
       _currentVideoPath = null;
+      _initializingVideoPath = null;
     }
   }
 
@@ -281,6 +481,7 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
     _bottomPageController?.dispose();
     _fullPageController?.dispose();
     _videoPlayerController?.dispose();
+    _downloadSubscription?.cancel();
     HardwareKeyboard.instance.removeHandler(_handleKeyEvent);
     super.dispose();
   }
@@ -457,7 +658,8 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
       final expectedCacheKey = appSettings.queueBgVideoSource == 'file'
           ? appSettings.queueBgVideoPath
           : 'link_${appSettings.queueBgVideoUrl}';
-      if (_currentVideoPath != expectedCacheKey) {
+      if (_currentVideoPath != expectedCacheKey && _initializingVideoPath != expectedCacheKey) {
+        _initializingVideoPath = expectedCacheKey;
         Future.microtask(() => _initializeBackgroundVideo());
       }
     } else if (_videoPlayerController != null) {
@@ -465,6 +667,7 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
         _videoPlayerController?.dispose();
         _videoPlayerController = null;
         _currentVideoPath = null;
+        _initializingVideoPath = null;
         setState(() {});
       });
     }
@@ -519,7 +722,7 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
     );
 
     Widget bodyContent = mainContent;
-    if (!_isFullScreenPromo && appSettings.queueBgType != 'none') {
+    if (appSettings.queueBgType != 'none') {
       Widget? bgWidget;
       if (appSettings.queueBgType == 'image' && appSettings.queueBgImageBase64 != null) {
         bgWidget = Positioned.fill(
@@ -552,11 +755,53 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
                   : (appSettings.queueBgVideoSource == 'link' && appSettings.queueBgVideoUrl != null)
                       ? Builder(builder: (context) {
                           final videoId = _getYoutubeId(appSettings.queueBgVideoUrl!);
+                          final isDownloading = videoId != null && _downloadSubscription != null;
                           return videoId != null
-                              ? Image.network(
-                                  'https://img.youtube.com/vi/$videoId/hqdefault.jpg',
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (c, e, s) => Container(color: const Color(0xFF0F172A)),
+                              ? Stack(
+                                  children: [
+                                    Positioned.fill(
+                                      child: Image.network(
+                                        'https://img.youtube.com/vi/$videoId/hqdefault.jpg',
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (c, e, s) => Container(color: const Color(0xFF0F172A)),
+                                      ),
+                                    ),
+                                    if (isDownloading)
+                                      Positioned.fill(
+                                        child: Container(
+                                          color: Colors.black54,
+                                          child: Center(
+                                            child: Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const CircularProgressIndicator(
+                                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                                ),
+                                                const SizedBox(height: 16),
+                                                Text(
+                                                  _downloadProgressPercent != null
+                                                      ? 'Downloading Background Video ($_downloadProgressPercent%)...'
+                                                      : 'Downloading Background Video...',
+                                                  style: GoogleFonts.inter(
+                                                    color: Colors.white,
+                                                    fontSize: 16,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 6),
+                                                Text(
+                                                  'This will take a moment for long videos.',
+                                                  style: GoogleFonts.inter(
+                                                    color: Colors.white70,
+                                                    fontSize: 12,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                  ],
                                 )
                               : const Center(
                                   child: Icon(Icons.video_library_outlined, size: 200, color: Colors.white10),
@@ -616,72 +861,147 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
       children: [
         // Screen Header
         Container(
-          padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 24),
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
           color: const Color(0xFF1E293B),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          child: Stack(
+            alignment: Alignment.center,
             children: [
+              // Left Corner (Logo & Title) & Right Corner (Slideshow & Messages)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  // Left Corner: Logo, Title, and fullscreen button
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Image.asset(
+                        'assets/images/mhb_logo.png',
+                        width: 62,
+                        height: 62,
+                        fit: BoxFit.contain,
+                        errorBuilder: (context, error, stackTrace) => const Icon(
+                          Icons.restaurant_rounded,
+                          color: Colors.white70,
+                          size: 36,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Container(
+                        width: 1,
+                        height: 32,
+                        color: Colors.white24,
+                      ),
+                      const SizedBox(width: 16),
+                      Text(
+                        'CUSTOMER ORDER STATUS',
+                        style: GoogleFonts.outfit(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white70,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // IconButton(
+                      //   icon: Icon(
+                      //     widget.isSeparateWindow
+                      //         ? Icons.close_rounded
+                      //         : (appSettings.extendQueueScreen
+                      //             ? Icons.fullscreen_exit_rounded
+                      //             : Icons.fullscreen_rounded),
+                      //     color: Colors.white54,
+                      //     size: 20,
+                      //   ),
+                      //   tooltip: widget.isSeparateWindow
+                      //       ? 'Close Window'
+                      //       : (appSettings.extendQueueScreen
+                      //           ? 'Exit Full Screen'
+                      //           : 'Go Full Screen'),
+                      //   onPressed: () async {
+                      //     if (widget.isSeparateWindow) {
+                      //       exit(0);
+                      //     } else {
+                      //       await appSettings.toggleExtendQueueScreen();
+                      //     }
+                      //   },
+                      // ),
+                    ],
+                  ),
+                  // Right Corner: Slideshow buttons & message
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (hasPromos) ...[
+                        // IconButton(
+                        //   icon: Icon(
+                        //     _isAutoplayPaused
+                        //         ? Icons.play_arrow_rounded
+                        //         : Icons.pause_rounded,
+                        //     color: _isAutoplayPaused
+                        //         ? AppTheme.primary
+                        //         : const Color(0xFF94A3B8),
+                        //     size: 20,
+                        //   ),
+                        //   onPressed: () {
+                        //     setState(() {
+                        //       _isAutoplayPaused = !_isAutoplayPaused;
+                        //     });
+                        //   },
+                        // ),
+                        // Text(
+                        //   _isAutoplayPaused
+                        //       ? 'RESUME SLIDESHOW'
+                        //       : 'PAUSE SLIDESHOW',
+                        //   style: GoogleFonts.inter(
+                        //     fontSize: 10,
+                        //     fontWeight: FontWeight.bold,
+                        //     color: _isAutoplayPaused
+                        //         ? AppTheme.primary
+                        //         : const Color(0xFF64748B),
+                        //     letterSpacing: 0.5,
+                        //   ),
+                        // ),
+                        const SizedBox(width: 20),
+                      ],
+                      Text(
+                        'Please collect when your number is Ready',
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: const Color(0xFF64748B),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+
+              // Centered branding: Name & Phone number displayed horizontally side-by-side
               Row(
                 mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Text(
-                    'CUSTOMER ORDER STATUS',
-                    style: GoogleFonts.outfit(
-                      fontSize: 24,
+                    'v£ly »ƒ£Šfzx',
+                    style: const TextStyle(
+                      fontFamily: 'Isiagni',
+                      fontSize: 62,
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  IconButton(
-                    icon: Icon(
-                      widget.isSeparateWindow ? Icons.close_rounded : (appSettings.extendQueueScreen ? Icons.fullscreen_exit_rounded : Icons.fullscreen_rounded),
-                      color: Colors.white70,
-                      size: 20,
-                    ),
-                    tooltip: widget.isSeparateWindow ? 'Close Window' : (appSettings.extendQueueScreen ? 'Exit Full Screen' : 'Go Full Screen'),
-                    onPressed: () async {
-                      if (widget.isSeparateWindow) {
-                        exit(0);
-                      } else {
-                        await appSettings.toggleExtendQueueScreen();
-                      }
-                    },
+                  const SizedBox(width: 24),
+                  Container(
+                    width: 1,
+                    height: 20,
+                    color: Colors.white30,
                   ),
-                ],
-              ),
-              Row(
-                children: [
-                  if (hasPromos) ...[
-                    IconButton(
-                      icon: Icon(
-                        _isAutoplayPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
-                        color: _isAutoplayPaused ? AppTheme.primary : const Color(0xFF94A3B8),
-                        size: 22,
-                      ),
-                      onPressed: () {
-                        setState(() {
-                          _isAutoplayPaused = !_isAutoplayPaused;
-                        });
-                      },
-                    ),
-                    Text(
-                      _isAutoplayPaused ? 'RESUME SLIDESHOW' : 'PAUSE SLIDESHOW',
-                      style: GoogleFonts.inter(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: _isAutoplayPaused ? AppTheme.primary : const Color(0xFF64748B),
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                    const SizedBox(width: 24),
-                  ],
+                  const SizedBox(width: 24),
                   Text(
-                    'Please collect when your number is Ready',
+                    '041 2283857',
                     style: GoogleFonts.inter(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      color: const Color(0xFF94A3B8),
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white70,
                     ),
                   ),
                 ],
@@ -928,30 +1248,6 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
                   );
                 }),
               ),
-              // Current Time Display
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1E293B).withOpacity(0.85),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.white.withOpacity(0.12), width: 1),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.access_time_rounded, color: Colors.white70, size: 16),
-                    const SizedBox(width: 8),
-                    Text(
-                      DateFormat('hh:mm a').format(DateTime.now()),
-                      style: GoogleFonts.outfit(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
               IconButton.filled(
                 icon: const Icon(Icons.close_rounded, color: Colors.white),
                 style: IconButton.styleFrom(
@@ -966,6 +1262,16 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
                 },
               ),
             ],
+          ),
+        ),
+
+        // Clock at the bottom center of the screen
+        Positioned(
+          bottom: 60,
+          left: 0,
+          right: 0,
+          child: Center(
+            child: const NeonDigitalClock(),
           ),
         ),
       ],
@@ -2369,5 +2675,176 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
       return idStr.substring(idStr.length - 3);
     }
     return idStr.padLeft(3, '0');
+  }
+}
+
+// ── Neon Digital Clock Widget ───────────────────────────────────────────────
+class NeonDigitalClock extends StatefulWidget {
+  const NeonDigitalClock({super.key});
+
+  @override
+  State<NeonDigitalClock> createState() => _NeonDigitalClockState();
+}
+
+class _NeonDigitalClockState extends State<NeonDigitalClock> {
+  late Timer _timer;
+  late DateTime _currentTime;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentTime = DateTime.now();
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (mounted) {
+        setState(() {
+          _currentTime = DateTime.now();
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hours = DateFormat('hh').format(_currentTime);
+    final minutes = DateFormat('mm').format(_currentTime);
+    final seconds = DateFormat('ss').format(_currentTime);
+    final period = DateFormat('a').format(_currentTime);
+    final showColon = _currentTime.second % 2 == 0;
+
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        gradient: const LinearGradient(
+          colors: [
+            Color(0xFFFF007F), // Neon Pink/Magenta
+            Color(0xFF00F0FF), // Neon Cyan/Blue
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFFF007F).withOpacity(0.4),
+            blurRadius: 20,
+            spreadRadius: 2,
+            offset: const Offset(-2, -2),
+          ),
+          BoxShadow(
+            color: const Color(0xFF00F0FF).withOpacity(0.4),
+            blurRadius: 20,
+            spreadRadius: 2,
+            offset: const Offset(2, 2),
+          ),
+        ],
+      ),
+      child: Container(
+        margin: const EdgeInsets.all(2.5), // Border thickness
+        padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0B0D1B), // Dark digital clock background
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            _buildDigitGroup(hours),
+            _buildColon(showColon),
+            _buildDigitGroup(minutes),
+            _buildColon(showColon),
+            _buildDigitGroup(seconds),
+            const SizedBox(width: 16),
+            _buildAmPm(period),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDigitGroup(String digits) {
+    return ShaderMask(
+      shaderCallback: (bounds) => const LinearGradient(
+        colors: [
+          Color(0xFF00F0FF),
+          Color(0xFFFF007F),
+        ],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ).createShader(bounds),
+      child: Text(
+        digits,
+        style: GoogleFonts.orbitron(
+          fontSize: 42,
+          fontWeight: FontWeight.w600,
+          color: Colors.white,
+          letterSpacing: 1.5,
+          fontFeatures: const [ui.FontFeature.tabularFigures()],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildColon(bool show) {
+    return AnimatedOpacity(
+      opacity: show ? 1.0 : 0.25,
+      duration: const Duration(milliseconds: 200),
+      child: ShaderMask(
+        shaderCallback: (bounds) => const LinearGradient(
+          colors: [
+            Color(0xFF00F0FF),
+            Color(0xFFFF007F),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ).createShader(bounds),
+        child: Text(
+          ':',
+          style: GoogleFonts.orbitron(
+            fontSize: 42,
+            fontWeight: FontWeight.w600,
+            color: Colors.white,
+            fontFeatures: const [ui.FontFeature.tabularFigures()],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAmPm(String amPm) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: const Color(0xFFFF007F).withOpacity(0.5),
+          width: 1.5,
+        ),
+      ),
+      child: ShaderMask(
+        shaderCallback: (bounds) => const LinearGradient(
+          colors: [
+            Color(0xFFFF007F),
+            Color(0xFF00F0FF),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ).createShader(bounds),
+        child: Text(
+          amPm,
+          style: GoogleFonts.orbitron(
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+            color: Colors.white,
+            fontFeatures: const [ui.FontFeature.tabularFigures()],
+          ),
+        ),
+      ),
+    );
   }
 }

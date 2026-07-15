@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hotel_pos/theme/theme.dart';
+import 'package:hotel_pos/services/api_service.dart';
 
 /// Holds company-wide settings that affect the entire app UI
 /// (sidebar logo text, primary color, logo image, branches list).
@@ -32,7 +33,9 @@ class AppSettingsController extends ChangeNotifier {
   String? _queueBgVideoUrl;
   String _queueBgVideoSource = 'link'; // 'link' | 'file'
   String? _queueBgVideoPath;
-  double _queueBgOpacity = 0.2;
+  double _queueBgOpacity = 0.8;
+  bool _isListeningToEvents = false;
+  bool _isApplyingWsUpdate = false;
 
   // ── Branches ───────────────────────────────────────────────────────────────
   List<BranchItem> _branches = [];
@@ -96,7 +99,7 @@ class AppSettingsController extends ChangeNotifier {
     _queueBgVideoUrl   = prefs.getString('queue_bg_video_url');
     _queueBgVideoSource = prefs.getString('queue_bg_video_source') ?? 'link';
     _queueBgVideoPath   = prefs.getString('queue_bg_video_path');
-    _queueBgOpacity    = prefs.getDouble('queue_bg_opacity') ?? 0.2;
+    _queueBgOpacity    = prefs.getDouble('queue_bg_opacity') ?? 0.8;
 
     final branchJson = prefs.getString('branches_json');
     if (branchJson != null) {
@@ -108,6 +111,21 @@ class AppSettingsController extends ChangeNotifier {
         BranchItem(id: 1, name: 'Main Branch', city: 'Colombo', state: 'Western', status: 'Active'),
       ];
     }
+
+    if (!_isListeningToEvents) {
+      _isListeningToEvents = true;
+      APIService.instance.eventStream.listen((event) async {
+        if (event['type'] == 'settings_updated' && event['settings'] != null) {
+          _isApplyingWsUpdate = true;
+          try {
+            updateFromMap(event['settings']);
+          } finally {
+            _isApplyingWsUpdate = false;
+          }
+        }
+      });
+    }
+
     notifyListeners();
   }
 
@@ -247,6 +265,58 @@ class AppSettingsController extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('extend_pos_screen', _extendPosScreen);
     notifyListeners();
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'queueBgType': _queueBgType,
+      'queueBgImageBase64': _queueBgImageBase64,
+      'queueBgVideoUrl': _queueBgVideoUrl,
+      'queueBgVideoSource': _queueBgVideoSource,
+      'queueBgVideoPath': _queueBgVideoPath,
+      'queueBgOpacity': _queueBgOpacity,
+    };
+  }
+
+  void updateFromMap(Map<String, dynamic> map) async {
+    if (map.containsKey('queueBgType')) _queueBgType = map['queueBgType'] ?? 'none';
+    if (map.containsKey('queueBgImageBase64')) _queueBgImageBase64 = map['queueBgImageBase64'];
+    if (map.containsKey('queueBgVideoUrl')) _queueBgVideoUrl = map['queueBgVideoUrl'];
+    if (map.containsKey('queueBgVideoSource')) _queueBgVideoSource = map['queueBgVideoSource'] ?? 'link';
+    if (map.containsKey('queueBgVideoPath')) _queueBgVideoPath = map['queueBgVideoPath'];
+    if (map.containsKey('queueBgOpacity')) {
+      _queueBgOpacity = double.tryParse(map['queueBgOpacity'].toString()) ?? 0.8;
+    }
+    notifyListeners();
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('queue_bg_type', _queueBgType);
+      if (_queueBgImageBase64 != null) {
+        await prefs.setString('queue_bg_image', _queueBgImageBase64!);
+      }
+      if (_queueBgVideoUrl != null) {
+        await prefs.setString('queue_bg_video_url', _queueBgVideoUrl!);
+      }
+      await prefs.setString('queue_bg_video_source', _queueBgVideoSource);
+      if (_queueBgVideoPath != null) {
+        await prefs.setString('queue_bg_video_path', _queueBgVideoPath!);
+      }
+      await prefs.setDouble('queue_bg_opacity', _queueBgOpacity);
+    } catch (_) {}
+  }
+
+  @override
+  void notifyListeners() {
+    super.notifyListeners();
+    if (!_isApplyingWsUpdate) {
+      try {
+        APIService.instance.sendWebSocketMessage({
+          'type': 'settings_updated',
+          'settings': toMap(),
+        });
+      } catch (_) {}
+    }
   }
 }
 
