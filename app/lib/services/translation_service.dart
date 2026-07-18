@@ -74,7 +74,7 @@ class TranslationService {
     'Search by name, email, or phone...': 'නම, ඊමේල් හෝ දුරකථනයෙන් සොයන්න...',
     'Reminder!': 'මතක් කිරීමක්!',
     'Dummy data will be reset in every 60 minutes.': 'සෑම විනාඩි 60 කට වරක් දත්ත යළි පිහිටුවනු ලැබේ.',
-    'Version : 3.9': 'අනුවාදය : 3.9',
+    'Version :': 'අනුවාදය : ',
     'USERS': 'පරිශීලකයින්',
     'REPORTS & SHIFTS': 'වාර්තා සහ මාරුවීම්',
     'STOCKS': 'තොග',

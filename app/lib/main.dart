@@ -11,9 +11,18 @@ import 'screens/order_queue_screen.dart';
 
 import 'package:flutter/foundation.dart';
 import 'package:video_player_win/video_player_win_plugin.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Load app version from pubspec/binary config dynamically
+  try {
+    final packageInfo = await PackageInfo.fromPlatform();
+    POSController.appVersion = '${packageInfo.version}+${packageInfo.buildNumber}';
+  } catch (e) {
+    print('Failed to load package info version: \$e');
+  }
 
   // Register Windows Video Player platform implementation
   if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
@@ -66,7 +75,7 @@ class HotelPOSApp extends StatelessWidget {
     }
 
     return MaterialApp(
-      title: 'FoodKing POS - LAN-first Restaurant POS System',
+      title: 'Hotel POS System',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,

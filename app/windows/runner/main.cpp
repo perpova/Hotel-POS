@@ -63,7 +63,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
     }
   }
 
-  if (!window.Create(L"hotel_pos", origin, size)) {
+  if (!window.Create(L"Hotel POS System", origin, size)) {
     return EXIT_FAILURE;
   }
   window.SetQuitOnClose(true);

@@ -10,6 +10,8 @@ import 'package:hotel_pos/services/local_db.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class POSController extends ChangeNotifier {
+  static String appVersion = '0.0.0';
+
   final APIService _api = APIService.instance;
   final FlutterTts _tts = FlutterTts();
 

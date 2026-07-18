@@ -1,4 +1,5 @@
 import 'dart:io';
+import '../services/update_service.dart';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -48,6 +49,86 @@ class _MainLayoutState extends State<MainLayout> {
   bool _isSidebarCollapsed = false;
   bool _hasShownLowStockWarning = false;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
+  // ── Update state (managed via UpdateService) ────────────────────────────
+  final UpdateService _updateService = UpdateService();
+  String _latestVersion = POSController.appVersion;
+  bool _isCheckingUpdate = false;
+  /// 'up_to_date' | 'checking' | 'update_available' | 'downloading' | 'error'
+  String _updateStatus = 'up_to_date';
+  String _updateUrl = 'https://github.com/Perpova/hotel-pos/releases/latest';
+  bool _isDirectDownload = false;
+  double _downloadProgress = 0.0;
+
+
+
+  // ── Update helpers (delegating to UpdateService) ─────────────────────────
+
+  Future<void> _checkForUpdates() async {
+    if (_isCheckingUpdate) return;
+    if (mounted) setState(() {
+      _isCheckingUpdate = true;
+      _updateStatus = 'checking';
+    });
+    try {
+      final info = await _updateService.checkForUpdate();
+      if (!mounted) return;
+      if (info.hasUpdate) {
+        setState(() {
+          _latestVersion    = info.latestVersion;
+          _updateStatus     = 'update_available';
+          _updateUrl        = info.downloadUrl ??
+              'https://github.com/Perpova/hotel-pos/releases/latest';
+          _isDirectDownload = info.isDirectDownload;
+        });
+      } else if (info.latestVersion.isEmpty) {
+        setState(() => _updateStatus = 'error');
+      } else {
+        setState(() {
+          _latestVersion = POSController.appVersion;
+          _updateStatus  = 'up_to_date';
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _updateStatus = 'error');
+    } finally {
+      if (mounted) setState(() => _isCheckingUpdate = false);
+    }
+  }
+
+  Future<void> _startDownloadUpdate() async {
+    if (!_isDirectDownload) {
+      // No direct zip asset — open the releases page in the browser
+      _updateService.openReleasePage(_updateUrl);
+      return;
+    }
+
+    if (mounted) setState(() {
+      _updateStatus     = 'downloading';
+      _downloadProgress = 0.0;
+    });
+
+    await _updateService.startWindowsUpdate(
+      _updateUrl,
+      onProgress: (p) {
+        if (mounted) setState(() => _downloadProgress = p);
+      },
+      onError: (e) {
+        if (mounted) {
+          setState(() => _updateStatus = 'error');
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Update failed: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      },
+      onComplete: () {
+        // App is about to exit — nothing to do
+      },
+    );
+  }
 
   final List<String> _titles = [
     'Dashboard',
@@ -140,6 +221,7 @@ class _MainLayoutState extends State<MainLayout> {
   @override
   void initState() {
     super.initState();
+    _checkForUpdates();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final controller = Provider.of<POSController>(context, listen: false);
       final appSettings = Provider.of<AppSettingsController>(context, listen: false);
@@ -733,6 +815,9 @@ class _MainLayoutState extends State<MainLayout> {
                           ),
                         );
                       }).toList(),
+                      if (cat.title == 'SYSTEM') ...[
+                        _buildSidebarUpdateWidget(),
+                      ],
                     ],
                   );
                 },
@@ -870,7 +955,18 @@ class _MainLayoutState extends State<MainLayout> {
                           final cn = appS.companyName;
                           final h = cn.length > 4 ? cn.length ~/ 2 : cn.length;
                           return Row(children: [
-                            if (appS.faviconBase64 != null && appS.faviconBase64!.isNotEmpty)
+                            if (appS.logoBase64 != null && appS.logoBase64!.isNotEmpty)
+                              Container(
+                                width: 28, height: 28,
+                                margin: const EdgeInsets.only(right: 8),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                                ),
+                                clipBehavior: Clip.antiAlias,
+                                child: Base64ImageWidget(base64Str: appS.logoBase64, fit: BoxFit.cover),
+                              )
+                            else if (appS.faviconBase64 != null && appS.faviconBase64!.isNotEmpty)
                               Container(
                                 width: 28, height: 28,
                                 margin: const EdgeInsets.only(right: 8),
@@ -1155,7 +1251,7 @@ class _MainLayoutState extends State<MainLayout> {
                                             style: GoogleFonts.inter(
                                               fontSize: 12,
                                               fontWeight: FontWeight.bold,
-                                              color: const Color(0xFF1E293B),
+                                              color: AppTheme.textLightPrimary,
                                             ),
                                           ),
                                         ),
@@ -1637,6 +1733,82 @@ class _MainLayoutState extends State<MainLayout> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSidebarUpdateWidget() {
+    IconData icon;
+    Color iconColor;
+    String label;
+    Color textColor;
+    VoidCallback? onTap;
+
+    final isDark = AppTheme.isDarkMode;
+
+    if (_updateStatus == 'checking') {
+      icon = Icons.sync;
+      iconColor = const Color(0xFFE91E63);
+      label = 'Checking for updates...'.tr(context);
+      textColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF7A869A);
+      onTap = null;
+    } else if (_updateStatus == 'downloading') {
+      icon = Icons.downloading;
+      iconColor = const Color(0xFFE91E63);
+      label = '${'Downloading...'.tr(context)} ${(_downloadProgress * 100).toStringAsFixed(0)}%';
+      textColor = const Color(0xFFE91E63);
+      onTap = null;
+    } else if (_updateStatus == 'update_available') {
+      icon = Icons.system_update_alt;
+      iconColor = const Color(0xFFEF4444);
+      label = 'Update: $_latestVersion'.tr(context);
+      textColor = const Color(0xFFEF4444);
+      onTap = _startDownloadUpdate;
+    } else if (_updateStatus == 'error') {
+      icon = Icons.error_outline;
+      iconColor = const Color(0xFFF43F5E);
+      label = 'Update check failed'.tr(context);
+      textColor = isDark ? const Color(0xFFF43F5E) : const Color(0xFF7A869A);
+      onTap = _checkForUpdates;
+    } else {
+      icon = Icons.check_circle_outline;
+      iconColor = const Color(0xFF10B981);
+      label = 'Version : v'.tr(context) + POSController.appVersion;
+      textColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF7A869A);
+      onTap = _checkForUpdates;
+    }
+
+    final isInteractive = _updateStatus == 'downloading' || _updateStatus == 'checking';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 2),
+      child: ListTile(
+        hoverColor: Colors.pink.withOpacity(0.02),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        leading: isInteractive
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFE91E63)),
+                ),
+              )
+            : Icon(
+                icon,
+                color: iconColor,
+                size: 18,
+              ),
+        title: Text(
+          label,
+          style: GoogleFonts.inter(
+            fontSize: 13,
+            fontWeight: _updateStatus == 'update_available' || _updateStatus == 'downloading' ? FontWeight.bold : FontWeight.w500,
+            color: textColor,
+          ),
+        ),
+        onTap: onTap,
+        dense: true,
       ),
     );
   }

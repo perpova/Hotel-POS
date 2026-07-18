@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../api_service.dart';
 import '../../services/translation_service.dart';
 import '../../theme.dart';
+import '../../controllers/pos_controller.dart';
 
 class GreetingHeader extends StatelessWidget {
   const GreetingHeader({Key? key}) : super(key: key);
@@ -57,7 +58,7 @@ class GreetingHeader extends StatelessWidget {
             border: Border.all(color: AppTheme.isDarkMode ? const Color(0xFFE91E63).withOpacity(0.3) : const Color(0xFFFFC0CB), width: 1.5),
           ),
           child: Text(
-            'Version : 3.9'.tr(context),
+            'Version :'.tr(context) + POSController.appVersion,
             style: GoogleFonts.outfit(
               fontSize: 12,
               fontWeight: FontWeight.bold,
