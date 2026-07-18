@@ -36,7 +36,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final isDesktop = size.width > 950;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: AppTheme.bgLight,
       body: controller.isLoading
           ? Center(child: CircularProgressIndicator(color: AppTheme.primary))
           : RefreshIndicator(

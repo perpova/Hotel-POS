@@ -363,7 +363,7 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
                 Row(
                   children: [
                     Text('Dashboard', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
-                    const Icon(Icons.chevron_right, size: 14, color: AppTheme.textLightSecondary),
+                    Icon(Icons.chevron_right, size: 14, color: AppTheme.textLightSecondary),
                     Text('POS Orders', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.primary, fontWeight: FontWeight.w600)),
                   ],
                 ),
@@ -976,9 +976,9 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
                 Row(
                   children: [
                     Text('Dashboard', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
-                    const Icon(Icons.chevron_right, size: 14, color: AppTheme.textLightSecondary),
+                    Icon(Icons.chevron_right, size: 14, color: AppTheme.textLightSecondary),
                     Text('POS Orders', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
-                    const Icon(Icons.chevron_right, size: 14, color: AppTheme.textLightSecondary),
+                    Icon(Icons.chevron_right, size: 14, color: AppTheme.textLightSecondary),
                     Text('View', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.primary, fontWeight: FontWeight.w600)),
                   ],
                 ),

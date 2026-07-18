@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../theme.dart';
 
 class TopCustomersList extends StatelessWidget {
   final List<dynamic>? customers;
@@ -22,10 +23,10 @@ class TopCustomersList extends StatelessWidget {
 
     return Card(
       elevation: 0,
-      color: Colors.white,
+      color: AppTheme.cardLight,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: Color(0xFFF1F5F9)),
+        side: BorderSide(color: AppTheme.borderLight),
       ),
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -37,7 +38,7 @@ class TopCustomersList extends StatelessWidget {
               style: GoogleFonts.outfit(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: const Color(0xFF1E293B),
+                color: AppTheme.textLightPrimary,
               ),
             ),
             const SizedBox(height: 16),
@@ -48,9 +49,9 @@ class TopCustomersList extends StatelessWidget {
                     margin: const EdgeInsets.only(right: 8, left: 8),
                     padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: AppTheme.cardLight,
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                      border: Border.all(color: AppTheme.borderLight),
                     ),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -59,7 +60,7 @@ class TopCustomersList extends StatelessWidget {
                         Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFE0F2FE), // Light blue avatar bg
+                            color: AppTheme.isDarkMode ? const Color(0xFF0369A1).withOpacity(0.2) : const Color(0xFFE0F2FE), // Light blue avatar bg
                             shape: BoxShape.circle,
                           ),
                           child: const Icon(
@@ -78,7 +79,7 @@ class TopCustomersList extends StatelessWidget {
                           style: GoogleFonts.inter(
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
-                            color: const Color(0xFF1E293B),
+                            color: AppTheme.textLightPrimary,
                           ),
                         ),
                         const SizedBox(height: 12),

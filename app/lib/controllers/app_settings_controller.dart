@@ -26,6 +26,7 @@ class AppSettingsController extends ChangeNotifier {
   bool _cartOnLeft = false;
   bool _extendQueueScreen = false;
   bool _extendPosScreen = false;
+  ThemeMode _themeMode = ThemeMode.system;
 
   // ── Queue Screen Background ────────────────────────────────────────────────
   String _queueBgType = 'none'; // 'none' | 'image' | 'video'
@@ -58,6 +59,7 @@ class AppSettingsController extends ChangeNotifier {
   bool get cartOnLeft        => _cartOnLeft;
   bool get extendQueueScreen => _extendQueueScreen;
   bool get extendPosScreen   => _extendPosScreen;
+  ThemeMode get themeMode    => _themeMode;
 
   String get queueBgType => _queueBgType;
   String? get queueBgImageBase64 => _queueBgImageBase64;
@@ -93,6 +95,18 @@ class AppSettingsController extends ChangeNotifier {
     _cartOnLeft       = prefs.getBool('cart_on_left') ?? false;
     _extendQueueScreen = prefs.getBool('extend_queue_screen') ?? false;
     _extendPosScreen   = prefs.getBool('extend_pos_screen') ?? false;
+
+    final themeStr = prefs.getString('theme_mode') ?? 'system';
+    if (themeStr == 'dark') {
+      _themeMode = ThemeMode.dark;
+    } else if (themeStr == 'light') {
+      _themeMode = ThemeMode.light;
+    } else {
+      _themeMode = ThemeMode.system;
+    }
+    AppTheme.isDarkMode = _themeMode == ThemeMode.dark ||
+        (_themeMode == ThemeMode.system &&
+            WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark);
 
     _queueBgType       = prefs.getString('queue_bg_type') ?? 'none';
     _queueBgImageBase64 = prefs.getString('queue_bg_image');
@@ -328,6 +342,21 @@ class AppSettingsController extends ChangeNotifier {
       }
       await prefs.setDouble('queue_bg_opacity', _queueBgOpacity);
     } catch (_) {}
+  }
+
+  Future<void> saveThemeMode(ThemeMode mode) async {
+    _themeMode = mode;
+    final prefs = await SharedPreferences.getInstance();
+    String modeStr = 'system';
+    if (mode == ThemeMode.dark) modeStr = 'dark';
+    if (mode == ThemeMode.light) modeStr = 'light';
+    await prefs.setString('theme_mode', modeStr);
+    
+    AppTheme.isDarkMode = mode == ThemeMode.dark ||
+        (mode == ThemeMode.system &&
+            WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark);
+            
+    notifyListeners();
   }
 
   @override

@@ -233,7 +233,7 @@ class _ItemsScreenState extends State<ItemsScreen> {
     final paginatedList = totalRows > 0 ? filtered.sublist(startIdx, endIdx) : <ProductModel>[];
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC), // Slate background
+      backgroundColor: AppTheme.bgLight, // Slate background
       body: _isLoading
           ? Center(child: CircularProgressIndicator(color: AppTheme.primary))
           : Padding(
@@ -249,9 +249,9 @@ class _ItemsScreenState extends State<ItemsScreen> {
                   Expanded(
                     child: Container(
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: AppTheme.cardLight,
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                        border: Border.all(color: AppTheme.borderLight),
                         boxShadow: [
                           BoxShadow(
                             color: Colors.black.withOpacity(0.02),
@@ -266,38 +266,38 @@ class _ItemsScreenState extends State<ItemsScreen> {
                           Expanded(
                             child: SingleChildScrollView(
                               child: DataTable(
-                                headingRowColor: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
+                               headingRowColor: WidgetStateProperty.all(AppTheme.bgLight),
                                 dataRowMinHeight: 60,
                                 dataRowMaxHeight: 60,
                                 columns: [
                                   DataColumn(
                                     label: Text(
                                       'NAME',
-                                      style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF64748B)),
+                                      style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary),
                                     ),
                                   ),
                                   DataColumn(
                                     label: Text(
                                       'CATEGORY',
-                                      style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF64748B)),
+                                      style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary),
                                     ),
                                   ),
                                   DataColumn(
                                     label: Text(
                                       'PRICE',
-                                      style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF64748B)),
+                                      style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary),
                                     ),
                                   ),
                                   DataColumn(
                                     label: Text(
                                       'STATUS',
-                                      style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF64748B)),
+                                      style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary),
                                     ),
                                   ),
                                   DataColumn(
                                     label: Text(
                                       'ACTION',
-                                      style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF64748B)),
+                                      style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary),
                                     ),
                                   ),
                                 ],
@@ -331,7 +331,7 @@ class _ItemsScreenState extends State<ItemsScreen> {
                                             const SizedBox(width: 12),
                                             Text(
                                               product.name,
-                                              style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: const Color(0xFF1E293B)),
+                                              style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.textLightPrimary),
                                             ),
                                           ],
                                         ),
@@ -340,14 +340,14 @@ class _ItemsScreenState extends State<ItemsScreen> {
                                       DataCell(
                                         Text(
                                           cat.name,
-                                          style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569)),
+                                          style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightSecondary),
                                         ),
                                       ),
                                       // Price
                                       DataCell(
                                         Text(
                                           '${product.price.toStringAsFixed(2)}',
-                                          style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF1E293B)),
+                                          style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textLightPrimary),
                                         ),
                                       ),
                                       // Status Badge
@@ -442,20 +442,20 @@ class _ItemsScreenState extends State<ItemsScreen> {
             width: isCompact ? double.infinity : 260,
             height: 40,
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: AppTheme.cardLight,
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
+              border: Border.all(color: AppTheme.borderLight),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Row(
               children: [
-                const Icon(Icons.search, color: Color(0xFF94A3B8), size: 18),
+                Icon(Icons.search, color: AppTheme.textLightSecondary, size: 18),
                 const SizedBox(width: 8),
                 Expanded(
                   child: TextField(
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       hintText: 'Search Item...',
-                      hintStyle: TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+                      hintStyle: TextStyle(color: AppTheme.textLightSecondary, fontSize: 13),
                       border: InputBorder.none,
                       isDense: true,
                       contentPadding: EdgeInsets.zero,
@@ -534,26 +534,26 @@ class _ItemsScreenState extends State<ItemsScreen> {
             icon: const Icon(Icons.upload_file_outlined, size: 16),
             label: const Text('Export'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.white,
-              foregroundColor: const Color(0xFF64748B),
+              backgroundColor: AppTheme.cardLight,
+              foregroundColor: AppTheme.textLightSecondary,
               elevation: 0,
-              side: const BorderSide(color: Color(0xFFE2E8F0)),
+              side: BorderSide(color: AppTheme.borderLight),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               minimumSize: const Size(100, 40),
               textStyle: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold),
             ),
           ),
-
+ 
           // Import Excel Button
           ElevatedButton.icon(
             onPressed: _handleImportExcel,
             icon: const Icon(Icons.download_for_offline_outlined, size: 16),
             label: const Text('Import'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.white,
-              foregroundColor: const Color(0xFF64748B),
+              backgroundColor: AppTheme.cardLight,
+              foregroundColor: AppTheme.textLightSecondary,
               elevation: 0,
-              side: const BorderSide(color: Color(0xFFE2E8F0)),
+              side: BorderSide(color: AppTheme.borderLight),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               minimumSize: const Size(100, 40),
               textStyle: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold),
@@ -603,15 +603,16 @@ class _ItemsScreenState extends State<ItemsScreen> {
       height: 40,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppTheme.cardLight,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: AppTheme.borderLight),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<T>(
           value: value,
-          hint: Text(hint, style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF64748B))),
-          style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF1E293B), fontWeight: FontWeight.w500),
+          dropdownColor: AppTheme.cardLight,
+          hint: Text(hint, style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightSecondary)),
+          style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary, fontWeight: FontWeight.w500),
           items: items,
           onChanged: onChanged,
         ),
@@ -630,7 +631,7 @@ class _ItemsScreenState extends State<ItemsScreen> {
             totalRows == 0
                 ? 'Showing 0 to 0 of 0 entries'
                 : 'Showing ${startIdx + 1} to $endIdx of $totalRows entries',
-            style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF64748B)),
+            style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightSecondary),
           ),
           
           // Page Navigation Buttons
@@ -667,7 +668,7 @@ class _ItemsScreenState extends State<ItemsScreen> {
                           style: GoogleFonts.inter(
                             fontSize: 13,
                             fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                            color: isSelected ? AppTheme.primary : Color(0xFF64748B),
+                            color: isSelected ? AppTheme.primary : AppTheme.textLightSecondary,
                           ),
                         ),
                       ),
@@ -1288,15 +1289,16 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFFCBD5E1)),
+                  border: Border.all(color: AppTheme.borderDark),
                 ),
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<int>(
                     value: _selectedCategoryId,
-                    hint: const Text('Select category', style: TextStyle(fontSize: 13)),
+                    dropdownColor: AppTheme.cardLight,
+                    hint: Text('Select category', style: TextStyle(fontSize: 13, color: AppTheme.textLightSecondary)),
                     isExpanded: true,
                     items: _localCategories.map((c) {
-                      return DropdownMenuItem(value: c.id, child: Text(c.name, style: GoogleFonts.inter(fontSize: 13)));
+                      return DropdownMenuItem(value: c.id, child: Text(c.name, style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary)));
                     }).toList(),
                     onChanged: (val) {
                       setState(() {
@@ -1598,10 +1600,10 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
     return Container(
       width: drawerWidth,
       height: size.height,
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.only(topLeft: Radius.circular(16), bottomLeft: Radius.circular(16)),
-        boxShadow: [
+      decoration: BoxDecoration(
+        color: AppTheme.cardLight,
+        borderRadius: const BorderRadius.only(topLeft: Radius.circular(16), bottomLeft: Radius.circular(16)),
+        boxShadow: const [
           BoxShadow(color: Colors.black12, blurRadius: 16, offset: Offset(-4, 0)),
         ],
       ),
@@ -1612,18 +1614,18 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
             // Drawer Header
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-              decoration: const BoxDecoration(
-                border: Border(bottom: BorderSide(color: Color(0xFFF1F5F9))),
+              decoration: BoxDecoration(
+                border: Border(bottom: BorderSide(color: AppTheme.dividerColor)),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
                     widget.product != null ? 'Edit Product' : 'Add Product',
-                    style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)),
+                    style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close, color: Color(0xFF64748B)),
+                    icon: Icon(Icons.close, color: AppTheme.textLightSecondary),
                     onPressed: () => Navigator.pop(context),
                   ),
                 ],
@@ -1747,7 +1749,7 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
                           padding: const EdgeInsets.symmetric(vertical: 8.0),
                           child: Text(
                             'No sizes added. Click "Add Size" to configure.',
-                            style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8), fontStyle: FontStyle.italic),
+                            style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary, fontStyle: FontStyle.italic),
                           ),
                         )
                       else
@@ -1812,7 +1814,7 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
                           padding: const EdgeInsets.symmetric(vertical: 8.0),
                           child: Text(
                             'No extras added. Click "Add Extra" to configure.',
-                            style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8), fontStyle: FontStyle.italic),
+                            style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary, fontStyle: FontStyle.italic),
                           ),
                         )
                       else
@@ -1865,23 +1867,24 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
                                         padding: const EdgeInsets.symmetric(horizontal: 10),
                                         decoration: BoxDecoration(
                                           borderRadius: BorderRadius.circular(6),
-                                          border: Border.all(color: const Color(0xFFCBD5E1)),
+                                          border: Border.all(color: AppTheme.borderDark),
                                         ),
                                         child: DropdownButtonHideUnderline(
                                           child: DropdownButton<int?>(
                                             value: ex['ingredient_id'],
-                                            hint: const Text('No Linked Ingredient', style: TextStyle(fontSize: 11)),
+                                            dropdownColor: AppTheme.cardLight,
+                                            hint: Text('No Linked Ingredient', style: TextStyle(fontSize: 11, color: AppTheme.textLightSecondary)),
                                             isExpanded: true,
-                                            style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF1E293B)),
+                                            style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightPrimary),
                                             items: [
-                                              const DropdownMenuItem<int?>(
+                                              DropdownMenuItem<int?>(
                                                 value: null,
-                                                child: Text('No Linked Ingredient', style: TextStyle(fontSize: 11)),
+                                                child: Text('No Linked Ingredient', style: TextStyle(fontSize: 11, color: AppTheme.textLightSecondary)),
                                               ),
                                               ...widget.ingredients.map((ing) {
                                                 return DropdownMenuItem<int?>(
                                                   value: ing.id,
-                                                  child: Text('${ing.name} (${ing.unit})', style: const TextStyle(fontSize: 11)),
+                                                  child: Text('${ing.name} (${ing.unit})', style: TextStyle(fontSize: 11, color: AppTheme.textLightPrimary)),
                                                 );
                                               }),
                                             ],
@@ -1914,11 +1917,14 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
                                     const SizedBox(width: 32), // space aligning with delete button
                                   ],
                                 ),
-                                const Divider(height: 12, color: Color(0xFFE2E8F0)),
+                                Divider(height: 12, color: AppTheme.dividerColor),
                               ],
                             ),
                           );
                         }),
+                      if (_hasExtras) ...[
+                        Divider(height: 12, color: AppTheme.borderLight),
+                      ],
                       const SizedBox(height: 16),
                     ],
 
@@ -1927,9 +1933,9 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                           color: const Color(0xFFF8FAFC),
+                           color: AppTheme.bgLight,
                            borderRadius: BorderRadius.circular(8),
-                           border: Border.all(color: const Color(0xFFE2E8F0)),
+                           border: Border.all(color: AppTheme.borderLight),
                         ),
                         child: Column(
                           children: () {
@@ -1942,15 +1948,15 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
                               return [
                                 Padding(
                                   padding: const EdgeInsets.all(8.0),
-                                  child: Text('No drink items found in catalog.', style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8), fontStyle: FontStyle.italic)),
+                                  child: Text('No drink items found in catalog.', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary, fontStyle: FontStyle.italic)),
                                 )
                               ];
                             }
                             return drinksProducts.map((p) {
                               final isChecked = _selectedAddons.contains(p.id);
                               return CheckboxListTile(
-                                title: Text(p.name, style: GoogleFonts.inter(fontSize: 12)),
-                                secondary: Text('LKR ${p.price.toStringAsFixed(0)}', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold)),
+                                title: Text(p.name, style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightPrimary)),
+                                secondary: Text('LKR ${p.price.toStringAsFixed(0)}', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
                                 value: isChecked,
                                 activeColor: AppTheme.primary,
                                 onChanged: (val) {
@@ -1992,7 +1998,7 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
                         padding: const EdgeInsets.symmetric(vertical: 8.0),
                         child: Text(
                           'No ingredients linked. Click "Add Ingredient" to configure recipe.',
-                          style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8), fontStyle: FontStyle.italic),
+                          style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary, fontStyle: FontStyle.italic),
                         ),
                       )
                     else
@@ -2032,18 +2038,19 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
                                   padding: const EdgeInsets.symmetric(horizontal: 10),
                                   decoration: BoxDecoration(
                                     borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(color: const Color(0xFFCBD5E1)),
+                                    border: Border.all(color: AppTheme.borderDark),
                                   ),
                                   child: DropdownButtonHideUnderline(
                                     child: DropdownButton<int?>(
                                       value: item['ingredient_id'],
-                                      hint: const Text('Select Ingredient', style: TextStyle(fontSize: 11)),
+                                      dropdownColor: AppTheme.cardLight,
+                                      hint: Text('Select Ingredient', style: TextStyle(fontSize: 11, color: AppTheme.textLightSecondary)),
                                       isExpanded: true,
-                                      style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF1E293B)),
+                                      style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightPrimary),
                                       items: widget.ingredients.map((ing) {
                                         return DropdownMenuItem<int?>(
                                           value: ing.id,
-                                          child: Text('${ing.name} (${ing.unit})', style: const TextStyle(fontSize: 11)),
+                                          child: Text('${ing.name} (${ing.unit})', style: TextStyle(fontSize: 11, color: AppTheme.textLightPrimary)),
                                         );
                                       }).toList(),
                                       onChanged: (val) {
@@ -2064,14 +2071,15 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
                                     padding: const EdgeInsets.symmetric(horizontal: 10),
                                     decoration: BoxDecoration(
                                       borderRadius: BorderRadius.circular(6),
-                                      border: Border.all(color: const Color(0xFFCBD5E1)),
+                                      border: Border.all(color: AppTheme.borderDark),
                                     ),
                                     child: DropdownButtonHideUnderline(
                                       child: DropdownButton<String?>(
                                         value: currentSize,
-                                        hint: const Text('All Sizes', style: TextStyle(fontSize: 11)),
+                                        dropdownColor: AppTheme.cardLight,
+                                        hint: Text('All Sizes', style: TextStyle(fontSize: 11, color: AppTheme.textLightSecondary)),
                                         isExpanded: true,
-                                        style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF1E293B)),
+                                        style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightPrimary),
                                         items: dropdownItems,
                                         onChanged: (val) {
                                           setState(() {
@@ -2118,8 +2126,8 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
             // Drawer Footer Action Buttons
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-              decoration: const BoxDecoration(
-                border: Border(top: BorderSide(color: Color(0xFFF1F5F9))),
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: AppTheme.dividerColor)),
               ),
               child: Row(
                 children: [
@@ -2144,11 +2152,11 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
                   OutlinedButton(
                     onPressed: () => Navigator.pop(context),
                     style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: Color(0xFFE2E8F0)),
+                      side: BorderSide(color: AppTheme.borderLight),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       minimumSize: const Size(80, 44),
                     ),
-                    child: Text('Close', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: const Color(0xFF64748B))),
+                    child: Text('Close', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary)),
                   ),
                 ],
               ),
@@ -2164,7 +2172,7 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
       padding: const EdgeInsets.only(bottom: 6.0),
       child: Text(
         text,
-        style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF64748B)),
+        style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary),
       ),
     );
   }
@@ -2181,7 +2189,7 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
         ),
         Text(
           label,
-          style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF1E293B), fontWeight: FontWeight.w500),
+          style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary, fontWeight: FontWeight.w500),
         ),
       ],
     );
@@ -2190,12 +2198,12 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
   InputDecoration _buildInputDecoration(String hint) {
     return InputDecoration(
       hintText: hint,
-      hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+      hintStyle: TextStyle(color: AppTheme.textLightSecondary.withOpacity(0.7), fontSize: 13),
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       isDense: true,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+        borderSide: BorderSide(color: AppTheme.borderDark),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),

@@ -90,7 +90,7 @@ class _POSScreenState extends State<POSScreen> {
     final isDesktop = size.width > 950;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: AppTheme.bgLight,
       body: isDesktop
           ? Row(
               children: appSettings.cartOnLeft
@@ -100,7 +100,7 @@ class _POSScreenState extends State<POSScreen> {
                         flex: 2,
                         child: _buildBillingArea(controller),
                       ),
-                      const VerticalDivider(width: 1, color: Color(0xFFE2E8F0)),
+                      VerticalDivider(width: 1, color: AppTheme.borderLight),
                       // Right: Products Grid (71.4% width)
                       Expanded(
                         flex: 5,
@@ -113,7 +113,7 @@ class _POSScreenState extends State<POSScreen> {
                         flex: 5,
                         child: _buildProductsArea(controller),
                       ),
-                      const VerticalDivider(width: 1, color: Color(0xFFE2E8F0)),
+                      VerticalDivider(width: 1, color: AppTheme.borderLight),
                       // Right: Bill / Checkout Details (28.6% width)
                       Expanded(
                         flex: 2,
@@ -124,7 +124,7 @@ class _POSScreenState extends State<POSScreen> {
           : Column(
               children: [
                 Expanded(child: _buildProductsArea(controller)),
-                const Divider(height: 1),
+                Divider(height: 1, color: AppTheme.dividerColor),
                 SizedBox(
                   height: size.height * 0.55,
                   child: _buildBillingArea(controller),
@@ -140,7 +140,7 @@ class _POSScreenState extends State<POSScreen> {
   Widget _buildProductsArea(POSController controller) {
     final appSettings = Provider.of<AppSettingsController>(context);
     return Container(
-      color: const Color(0xFFF8FAFC),
+      color: AppTheme.bgLight,
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
@@ -151,9 +151,9 @@ class _POSScreenState extends State<POSScreen> {
                 child: Container(
                   height: 46,
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: AppTheme.cardLight,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                    border: Border.all(color: AppTheme.borderLight),
                   ),
                   child: Row(
                     children: [
@@ -161,10 +161,10 @@ class _POSScreenState extends State<POSScreen> {
                       Expanded(
                         child: TextField(
                           controller: _searchController,
-                          style: GoogleFonts.inter(fontSize: 13),
+                          style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary),
                           decoration: InputDecoration(
                             hintText: 'Search by Menu Item...',
-                            hintStyle: GoogleFonts.inter(color: const Color(0xFF94A3B8), fontSize: 13),
+                            hintStyle: GoogleFonts.inter(color: AppTheme.textLightSecondary, fontSize: 13),
                             border: InputBorder.none,
                             enabledBorder: InputBorder.none,
                             focusedBorder: InputBorder.none,
@@ -193,14 +193,13 @@ class _POSScreenState extends State<POSScreen> {
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
               Container(
                 height: 46,
                 width: 46,
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: AppTheme.cardLight,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                  border: Border.all(color: AppTheme.borderLight),
                 ),
                 child: IconButton(
                   icon: Icon(Icons.barcode_reader, color: AppTheme.primary, size: 20),
@@ -214,9 +213,9 @@ class _POSScreenState extends State<POSScreen> {
                 height: 46,
                 width: 46,
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: AppTheme.cardLight,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                  border: Border.all(color: AppTheme.borderLight),
                 ),
                 child: IconButton(
                   icon: Icon(
@@ -255,7 +254,7 @@ class _POSScreenState extends State<POSScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(Icons.fastfood_outlined, size: 64, color: AppTheme.textLightSecondary),
+                        Icon(Icons.fastfood_outlined, size: 64, color: AppTheme.textLightSecondary),
                         const SizedBox(height: 12),
                         Text(
                           'No items found.',
@@ -295,10 +294,10 @@ class _POSScreenState extends State<POSScreen> {
         width: 95,
         margin: const EdgeInsets.only(right: 12),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFFFFF0F5) : Colors.white,
+          color: isSelected ? AppTheme.primary.withOpacity(0.12) : AppTheme.cardLight,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isSelected ? AppTheme.primary : Color(0xFFE2E8F0),
+            color: isSelected ? AppTheme.primary : AppTheme.borderLight,
             width: isSelected ? 1.5 : 1,
           ),
           boxShadow: isSelected
@@ -330,14 +329,14 @@ class _POSScreenState extends State<POSScreen> {
                       fit: BoxFit.cover,
                       fallback: Icon(
                         icon,
-                        color: isSelected ? AppTheme.primary : Color(0xFF64748B),
+                        color: isSelected ? AppTheme.primary : AppTheme.textLightSecondary,
                         size: 24,
                       ),
                     ),
                   )
                 : Icon(
                     icon,
-                    color: isSelected ? AppTheme.primary : Color(0xFF64748B),
+                    color: isSelected ? AppTheme.primary : AppTheme.textLightSecondary,
                     size: 24,
                   ),
             const SizedBox(height: 6),
@@ -351,7 +350,7 @@ class _POSScreenState extends State<POSScreen> {
                 style: GoogleFonts.inter(
                   fontSize: 10,
                   fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                  color: isSelected ? AppTheme.primary : Color(0xFF1E293B),
+                  color: isSelected ? AppTheme.primary : AppTheme.textLightPrimary,
                 ),
               ),
             ),
@@ -366,11 +365,11 @@ class _POSScreenState extends State<POSScreen> {
 
     return Card(
       elevation: 0,
-      color: Colors.white,
+      color: AppTheme.cardLight,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(
-          color: Color(0xFFF1F5F9),
+        side: BorderSide(
+          color: AppTheme.borderLight,
           width: 1.0,
         ),
       ),
@@ -457,7 +456,7 @@ class _POSScreenState extends State<POSScreen> {
                 product.name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF1E293B)),
+                style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textLightPrimary),
               ),
               if (product.sinhalaName != null) ...[
                 const SizedBox(height: 1),
@@ -568,7 +567,7 @@ class _POSScreenState extends State<POSScreen> {
     }
 
     return Container(
-      color: Colors.white,
+      color: AppTheme.cardLight,
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -595,9 +594,9 @@ class _POSScreenState extends State<POSScreen> {
                         height: 36,
                         padding: const EdgeInsets.symmetric(horizontal: 10),
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: AppTheme.cardLight,
                           borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                          border: Border.all(color: AppTheme.borderLight),
                         ),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -607,11 +606,11 @@ class _POSScreenState extends State<POSScreen> {
                                 controller.selectedCustomer != null
                                     ? '${controller.selectedCustomer!.name} (${controller.selectedCustomer!.phone})'
                                     : 'Select Customer',
-                                style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF1E293B), fontWeight: FontWeight.bold),
+                                style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightPrimary, fontWeight: FontWeight.bold),
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            const Icon(Icons.arrow_drop_down, color: Color(0xFF64748B), size: 18),
+                            Icon(Icons.arrow_drop_down, color: AppTheme.textLightSecondary, size: 18),
                           ],
                         ),
                       ),
@@ -621,9 +620,9 @@ class _POSScreenState extends State<POSScreen> {
                       Container(
                         constraints: const BoxConstraints(maxHeight: 200),
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: AppTheme.cardLight,
                           borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                          border: Border.all(color: AppTheme.borderLight),
                           boxShadow: [
                             BoxShadow(
                               color: Colors.black.withOpacity(0.05),
@@ -640,13 +639,13 @@ class _POSScreenState extends State<POSScreen> {
                               child: Container(
                                 height: 32,
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFFF1F5F9),
+                                  color: AppTheme.bgLight,
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: TextField(
                                   controller: _customerSearchController,
                                   autofocus: true,
-                                  style: GoogleFonts.inter(fontSize: 11),
+                                  style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightPrimary),
                                   onChanged: (val) {
                                     setState(() {
                                       _customerSearchQuery = val;
@@ -654,8 +653,8 @@ class _POSScreenState extends State<POSScreen> {
                                   },
                                   decoration: InputDecoration(
                                     hintText: 'Search customer name or phone...',
-                                    hintStyle: GoogleFonts.inter(fontSize: 10, color: const Color(0xFF94A3B8)),
-                                    prefixIcon: const Icon(Icons.search, size: 14, color: Color(0xFF94A3B8)),
+                                    hintStyle: GoogleFonts.inter(fontSize: 10, color: AppTheme.textLightSecondary),
+                                    prefixIcon: Icon(Icons.search, size: 14, color: AppTheme.textLightSecondary),
                                     border: InputBorder.none,
                                     isDense: true,
                                     contentPadding: const EdgeInsets.symmetric(vertical: 8),
@@ -663,7 +662,7 @@ class _POSScreenState extends State<POSScreen> {
                                 ),
                               ),
                             ),
-                            const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                            Divider(height: 1, color: AppTheme.borderLight),
                             Flexible(
                               child: ListView(
                                 shrinkWrap: true,
@@ -684,7 +683,7 @@ class _POSScreenState extends State<POSScreen> {
                                               style: GoogleFonts.inter(
                                                 fontSize: 11,
                                                 fontWeight: controller.selectedCustomer?.id == c.id ? FontWeight.bold : FontWeight.normal,
-                                                color: controller.selectedCustomer?.id == c.id ? AppTheme.primary : const Color(0xFF1E293B),
+                                                color: controller.selectedCustomer?.id == c.id ? AppTheme.primary : AppTheme.textLightPrimary,
                                               ),
                                             ),
                                             onTap: () {
@@ -735,9 +734,9 @@ class _POSScreenState extends State<POSScreen> {
                       height: 44,
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: AppTheme.cardLight,
                         borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                        border: Border.all(color: AppTheme.borderLight),
                       ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -750,12 +749,12 @@ class _POSScreenState extends State<POSScreen> {
                               style: GoogleFonts.inter(
                                 fontSize: 13,
                                 fontWeight: controller.selectedTable == null ? FontWeight.normal : FontWeight.bold,
-                                color: controller.selectedTable == null ? const Color(0xFF64748B) : const Color(0xFF1E293B),
+                                color: controller.selectedTable == null ? AppTheme.textLightSecondary : AppTheme.textLightPrimary,
                               ),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          const Icon(Icons.grid_view, size: 16, color: Color(0xFF64748B)),
+                          Icon(Icons.grid_view, size: 16, color: AppTheme.textLightSecondary),
                         ],
                       ),
                     ),
@@ -767,16 +766,17 @@ class _POSScreenState extends State<POSScreen> {
                     height: 44,
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: AppTheme.cardLight,
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                      border: Border.all(color: AppTheme.borderLight),
                     ),
                     child: DropdownButtonHideUnderline(
                       child: DropdownButtonFormField<String>(
                         value: controller.waiters.any((w) => w.name == controller.stewardName) ? controller.stewardName : null,
+                        dropdownColor: AppTheme.cardLight,
                         hint: Align(
                           alignment: Alignment.center,
-                          child: Text('Select Waiter', style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF64748B))),
+                          child: Text('Select Waiter', style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightSecondary)),
                         ),
                         alignment: Alignment.center,
                         decoration: const InputDecoration(
@@ -787,13 +787,13 @@ class _POSScreenState extends State<POSScreen> {
                           contentPadding: EdgeInsets.symmetric(vertical: 4),
                         ),
                         iconSize: 18,
-                        style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)),
+                        style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
                         items: [
                           ...controller.waiters.map((w) => DropdownMenuItem(
                                 value: w.name,
                                 child: Align(
                                   alignment: Alignment.center,
-                                  child: Text(w.name, style: GoogleFonts.inter(fontSize: 13)),
+                                  child: Text(w.name, style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary)),
                                 ),
                               )),
                         ],
@@ -809,16 +809,17 @@ class _POSScreenState extends State<POSScreen> {
               height: 44,
               padding: const EdgeInsets.symmetric(horizontal: 12),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: AppTheme.cardLight,
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: const Color(0xFFE2E8F0)),
+                border: Border.all(color: AppTheme.borderLight),
               ),
               child: DropdownButtonHideUnderline(
                 child: DropdownButtonFormField<String>(
                   value: controller.deliveryPlatform,
+                  dropdownColor: AppTheme.cardLight,
                   hint: Align(
                     alignment: Alignment.center,
-                    child: Text('Delivery Platform', style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF64748B))),
+                    child: Text('Delivery Platform', style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightSecondary)),
                   ),
                   alignment: Alignment.center,
                   decoration: const InputDecoration(
@@ -829,7 +830,7 @@ class _POSScreenState extends State<POSScreen> {
                     contentPadding: EdgeInsets.symmetric(vertical: 4),
                   ),
                   iconSize: 18,
-                  style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)),
+                  style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
                   items: const [
                     DropdownMenuItem(value: 'uber_eats', child: Align(alignment: Alignment.center, child: Text('Uber Eats', style: TextStyle(fontSize: 13)))),
                     DropdownMenuItem(value: 'pickme', child: Align(alignment: Alignment.center, child: Text('PickMe Food', style: TextStyle(fontSize: 13)))),
@@ -845,25 +846,25 @@ class _POSScreenState extends State<POSScreen> {
 
           // Cart Column Headers
           Container(
-            color: const Color(0xFFFFF0F5),
+            color: AppTheme.primary.withOpacity(0.08),
             padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
             child: Row(
               children: [
                 Expanded(
                   flex: 4,
-                  child: Text('Item', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: const Color(0xFF64748B))),
+                  child: Text('Item', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary)),
                 ),
                 Expanded(
                   flex: 3,
                   child: Center(
-                    child: Text('Qty', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: const Color(0xFF64748B))),
+                    child: Text('Qty', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary)),
                   ),
                 ),
                 Expanded(
                   flex: 2,
                   child: Align(
                     alignment: Alignment.centerRight,
-                    child: Text('Price', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: const Color(0xFF64748B))),
+                    child: Text('Price', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary)),
                   ),
                 ),
               ],
@@ -887,7 +888,7 @@ class _POSScreenState extends State<POSScreen> {
                     },
                   ),
           ),
-          const Divider(height: 1, color: Color(0xFFE2E8F0)),
+          Divider(height: 1, color: AppTheme.dividerColor),
           const SizedBox(height: 8),
 
           // Discount selector row (no Apply button needed)
@@ -906,7 +907,7 @@ class _POSScreenState extends State<POSScreen> {
                   height: 44,
                   padding: const EdgeInsets.symmetric(horizontal: 14),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFFFF0F5),
+                    color: AppTheme.primary.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(color: AppTheme.primary.withOpacity(0.3)),
                   ),
@@ -927,17 +928,17 @@ class _POSScreenState extends State<POSScreen> {
                 child: Container(
                   height: 44,
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: AppTheme.cardLight,
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                    border: Border.all(color: AppTheme.borderLight),
                   ),
                   child: TextField(
                     controller: _discountController,
                     textAlign: TextAlign.center,
-                    style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold),
+                    style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
                     decoration: InputDecoration(
                       hintText: 'Add Discount',
-                      hintStyle: GoogleFonts.inter(color: const Color(0xFF94A3B8), fontSize: 13),
+                      hintStyle: GoogleFonts.inter(color: AppTheme.textLightSecondary, fontSize: 13),
                       border: InputBorder.none,
                       enabledBorder: InputBorder.none,
                       focusedBorder: InputBorder.none,
@@ -962,23 +963,23 @@ class _POSScreenState extends State<POSScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Sub Total:', style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B))),
-                  Text('LKR ${controller.cartSubtotal.toStringAsFixed(2)}', style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
+                  Text('Sub Total:', style: GoogleFonts.inter(fontSize: 11.5, color: AppTheme.textLightSecondary)),
+                  Text('LKR ${controller.cartSubtotal.toStringAsFixed(2)}', style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
                 ],
               ),
               const SizedBox(height: 4),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Discount:', style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B))),
-                  Text('LKR ${controller.discount.toStringAsFixed(2)}', style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
+                  Text('Discount:', style: GoogleFonts.inter(fontSize: 11.5, color: AppTheme.textLightSecondary)),
+                  Text('LKR ${controller.discount.toStringAsFixed(2)}', style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
                 ],
               ),
               const SizedBox(height: 6),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Total:', style: GoogleFonts.outfit(fontSize: 14.5, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
+                  Text('Total:', style: GoogleFonts.outfit(fontSize: 14.5, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
                   Text(
                     'LKR ${controller.cartTotal.toStringAsFixed(2)}',
                     style: GoogleFonts.outfit(fontSize: 16.5, fontWeight: FontWeight.bold, color: AppTheme.primary),
@@ -998,7 +999,7 @@ class _POSScreenState extends State<POSScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Balance Due:', style: GoogleFonts.outfit(fontSize: 14.5, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
+                    Text('Balance Due:', style: GoogleFonts.outfit(fontSize: 14.5, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
                     Text(
                       'LKR ${(controller.cartTotal - controller.activePreOrderAdvance < 0 ? 0.00 : controller.cartTotal - controller.activePreOrderAdvance).toStringAsFixed(2)}',
                       style: GoogleFonts.outfit(fontSize: 16.5, fontWeight: FontWeight.bold, color: AppTheme.primary),
@@ -1081,7 +1082,7 @@ class _POSScreenState extends State<POSScreen> {
       children: [
         Text(
           'Select Order Type',
-          style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: const Color(0xFF475569)),
+          style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary),
         ),
         const SizedBox(height: 8),
         Row(
@@ -1104,9 +1105,9 @@ class _POSScreenState extends State<POSScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
         decoration: BoxDecoration(
-          color: isSel ? const Color(0xFFFFF0F5) : Colors.white,
+          color: isSel ? AppTheme.primary.withOpacity(0.12) : AppTheme.cardLight,
           border: Border.all(
-            color: isSel ? AppTheme.primary : const Color(0xFFE2E8F0),
+            color: isSel ? AppTheme.primary : AppTheme.borderLight,
             width: isSel ? 2.0 : 1.0,
           ),
           borderRadius: BorderRadius.circular(12),
@@ -1125,7 +1126,7 @@ class _POSScreenState extends State<POSScreen> {
           children: [
             Icon(
               isSel ? Icons.radio_button_checked : Icons.radio_button_off,
-              color: isSel ? AppTheme.primary : const Color(0xFFCBD5E1),
+              color: isSel ? AppTheme.primary : AppTheme.textLightSecondary,
               size: 16,
             ),
             const SizedBox(width: 6),
@@ -1136,7 +1137,7 @@ class _POSScreenState extends State<POSScreen> {
                 style: GoogleFonts.inter(
                   fontSize: 13,
                   fontWeight: isSel ? FontWeight.bold : FontWeight.w600,
-                  color: isSel ? AppTheme.primary : const Color(0xFF1E293B),
+                  color: isSel ? AppTheme.primary : AppTheme.textLightPrimary,
                 ),
               ),
             ),
@@ -1149,8 +1150,8 @@ class _POSScreenState extends State<POSScreen> {
   Widget _buildCartRow(OrderItemModel item, int index, POSController controller) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: Color(0xFFF1F5F9))),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: AppTheme.dividerColor)),
       ),
       child: Row(
         children: [
@@ -1171,7 +1172,7 @@ class _POSScreenState extends State<POSScreen> {
               children: [
                 Text(
                   item.productName,
-                  style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF1E293B)),
+                  style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textLightPrimary),
                 ),
                 if (item.notes != null) ...[
                   const SizedBox(height: 1),
@@ -1197,7 +1198,7 @@ class _POSScreenState extends State<POSScreen> {
                     width: 32,
                     height: 32,
                     decoration: BoxDecoration(
-                      color: const Color(0xFFFEE2E2),
+                      color: const Color(0xFFEF4444).withOpacity(0.12),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: const Icon(Icons.remove, size: 14, color: Color(0xFFEF4444)),
@@ -1206,7 +1207,7 @@ class _POSScreenState extends State<POSScreen> {
                 const SizedBox(width: 8),
                 Text(
                   '${item.quantity}',
-                  style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold),
+                  style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
                 ),
                 const SizedBox(width: 8),
                 InkWell(
@@ -1216,7 +1217,7 @@ class _POSScreenState extends State<POSScreen> {
                     width: 32,
                     height: 32,
                     decoration: BoxDecoration(
-                      color: const Color(0xFFDCFCE7),
+                      color: const Color(0xFF10B981).withOpacity(0.12),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: const Icon(Icons.add, size: 14, color: Color(0xFF15803D)),
@@ -1233,7 +1234,7 @@ class _POSScreenState extends State<POSScreen> {
               alignment: Alignment.centerRight,
               child: Text(
                 'LKR ${(item.price * item.quantity).toStringAsFixed(0)}',
-                style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF1E293B)),
+                style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textLightPrimary),
               ),
             ),
           ),
@@ -1434,15 +1435,15 @@ class _POSScreenState extends State<POSScreen> {
                 constraints: BoxConstraints(
                   maxHeight: MediaQuery.of(context).size.height * 0.9,
                 ),
-                color: Colors.white,
+                color: AppTheme.cardLight,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     // Header row with product info
                     Container(
                       padding: const EdgeInsets.all(20),
-                      decoration: const BoxDecoration(
-                        border: Border(bottom: BorderSide(color: Color(0xFFF1F5F9))),
+                      decoration: BoxDecoration(
+                        border: Border(bottom: BorderSide(color: AppTheme.dividerColor)),
                       ),
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1480,12 +1481,12 @@ class _POSScreenState extends State<POSScreen> {
                               children: [
                                 Text(
                                   product.name,
-                                  style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)),
+                                  style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
                                 ),
                                 const SizedBox(height: 6),
                                 Text(
                                   product.description ?? 'A delicious menu item prepared with fresh ingredients.',
-                                  style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+                                  style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary),
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
                                 ),
@@ -1522,13 +1523,13 @@ class _POSScreenState extends State<POSScreen> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Text('Quantity:', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 14)),
+                                Text('Quantity:', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 14, color: AppTheme.textLightPrimary)),
                                 Row(
                                   children: [
                                     IconButton(
                                       icon: const Icon(Icons.remove, size: 20),
                                       style: IconButton.styleFrom(
-                                        backgroundColor: const Color(0xFFF1F5F9),
+                                        backgroundColor: AppTheme.bgLight,
                                         padding: const EdgeInsets.all(12),
                                       ),
                                       onPressed: () {
@@ -1539,12 +1540,12 @@ class _POSScreenState extends State<POSScreen> {
                                     ),
                                     Padding(
                                       padding: const EdgeInsets.symmetric(horizontal: 20),
-                                      child: Text('$itemQty', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 18)),
+                                      child: Text('$itemQty', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 18, color: AppTheme.textLightPrimary)),
                                     ),
                                     IconButton(
                                       icon: const Icon(Icons.add, size: 20),
                                       style: IconButton.styleFrom(
-                                        backgroundColor: const Color(0xFFF1F5F9),
+                                        backgroundColor: AppTheme.bgLight,
                                         padding: const EdgeInsets.all(12),
                                       ),
                                       onPressed: () {
@@ -1559,7 +1560,7 @@ class _POSScreenState extends State<POSScreen> {
 
                     if (product.hasSizes) ...[
                               // Sizes Options
-                              Text('Size', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 14)),
+                              Text('Size', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 14, color: AppTheme.textLightPrimary)),
                               const SizedBox(height: 8),
                               Row(
                                 children: sizes.map((sz) {
@@ -1576,9 +1577,9 @@ class _POSScreenState extends State<POSScreen> {
                                         margin: const EdgeInsets.only(right: 12),
                                         padding: const EdgeInsets.all(12),
                                         decoration: BoxDecoration(
-                                          color: isSel ? const Color(0xFFFFF0F5) : Colors.white,
+                                          color: isSel ? AppTheme.primary.withOpacity(0.12) : AppTheme.cardLight,
                                           border: Border.all(
-                                            color: isSel ? AppTheme.primary : Color(0xFFE2E8F0),
+                                            color: isSel ? AppTheme.primary : AppTheme.borderLight,
                                             width: isSel ? 1.5 : 1,
                                           ),
                                           borderRadius: BorderRadius.circular(8),
@@ -1612,7 +1613,7 @@ class _POSScreenState extends State<POSScreen> {
                                             Expanded(
                                               child: Text(
                                                 "${sz['name']} (LKR ${sz['price'].toStringAsFixed(0)})",
-                                                style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600),
+                                                style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textLightPrimary),
                                                 overflow: TextOverflow.ellipsis,
                                               ),
                                             ),
@@ -1628,7 +1629,7 @@ class _POSScreenState extends State<POSScreen> {
 
                             if (product.hasExtras) ...[
                               // Extras Options
-                              Text('Extras', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 14)),
+                              Text('Extras', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 14, color: AppTheme.textLightPrimary)),
                               const SizedBox(height: 8),
                               Column(
                                 children: extras.map((ex) {
@@ -1638,9 +1639,9 @@ class _POSScreenState extends State<POSScreen> {
                                     margin: const EdgeInsets.only(bottom: 8),
                                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                     decoration: BoxDecoration(
-                                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                                      border: Border.all(color: AppTheme.borderLight),
                                       borderRadius: BorderRadius.circular(8),
-                                      color: qty > 0 ? const Color(0xFFFFF0F5) : Colors.white,
+                                      color: qty > 0 ? AppTheme.primary.withOpacity(0.12) : AppTheme.cardLight,
                                     ),
                                     child: Row(
                                       children: [
@@ -1650,7 +1651,7 @@ class _POSScreenState extends State<POSScreen> {
                                             name,
                                             style: GoogleFonts.inter(
                                               fontSize: 13,
-                                              color: const Color(0xFF1E293B),
+                                              color: AppTheme.textLightPrimary,
                                               fontWeight: qty > 0 ? FontWeight.bold : FontWeight.normal,
                                             ),
                                           ),
@@ -1661,7 +1662,7 @@ class _POSScreenState extends State<POSScreen> {
                                           style: GoogleFonts.inter(
                                             fontSize: 13,
                                             fontWeight: FontWeight.bold,
-                                            color: qty > 0 ? AppTheme.primary : const Color(0xFF64748B),
+                                            color: qty > 0 ? AppTheme.primary : AppTheme.textLightSecondary,
                                           ),
                                         ),
                                         const SizedBox(width: 16),
@@ -1681,14 +1682,14 @@ class _POSScreenState extends State<POSScreen> {
                                                 width: 32,
                                                 height: 32,
                                                 decoration: BoxDecoration(
-                                                  color: const Color(0xFFF1F5F9),
+                                                  color: AppTheme.bgLight,
                                                   borderRadius: BorderRadius.circular(6),
                                                 ),
-                                                child: const Icon(Icons.remove, size: 14, color: Color(0xFF475569)),
+                                                child: Icon(Icons.remove, size: 14, color: AppTheme.textLightSecondary),
                                               ),
                                             ),
                                             const SizedBox(width: 10),
-                                            Text('$qty', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold)),
+                                            Text('$qty', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
                                             const SizedBox(width: 10),
                                             InkWell(
                                               onTap: () {
@@ -1701,10 +1702,10 @@ class _POSScreenState extends State<POSScreen> {
                                                 width: 32,
                                                 height: 32,
                                                 decoration: BoxDecoration(
-                                                  color: const Color(0xFFF1F5F9),
+                                                  color: AppTheme.bgLight,
                                                   borderRadius: BorderRadius.circular(6),
                                                 ),
-                                                child: const Icon(Icons.add, size: 14, color: Color(0xFF475569)),
+                                                child: Icon(Icons.add, size: 14, color: AppTheme.textLightSecondary),
                                               ),
                                             ),
                                           ],
@@ -1719,7 +1720,7 @@ class _POSScreenState extends State<POSScreen> {
 
                             if (product.hasAddons) ...[
                               // Addons Options (Horizontal Cards)
-                              Text('Addons', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 14)),
+                              Text('Addons', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 14, color: AppTheme.textLightPrimary)),
                               const SizedBox(height: 8),
                               SizedBox(
                                 height: 100,
@@ -1733,8 +1734,9 @@ class _POSScreenState extends State<POSScreen> {
                                       margin: const EdgeInsets.only(right: 12),
                                       padding: const EdgeInsets.all(10),
                                       decoration: BoxDecoration(
-                                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                                        border: Border.all(color: AppTheme.borderLight),
                                         borderRadius: BorderRadius.circular(8),
+                                        color: AppTheme.cardLight,
                                       ),
                                       child: Row(
                                         children: [
@@ -1745,8 +1747,8 @@ class _POSScreenState extends State<POSScreen> {
                                               crossAxisAlignment: CrossAxisAlignment.start,
                                               mainAxisAlignment: MainAxisAlignment.center,
                                               children: [
-                                                Text(name, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold)),
-                                                Text('LKR ${add['price'].toStringAsFixed(0)}', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B))),
+                                                Text(name, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
+                                                Text('LKR ${add['price'].toStringAsFixed(0)}', style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary)),
                                               ],
                                             ),
                                           ),
@@ -1768,14 +1770,14 @@ class _POSScreenState extends State<POSScreen> {
                                                        width: 32,
                                                        height: 32,
                                                        decoration: BoxDecoration(
-                                                         color: const Color(0xFFF1F5F9),
+                                                         color: AppTheme.bgLight,
                                                          borderRadius: BorderRadius.circular(6),
                                                        ),
-                                                       child: const Icon(Icons.remove, size: 14, color: Color(0xFF475569)),
+                                                       child: Icon(Icons.remove, size: 14, color: AppTheme.textLightSecondary),
                                                      ),
                                                    ),
                                                    const SizedBox(width: 8),
-                                                   Text('$qty', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold)),
+                                                   Text('$qty', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
                                                    const SizedBox(width: 8),
                                                    InkWell(
                                                      onTap: () {
@@ -1788,10 +1790,10 @@ class _POSScreenState extends State<POSScreen> {
                                                        width: 32,
                                                        height: 32,
                                                        decoration: BoxDecoration(
-                                                         color: const Color(0xFFF1F5F9),
+                                                         color: AppTheme.bgLight,
                                                          borderRadius: BorderRadius.circular(6),
                                                        ),
-                                                       child: const Icon(Icons.add, size: 14, color: Color(0xFF475569)),
+                                                       child: Icon(Icons.add, size: 14, color: AppTheme.textLightSecondary),
                                                      ),
                                                    ),
                                                 ],
@@ -1807,18 +1809,20 @@ class _POSScreenState extends State<POSScreen> {
                               const SizedBox(height: 20),
                             ],
 
-                            // Special Instructions
-                            Text('Special Instructions', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 14)),
+                             // Special Instructions
+                            Text('Special Instructions', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 14, color: AppTheme.textLightPrimary)),
                             const SizedBox(height: 8),
                             TextField(
                               controller: instructionController,
                               maxLines: 2,
+                              style: TextStyle(color: AppTheme.textLightPrimary),
                               decoration: InputDecoration(
                                 hintText: 'Add note (extra mayo, cheese, etc.)',
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
-                                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+                                hintStyle: TextStyle(color: AppTheme.textLightSecondary),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: AppTheme.borderLight)),
+                                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: AppTheme.borderLight)),
                                 focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: AppTheme.primary)),
-                                fillColor: Colors.white,
+                                fillColor: AppTheme.bgLight,
                               ),
                             ),
                           ],
@@ -1829,8 +1833,8 @@ class _POSScreenState extends State<POSScreen> {
                     // Footer checkout button
                     Container(
                       padding: const EdgeInsets.all(20),
-                      decoration: const BoxDecoration(
-                        border: Border(top: BorderSide(color: Color(0xFFF1F5F9))),
+                      decoration: BoxDecoration(
+                        border: Border(top: BorderSide(color: AppTheme.dividerColor)),
                       ),
                       child: ElevatedButton(
                         onPressed: () {
@@ -1966,8 +1970,9 @@ class _POSScreenState extends State<POSScreen> {
             }
 
             return AlertDialog(
+              backgroundColor: AppTheme.cardLight,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              title: Text('Register New Customer', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+              title: Text('Register New Customer', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
               content: Form(
                 key: formKey,
                 child: SingleChildScrollView(
@@ -1975,46 +1980,46 @@ class _POSScreenState extends State<POSScreen> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('NAME *', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: const Color(0xFF64748B))),
+                      Text('NAME *', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary)),
                       const SizedBox(height: 6),
                       TextFormField(
                         controller: _customerNameController,
-                        style: GoogleFonts.inter(fontSize: 13),
+                        style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary),
                         validator: (val) => val == null || val.isEmpty ? 'Please enter customer name' : null,
                         decoration: const InputDecoration(hintText: 'Enter customer name'),
                       ),
                       const SizedBox(height: 16),
                       
-                      Text('PHONE NUMBER *', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: const Color(0xFF64748B))),
+                      Text('PHONE NUMBER *', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary)),
                       const SizedBox(height: 6),
                       TextFormField(
                         controller: _customerPhoneController,
-                        style: GoogleFonts.inter(fontSize: 13),
+                        style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary),
                         keyboardType: TextInputType.phone,
                         validator: (val) => val == null || val.isEmpty ? 'Please enter phone number' : null,
                         decoration: const InputDecoration(hintText: 'Enter phone number'),
                       ),
                       const SizedBox(height: 16),
                       
-                      Text('BIRTHDAY', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: const Color(0xFF64748B))),
+                      Text('BIRTHDAY', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary)),
                       const SizedBox(height: 6),
                       TextFormField(
                         controller: _customerBirthdayController,
-                        style: GoogleFonts.inter(fontSize: 13),
+                        style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary),
                         readOnly: true,
                         onTap: selectBirthday,
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           hintText: 'yyyy-mm-dd',
-                          suffixIcon: Icon(Icons.calendar_today, size: 16, color: Color(0xFF64748B)),
+                          suffixIcon: Icon(Icons.calendar_today, size: 16, color: AppTheme.textLightSecondary),
                         ),
                       ),
                       const SizedBox(height: 16),
                       
-                      Text('CREDIT LIMIT (LKR)', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: const Color(0xFF64748B))),
+                      Text('CREDIT LIMIT (LKR)', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary)),
                       const SizedBox(height: 6),
                       TextFormField(
                         controller: _customerLimitController,
-                        style: GoogleFonts.inter(fontSize: 13),
+                        style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary),
                         keyboardType: TextInputType.number,
                         decoration: const InputDecoration(hintText: 'Enter credit limit'),
                       ),
@@ -2025,7 +2030,7 @@ class _POSScreenState extends State<POSScreen> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: Text('Cancel', style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: const Color(0xFF64748B))),
+                  child: Text('Cancel', style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary)),
                 ),
                 ElevatedButton(
                   onPressed: () async {
@@ -2085,16 +2090,17 @@ class _POSScreenState extends State<POSScreen> {
       context: context,
       builder: (context) {
         return AlertDialog(
+          backgroundColor: AppTheme.cardLight,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
                 'Select Dining Table',
-                style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 18),
+                style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 18, color: AppTheme.textLightPrimary),
               ),
               IconButton(
-                icon: const Icon(Icons.close, size: 20),
+                icon: Icon(Icons.close, size: 20, color: AppTheme.textLightSecondary),
                 onPressed: () => Navigator.pop(context),
               )
             ],
@@ -2105,7 +2111,7 @@ class _POSScreenState extends State<POSScreen> {
             child: Consumer<POSController>(
               builder: (context, ctrl, _) {
                 if (ctrl.diningTables.isEmpty) {
-                  return const Center(child: Text('No tables configured'));
+                  return Center(child: Text('No tables configured', style: TextStyle(color: AppTheme.textLightSecondary)));
                 }
                 return GridView.builder(
                   gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -2187,10 +2193,10 @@ class _POSScreenState extends State<POSScreen> {
                               ),
                             ),
                             const SizedBox(height: 6),
-                            Container(
+                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.6),
+                                color: AppTheme.isDarkMode ? Colors.black.withOpacity(0.4) : Colors.white.withOpacity(0.6),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Text(
@@ -2221,16 +2227,18 @@ class _POSScreenState extends State<POSScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Barcode Scanner'),
+        backgroundColor: AppTheme.cardLight,
+        title: Text('Barcode Scanner', style: TextStyle(color: AppTheme.textLightPrimary)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(Icons.qr_code_scanner, size: 64, color: AppTheme.primary),
             const SizedBox(height: 12),
-            const Text('Scan acknowledgement ticket barcode or input order number manually to retrieve:'),
+            Text('Scan acknowledgement ticket barcode or input order number manually to retrieve:', style: TextStyle(color: AppTheme.textLightSecondary)),
             const SizedBox(height: 16),
             TextField(
               controller: _barcodeInputController,
+              style: TextStyle(color: AppTheme.textLightPrimary),
               decoration: const InputDecoration(
                 labelText: 'Order / Barcode Number',
                 hintText: 'ORD-YYYYMMDD-XXXX',
@@ -2239,7 +2247,7 @@ class _POSScreenState extends State<POSScreen> {
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancel', style: TextStyle(color: AppTheme.textLightSecondary))),
           ElevatedButton(
             onPressed: () async {
               try {
@@ -2271,20 +2279,21 @@ class _POSScreenState extends State<POSScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Retrieved Order: ${order.orderNumber}'),
+        backgroundColor: AppTheme.cardLight,
+        title: Text('Retrieved Order: ${order.orderNumber}', style: TextStyle(color: AppTheme.textLightPrimary)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Type: ${order.orderType.toUpperCase()}'),
-            Text('Status: ${order.status.toUpperCase()}'),
-            Text('Payment Status: ${order.paymentStatus.toUpperCase()}'),
+            Text('Type: ${order.orderType.toUpperCase()}', style: TextStyle(color: AppTheme.textLightSecondary)),
+            Text('Status: ${order.status.toUpperCase()}', style: TextStyle(color: AppTheme.textLightSecondary)),
+            Text('Payment Status: ${order.paymentStatus.toUpperCase()}', style: TextStyle(color: AppTheme.textLightSecondary)),
             const SizedBox(height: 12),
-            Text('Total Amount: LKR ${order.total.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold)),
+            Text('Total Amount: LKR ${order.total.toStringAsFixed(2)}', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+          TextButton(onPressed: () => Navigator.pop(context), child: Text('Close', style: TextStyle(color: AppTheme.textLightSecondary))),
           if (order.paymentStatus == 'unpaid')
             ElevatedButton(
               onPressed: () {
@@ -2505,7 +2514,7 @@ class _POSScreenState extends State<POSScreen> {
             }
             return Dialog(
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                backgroundColor: Colors.white,
+                backgroundColor: AppTheme.cardLight,
                 clipBehavior: Clip.antiAlias,
                 child: Container(
                   width: 480,
@@ -2523,7 +2532,7 @@ class _POSScreenState extends State<POSScreen> {
                             style: GoogleFonts.inter(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
-                              color: const Color(0xFF1E293B),
+                              color: AppTheme.textLightPrimary,
                             ),
                           ),
                           IconButton(
@@ -2533,16 +2542,16 @@ class _POSScreenState extends State<POSScreen> {
                         ],
                       ),
                       const SizedBox(height: 12),
-                      const Divider(color: Color(0xFFF1F5F9)),
+                      Divider(color: AppTheme.dividerColor),
                       const SizedBox(height: 12),
 
                       // Total Amount Display
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF8FAFC),
+                          color: AppTheme.bgLight,
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                          border: Border.all(color: AppTheme.borderLight),
                         ),
                         child: Column(
                           children: [
@@ -2554,7 +2563,7 @@ class _POSScreenState extends State<POSScreen> {
                                   style: GoogleFonts.inter(
                                     fontSize: 14,
                                     fontWeight: FontWeight.w600,
-                                    color: const Color(0xFF64748B),
+                                    color: AppTheme.textLightSecondary,
                                   ),
                                 ),
                                 Text(
@@ -2562,7 +2571,7 @@ class _POSScreenState extends State<POSScreen> {
                                   style: GoogleFonts.outfit(
                                     fontSize: 16,
                                     fontWeight: FontWeight.bold,
-                                    color: const Color(0xFF475569),
+                                    color: AppTheme.textLightPrimary,
                                   ),
                                 ),
                               ],
@@ -2590,7 +2599,7 @@ class _POSScreenState extends State<POSScreen> {
                                   ),
                                 ],
                               ),
-                              const Divider(height: 12),
+                              Divider(height: 12, color: AppTheme.dividerColor),
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
@@ -2599,7 +2608,7 @@ class _POSScreenState extends State<POSScreen> {
                                     style: GoogleFonts.inter(
                                       fontSize: 14,
                                       fontWeight: FontWeight.bold,
-                                      color: const Color(0xFF1E293B),
+                                      color: AppTheme.textLightPrimary,
                                     ),
                                   ),
                                   Text(
@@ -2624,7 +2633,7 @@ class _POSScreenState extends State<POSScreen> {
                         style: GoogleFonts.inter(
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
-                          color: const Color(0xFF64748B),
+                          color: AppTheme.textLightSecondary,
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -2717,12 +2726,12 @@ class _POSScreenState extends State<POSScreen> {
                           style: GoogleFonts.inter(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
-                            color: const Color(0xFF1E293B),
+                            color: AppTheme.textLightPrimary,
                           ),
                           decoration: InputDecoration(
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(10),
-                              borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                              borderSide: BorderSide(color: AppTheme.borderLight),
                             ),
                             contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                             hintText: '0.00',
@@ -2778,12 +2787,12 @@ class _POSScreenState extends State<POSScreen> {
                           style: GoogleFonts.inter(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
-                            color: const Color(0xFF1E293B),
+                            color: AppTheme.textLightPrimary,
                           ),
                           decoration: InputDecoration(
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(10),
-                              borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                              borderSide: BorderSide(color: AppTheme.borderLight),
                             ),
                             contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                             hintText: '****',
@@ -2846,25 +2855,27 @@ class _POSScreenState extends State<POSScreen> {
                           style: GoogleFonts.inter(
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
-                            color: const Color(0xFF64748B),
+                            color: AppTheme.textLightSecondary,
                           ),
                         ),
                         const SizedBox(height: 8),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10),
                           decoration: BoxDecoration(
-                            border: Border.all(color: const Color(0xFFD1D5DB)),
+                            border: Border.all(color: AppTheme.borderLight),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: DropdownButtonHideUnderline(
                             child: DropdownButton<CustomerModel>(
-                              hint: const Text('Choose customer...'),
+                              hint: Text('Choose customer...', style: TextStyle(color: AppTheme.textLightSecondary)),
+                              dropdownColor: AppTheme.cardLight,
+                              style: TextStyle(color: AppTheme.textLightPrimary),
                               value: selectedCreditCustomer,
                               isExpanded: true,
                               items: controller.customers.map((CustomerModel c) {
                                 return DropdownMenuItem<CustomerModel>(
                                   value: c,
-                                  child: Text('${c.name} (${c.phone})'),
+                                  child: Text('${c.name} (${c.phone})', style: TextStyle(color: AppTheme.textLightPrimary)),
                                 );
                               }).toList(),
                               onChanged: (CustomerModel? val) {
@@ -2880,9 +2891,9 @@ class _POSScreenState extends State<POSScreen> {
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFFEF3C7),
+                              color: AppTheme.isDarkMode ? const Color(0xFF451A03).withOpacity(0.4) : const Color(0xFFFEF3C7),
                               borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: const Color(0xFFFCD34D)),
+                              border: Border.all(color: AppTheme.isDarkMode ? const Color(0xFFB45309) : const Color(0xFFFCD34D)),
                             ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -2892,17 +2903,17 @@ class _POSScreenState extends State<POSScreen> {
                                   style: GoogleFonts.inter(
                                     fontSize: 12,
                                     fontWeight: FontWeight.bold,
-                                    color: const Color(0xFFB45309),
+                                    color: AppTheme.isDarkMode ? const Color(0xFFFDBA74) : const Color(0xFFB45309),
                                   ),
                                 ),
                                 const SizedBox(height: 6),
                                 Text(
                                   'Credit Limit: LKR ${selectedCreditCustomer!.creditLimit.toStringAsFixed(2)}',
-                                  style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF78350F)),
+                                  style: GoogleFonts.inter(fontSize: 11, color: AppTheme.isDarkMode ? const Color(0xFFFED7AA) : const Color(0xFF78350F)),
                                 ),
                                 Text(
                                   'Outstanding Balance: LKR ${selectedCreditCustomer!.outstandingBalance.toStringAsFixed(2)}',
-                                  style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF78350F)),
+                                  style: GoogleFonts.inter(fontSize: 11, color: AppTheme.isDarkMode ? const Color(0xFFFED7AA) : const Color(0xFF78350F)),
                                 ),
                                 Text(
                                   'Remaining Credit: LKR ${(selectedCreditCustomer!.creditLimit - selectedCreditCustomer!.outstandingBalance).toStringAsFixed(2)}',
@@ -2910,8 +2921,8 @@ class _POSScreenState extends State<POSScreen> {
                                     fontSize: 11,
                                     fontWeight: FontWeight.w600,
                                     color: (selectedCreditCustomer!.creditLimit - selectedCreditCustomer!.outstandingBalance) >= cartTotal
-                                        ? const Color(0xFF065F46)
-                                        : const Color(0xFF991B1B),
+                                        ? (AppTheme.isDarkMode ? const Color(0xFF34D399) : const Color(0xFF065F46))
+                                        : (AppTheme.isDarkMode ? const Color(0xFFF87171) : const Color(0xFF991B1B)),
                                   ),
                                 ),
                               ],
@@ -2961,9 +2972,9 @@ class _POSScreenState extends State<POSScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
         decoration: BoxDecoration(
-          color: isActive ? const Color(0xFFFFF0F5) : const Color(0xFFF8FAFC),
+          color: isActive ? AppTheme.primary.withOpacity(0.12) : AppTheme.bgLight,
           border: Border.all(
-            color: isActive ? AppTheme.primary : Color(0xFFE2E8F0),
+            color: isActive ? AppTheme.primary : AppTheme.borderLight,
             width: isActive ? 1.5 : 1,
           ),
           borderRadius: BorderRadius.circular(10),
@@ -2972,7 +2983,7 @@ class _POSScreenState extends State<POSScreen> {
           children: [
             Icon(
               icon,
-              color: isActive ? AppTheme.primary : Color(0xFF64748B),
+              color: isActive ? AppTheme.primary : AppTheme.textLightSecondary,
               size: 20,
             ),
             const SizedBox(height: 4),
@@ -2981,7 +2992,7 @@ class _POSScreenState extends State<POSScreen> {
               style: GoogleFonts.inter(
                 fontSize: 11,
                 fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
-                color: isActive ? AppTheme.primary : Color(0xFF475569),
+                color: isActive ? AppTheme.primary : AppTheme.textLightSecondary,
               ),
             ),
           ],
@@ -3016,12 +3027,12 @@ class _POSScreenState extends State<POSScreen> {
         return ElevatedButton(
           onPressed: () => onKeyPress(key),
           style: ElevatedButton.styleFrom(
-            backgroundColor: isAction ? const Color(0xFFF1F5F9) : Colors.white,
-            foregroundColor: isAction ? const Color(0xFF475569) : const Color(0xFF1E293B),
+            backgroundColor: isAction ? AppTheme.bgLight : AppTheme.cardLight,
+            foregroundColor: isAction ? AppTheme.textLightSecondary : AppTheme.textLightPrimary,
             elevation: 0,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(8),
-              side: const BorderSide(color: Color(0xFFE2E8F0)),
+              side: BorderSide(color: AppTheme.borderLight),
             ),
             padding: EdgeInsets.zero,
           ),
@@ -3052,7 +3063,7 @@ class _POSScreenState extends State<POSScreen> {
   Widget _buildReceiptDialogWidget(ReceiptData data, {bool showKOT = true, bool showInvoice = true}) {
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      backgroundColor: const Color(0xFFF1F5F9),
+      backgroundColor: AppTheme.bgLight,
       child: Builder(
         builder: (dialogCtx) {
           final controller = Provider.of<POSController>(dialogCtx, listen: false);
@@ -3076,7 +3087,7 @@ class _POSScreenState extends State<POSScreen> {
               children: [
                 // Top Action Buttons
                 Container(
-                  color: Colors.white,
+                  color: AppTheme.cardLight,
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   child: Row(
                     children: [
@@ -3825,18 +3836,19 @@ class _POSScreenState extends State<POSScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.cardLight,
         title: Row(
           children: [
             const Icon(Icons.print, color: Color(0xFF10B981)),
             const SizedBox(width: 8),
-            Text('Print Jobs Queued', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+            Text('Print Jobs Queued', style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
           ],
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Invoice and KOT tickets successfully sent to thermal printer network:'),
+            Text('Invoice and KOT tickets successfully sent to thermal printer network:', style: TextStyle(color: AppTheme.textLightSecondary)),
             const SizedBox(height: 12),
             if (printKOT)
               _buildPrintJobItem('1. KOT Ticket (Kitchen Copy)', 'Sent to Kitchen Printer (Table: ${data.tableName ?? "Takeaway"})'),
@@ -3963,7 +3975,7 @@ class _POSScreenState extends State<POSScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppTheme.cardLight,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.05),
@@ -3979,7 +3991,7 @@ class _POSScreenState extends State<POSScreen> {
           Center(
             child: Text(
               _getKOTHeader(data, controller),
-              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)),
+              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
             ),
           ),
           const SizedBox(height: 8),
@@ -4017,12 +4029,12 @@ class _POSScreenState extends State<POSScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Description', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold)),
-              Text('Qty', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold)),
+              Text('Description', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
+              Text('Qty', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
             ],
           ),
           const SizedBox(height: 4),
-          const Divider(height: 1, color: Color(0xFFCBD5E1)),
+          Divider(height: 1, color: AppTheme.dividerColor),
           const SizedBox(height: 6),
 
           ...kotItems.map((item) {
@@ -4038,13 +4050,13 @@ class _POSScreenState extends State<POSScreen> {
                       Expanded(
                         child: Text(
                           isSinhala ? (item.productSinhalaName ?? item.productName) : item.productName,
-                          style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600),
+                          style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600, color: AppTheme.textLightPrimary),
                         ),
                       ),
                       const SizedBox(width: 10),
                       Text(
                         '${item.quantity}',
-                        style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600),
+                        style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600, color: AppTheme.textLightPrimary),
                       ),
                     ],
                   ),
@@ -4052,7 +4064,7 @@ class _POSScreenState extends State<POSScreen> {
                     const SizedBox(height: 2),
                     Text(
                       '  * ${item.notes!}',
-                      style: GoogleFonts.inter(fontSize: 8, color: const Color(0xFF64748B), fontStyle: FontStyle.italic),
+                      style: GoogleFonts.inter(fontSize: 8, color: AppTheme.textLightSecondary, fontStyle: FontStyle.italic),
                     ),
                   ],
                 ],
@@ -4069,7 +4081,7 @@ class _POSScreenState extends State<POSScreen> {
             children: [
               Text(
                 '$totalQty',
-                style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold),
+                style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
               ),
             ],
           ),
@@ -4089,7 +4101,7 @@ class _POSScreenState extends State<POSScreen> {
           Center(
             child: Text(
               'KOT-${data.orderNumber}',
-              style: GoogleFonts.inter(fontSize: 8, color: const Color(0xFF64748B)),
+              style: GoogleFonts.inter(fontSize: 8, color: AppTheme.textLightSecondary),
             ),
           ),
         ],
@@ -4133,7 +4145,7 @@ class _POSScreenState extends State<POSScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppTheme.cardLight,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.05),
@@ -4158,7 +4170,7 @@ class _POSScreenState extends State<POSScreen> {
                     'assets/images/mhb_logo.png',
                     width: 40,
                     height: 40,
-                    errorBuilder: (context, error, stackTrace) => const Icon(Icons.restaurant_menu, size: 32, color: Color(0xFF1E293B)),
+                    errorBuilder: (context, error, stackTrace) => Icon(Icons.restaurant_menu, size: 32, color: AppTheme.textLightPrimary),
                   ),
                   const SizedBox(width: 8),
                   Column(
@@ -4166,15 +4178,15 @@ class _POSScreenState extends State<POSScreen> {
                     children: [
                        Text(
                            'v£ly »ƒ£Šfzx',
-                            style: const TextStyle(fontFamily: 'Isiagni',fontSize: 18,fontWeight: FontWeight.bold,color: Color(0xFF1E293B),),
-                      ),
+                            style: TextStyle(fontFamily: 'Isiagni',fontSize: 18,fontWeight: FontWeight.bold,color: AppTheme.textLightPrimary),
+                       ),
                       Text(
                         'නො: 04 මහා වීදිය, අකුරැස්ස',
-                        style: GoogleFonts.inter(fontSize: 8, color: const Color(0xFF64748B)),
+                        style: GoogleFonts.inter(fontSize: 8, color: AppTheme.textLightSecondary),
                       ),
                       Text(
                         '041 2283857',
-                        style: GoogleFonts.inter(fontSize: 8, color: const Color(0xFF64748B)),
+                        style: GoogleFonts.inter(fontSize: 8, color: AppTheme.textLightSecondary),
                       ),
                     ],
                   ),
@@ -4183,12 +4195,12 @@ class _POSScreenState extends State<POSScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                 decoration: BoxDecoration(
-                  border: Border.all(color: const Color(0xFF1E293B), width: 1),
+                  border: Border.all(color: AppTheme.textLightPrimary, width: 1),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Text(
                   _getOvalNumber(data),
-                  style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)),
+                  style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
                 ),
               ),
             ],
@@ -4197,7 +4209,7 @@ class _POSScreenState extends State<POSScreen> {
           Center(
             child: Text(
               'INVOICE',
-              style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, decoration: TextDecoration.underline, color: const Color(0xFF1E293B)),
+              style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, decoration: TextDecoration.underline, color: AppTheme.textLightPrimary),
             ),
           ),
           const SizedBox(height: 6),
@@ -4209,15 +4221,15 @@ class _POSScreenState extends State<POSScreen> {
             children: [
               Text(
                 'Date  ${DateTime.now().day.toString().padLeft(2, '0')}-${_getMonthName(DateTime.now())}-${DateTime.now().year}',
-                style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF334155), fontWeight: FontWeight.w500),
+                style: GoogleFonts.inter(fontSize: 9, color: AppTheme.textLightPrimary, fontWeight: FontWeight.w500),
               ),
               Text(
                 _formatTime(DateTime.now(), includeSpace: false),
-                style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF334155), fontWeight: FontWeight.w500),
+                style: GoogleFonts.inter(fontSize: 9, color: AppTheme.textLightPrimary, fontWeight: FontWeight.w500),
               ),
               Text(
                 data.cashierName,
-                style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF334155), fontWeight: FontWeight.w500),
+                style: GoogleFonts.inter(fontSize: 9, color: AppTheme.textLightPrimary, fontWeight: FontWeight.w500),
               ),
             ],
           ),
@@ -4228,14 +4240,14 @@ class _POSScreenState extends State<POSScreen> {
 
           Row(
             children: [
-              Expanded(flex: 3, child: Text('Description', style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold))),
-              Expanded(flex: 1, child: Align(alignment: Alignment.center, child: Text('Qty', style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold)))),
-              Expanded(flex: 2, child: Align(alignment: Alignment.centerRight, child: Text('Price', style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold)))),
-              Expanded(flex: 2, child: Align(alignment: Alignment.centerRight, child: Text('Amount', style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold)))),
+              Expanded(flex: 3, child: Text('Description', style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary))),
+              Expanded(flex: 1, child: Align(alignment: Alignment.center, child: Text('Qty', style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)))),
+              Expanded(flex: 2, child: Align(alignment: Alignment.centerRight, child: Text('Price', style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)))),
+              Expanded(flex: 2, child: Align(alignment: Alignment.centerRight, child: Text('Amount', style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)))),
             ],
           ),
           const SizedBox(height: 4),
-          const Divider(height: 1, color: Color(0xFFCBD5E1)),
+          Divider(height: 1, color: AppTheme.dividerColor),
           const SizedBox(height: 6),
 
           ..._groupDuplicateOrderItems(data.items).map((item) {
@@ -4274,28 +4286,28 @@ class _POSScreenState extends State<POSScreen> {
                         flex: 3,
                         child: Text(
                           isSinhala ? (item.productSinhalaName ?? item.productName) : item.productName,
-                          style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w600),
+                          style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w600, color: AppTheme.textLightPrimary),
                         ),
                       ),
                       Expanded(
                         flex: 1,
                         child: Align(
                           alignment: Alignment.center,
-                          child: Text('${item.quantity}', style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w500)),
+                          child: Text('${item.quantity}', style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w500, color: AppTheme.textLightPrimary)),
                         ),
                       ),
                       Expanded(
                         flex: 2,
                         child: Align(
                           alignment: Alignment.centerRight,
-                          child: Text(item.price.toStringAsFixed(2), style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w500)),
+                          child: Text(item.price.toStringAsFixed(2), style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w500, color: AppTheme.textLightPrimary)),
                         ),
                       ),
                       Expanded(
                         flex: 2,
                         child: Align(
                           alignment: Alignment.centerRight,
-                          child: Text((item.price * item.quantity).toStringAsFixed(2), style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w500)),
+                          child: Text((item.price * item.quantity).toStringAsFixed(2), style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w500, color: AppTheme.textLightPrimary)),
                         ),
                       ),
                     ],
@@ -4311,7 +4323,7 @@ class _POSScreenState extends State<POSScreen> {
                     const SizedBox(height: 2),
                     Text(
                       '  * ${item.notes!}',
-                      style: GoogleFonts.inter(fontSize: 8, color: const Color(0xFF64748B), fontStyle: FontStyle.italic),
+                      style: GoogleFonts.inter(fontSize: 8, color: AppTheme.textLightSecondary, fontStyle: FontStyle.italic),
                     ),
                   ],
                 ],
@@ -4335,15 +4347,15 @@ class _POSScreenState extends State<POSScreen> {
                   children: [
                     Row(
                       children: [
-                        Text('Items', style: GoogleFonts.inter(fontSize: 8.5, color: const Color(0xFF475569))),
+                        Text('Items', style: GoogleFonts.inter(fontSize: 8.5, color: AppTheme.textLightSecondary)),
                         const SizedBox(width: 6),
-                        Text('$totalQty', style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
+                        Text('$totalQty', style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
                       ],
                     ),
                     const SizedBox(height: 4),
                     Text(
                       'PAID BY ${data.paymentMethod.toUpperCase()}',
-                      style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)),
+                      style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
                     ),
                   ],
                 ),
@@ -4357,11 +4369,11 @@ class _POSScreenState extends State<POSScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        Text('Sub Total', style: GoogleFonts.inter(fontSize: 8.5, color: const Color(0xFF475569))),
+                        Text('Sub Total', style: GoogleFonts.inter(fontSize: 8.5, color: AppTheme.textLightSecondary)),
                         const SizedBox(width: 4),
-                        Text(':', style: GoogleFonts.inter(fontSize: 8.5, color: const Color(0xFF475569))),
+                        Text(':', style: GoogleFonts.inter(fontSize: 8.5, color: AppTheme.textLightSecondary)),
                         const SizedBox(width: 4),
-                        Text(data.subtotal.toStringAsFixed(2), style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
+                        Text(data.subtotal.toStringAsFixed(2), style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
                       ],
                     ),
                     if (data.discount > 0) ...[
@@ -4369,11 +4381,11 @@ class _POSScreenState extends State<POSScreen> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
-                          Text('Discount', style: GoogleFonts.inter(fontSize: 8.5, color: const Color(0xFF475569))),
+                          Text('Discount', style: GoogleFonts.inter(fontSize: 8.5, color: AppTheme.textLightSecondary)),
                           const SizedBox(width: 4),
-                          Text(':', style: GoogleFonts.inter(fontSize: 8.5, color: const Color(0xFF475569))),
+                          Text(':', style: GoogleFonts.inter(fontSize: 8.5, color: AppTheme.textLightSecondary)),
                           const SizedBox(width: 4),
-                          Text('-${data.discount.toStringAsFixed(2)}', style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
+                          Text('-${data.discount.toStringAsFixed(2)}', style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
                         ],
                       ),
                     ],
@@ -4391,22 +4403,22 @@ class _POSScreenState extends State<POSScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        Text('Total', style: GoogleFonts.inter(fontSize: 8.5, color: const Color(0xFF475569))),
+                        Text('Total', style: GoogleFonts.inter(fontSize: 8.5, color: AppTheme.textLightSecondary)),
                         const SizedBox(width: 4),
-                        Text(':', style: GoogleFonts.inter(fontSize: 8.5, color: const Color(0xFF475569))),
+                        Text(':', style: GoogleFonts.inter(fontSize: 8.5, color: AppTheme.textLightSecondary)),
                         const SizedBox(width: 4),
-                        Text(data.total.toStringAsFixed(2), style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
+                        Text(data.total.toStringAsFixed(2), style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
                       ],
                     ),
                     const SizedBox(height: 4),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        Text('Paid', style: GoogleFonts.inter(fontSize: 8.5, color: const Color(0xFF475569))),
+                        Text('Paid', style: GoogleFonts.inter(fontSize: 8.5, color: AppTheme.textLightSecondary)),
                         const SizedBox(width: 4),
-                        Text(':', style: GoogleFonts.inter(fontSize: 8.5, color: const Color(0xFF475569))),
+                        Text(':', style: GoogleFonts.inter(fontSize: 8.5, color: AppTheme.textLightSecondary)),
                         const SizedBox(width: 4),
-                        Text(data.receivedAmount.toStringAsFixed(2), style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
+                        Text(data.receivedAmount.toStringAsFixed(2), style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
                       ],
                     ),
                     if (data.advancePayment > 0) ...[
@@ -4414,22 +4426,22 @@ class _POSScreenState extends State<POSScreen> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
-                          Text('Adv Paid', style: GoogleFonts.inter(fontSize: 8.5, color: const Color(0xFF475569))),
+                          Text('Adv Paid', style: GoogleFonts.inter(fontSize: 8.5, color: AppTheme.textLightSecondary)),
                           const SizedBox(width: 4),
-                          Text(':', style: GoogleFonts.inter(fontSize: 8.5, color: const Color(0xFF475569))),
+                          Text(':', style: GoogleFonts.inter(fontSize: 8.5, color: AppTheme.textLightSecondary)),
                           const SizedBox(width: 4),
-                          Text(data.advancePayment.toStringAsFixed(2), style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
+                          Text(data.advancePayment.toStringAsFixed(2), style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
                         ],
                       ),
                       const SizedBox(height: 4),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
-                          Text('Bal Payable', style: GoogleFonts.inter(fontSize: 8.5, color: const Color(0xFF475569))),
+                          Text('Bal Payable', style: GoogleFonts.inter(fontSize: 8.5, color: AppTheme.textLightSecondary)),
                           const SizedBox(width: 4),
-                          Text(':', style: GoogleFonts.inter(fontSize: 8.5, color: const Color(0xFF475569))),
+                          Text(':', style: GoogleFonts.inter(fontSize: 8.5, color: AppTheme.textLightSecondary)),
                           const SizedBox(width: 4),
-                          Text(data.balanceAmount.toStringAsFixed(2), style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
+                          Text(data.balanceAmount.toStringAsFixed(2), style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
                         ],
                       ),
                     ],
@@ -4437,11 +4449,11 @@ class _POSScreenState extends State<POSScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        Text('Balance', style: GoogleFonts.inter(fontSize: 8.5, color: const Color(0xFF475569))),
+                        Text('Balance', style: GoogleFonts.inter(fontSize: 8.5, color: AppTheme.textLightSecondary)),
                         const SizedBox(width: 4),
-                        Text(':', style: GoogleFonts.inter(fontSize: 8.5, color: const Color(0xFF475569))),
+                        Text(':', style: GoogleFonts.inter(fontSize: 8.5, color: AppTheme.textLightSecondary)),
                         const SizedBox(width: 4),
-                        Text(data.changeAmount.toStringAsFixed(2), style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
+                        Text(data.changeAmount.toStringAsFixed(2), style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
                       ],
                     ),
                   ],
@@ -4466,20 +4478,20 @@ class _POSScreenState extends State<POSScreen> {
           Center(
             child: Text(
               'INV-${data.orderNumber}',
-              style: GoogleFonts.inter(fontSize: 8, color: const Color(0xFF64748B)),
+              style: GoogleFonts.inter(fontSize: 8, color: AppTheme.textLightSecondary),
             ),
           ),
           const SizedBox(height: 6),
           Center(
             child: Text(
               'Thank you & Come Again',
-              style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w600, color: const Color(0xFF1E293B)),
+              style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w600, color: AppTheme.textLightPrimary),
             ),
           ),
           Center(
             child: Text(
               'Software by Perpova. 0713555566',
-              style: GoogleFonts.inter(fontSize: 8, color: const Color(0xFF64748B)),
+              style: GoogleFonts.inter(fontSize: 8, color: AppTheme.textLightSecondary),
             ),
           ),
         ],
@@ -4498,11 +4510,11 @@ class _POSScreenState extends State<POSScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           direction: Axis.horizontal,
           children: List.generate(dashCount, (_) {
-            return const SizedBox(
+            return SizedBox(
               width: dashWidth,
               height: dashHeight,
               child: DecoratedBox(
-                decoration: BoxDecoration(color: Color(0xFFCBD5E1)),
+                decoration: BoxDecoration(color: AppTheme.dividerColor),
               ),
             );
           }),
@@ -4523,8 +4535,8 @@ class _POSScreenState extends State<POSScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold)),
-                Text(desc, style: GoogleFonts.inter(fontSize: 10, color: const Color(0xFF64748B))),
+                Text(title, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
+                Text(desc, style: GoogleFonts.inter(fontSize: 10, color: AppTheme.textLightSecondary)),
               ],
             ),
           )
@@ -4539,8 +4551,8 @@ class _POSScreenState extends State<POSScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: GoogleFonts.inter(fontSize: 10, color: const Color(0xFF64748B))),
-          Text(val, style: GoogleFonts.inter(fontSize: 10, color: const Color(0xFF475569))),
+          Text(label, style: GoogleFonts.inter(fontSize: 10, color: AppTheme.textLightSecondary)),
+          Text(val, style: GoogleFonts.inter(fontSize: 10, color: AppTheme.textLightSecondary)),
         ],
       ),
     );
@@ -4552,8 +4564,8 @@ class _POSScreenState extends State<POSScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: GoogleFonts.inter(fontSize: 10, color: const Color(0xFF64748B))),
-          Text(val, style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600, color: const Color(0xFF334155))),
+          Text(label, style: GoogleFonts.inter(fontSize: 10, color: AppTheme.textLightSecondary)),
+          Text(val, style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600, color: AppTheme.textLightPrimary)),
         ],
       ),
     );

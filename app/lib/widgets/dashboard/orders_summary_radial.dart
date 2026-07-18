@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' hide TextDirection;
+import '../../theme.dart';
 import 'custom_date_range_picker.dart';
 
 class OrdersSummaryRadial extends StatelessWidget {
@@ -44,10 +45,10 @@ class OrdersSummaryRadial extends StatelessWidget {
 
     return Card(
       elevation: 0,
-      color: Colors.white,
+      color: AppTheme.cardLight,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: Color(0xFFF1F5F9)),
+        side: BorderSide(color: AppTheme.borderLight),
       ),
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -63,7 +64,7 @@ class OrdersSummaryRadial extends StatelessWidget {
                   style: GoogleFonts.outfit(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: const Color(0xFF1E293B),
+                    color: AppTheme.textLightPrimary,
                   ),
                 ),
                 InkWell(
@@ -81,9 +82,9 @@ class OrdersSummaryRadial extends StatelessWidget {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: AppTheme.cardLight,
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                      border: Border.all(color: AppTheme.borderLight),
                     ),
                     child: Row(
                       children: [
@@ -91,15 +92,15 @@ class OrdersSummaryRadial extends StatelessWidget {
                           dateStr,
                           style: GoogleFonts.inter(
                             fontSize: 11,
-                            color: const Color(0xFF64748B),
+                            color: AppTheme.textLightSecondary,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
                         const SizedBox(width: 6),
-                        const Icon(
+                        Icon(
                           Icons.calendar_today_outlined,
                           size: 12,
-                          color: Color(0xFF64748B),
+                          color: AppTheme.textLightSecondary,
                         ),
                       ],
                     ),
@@ -161,7 +162,7 @@ class OrdersSummaryRadial extends StatelessWidget {
               style: GoogleFonts.inter(
                 fontSize: 12,
                 fontWeight: FontWeight.bold,
-                color: const Color(0xFF1E293B),
+                color: AppTheme.textLightPrimary,
               ),
             ),
             Text(
@@ -169,7 +170,7 @@ class OrdersSummaryRadial extends StatelessWidget {
               style: GoogleFonts.inter(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
-                color: const Color(0xFF64748B),
+                color: AppTheme.textLightSecondary,
               ),
             ),
           ],
@@ -180,7 +181,7 @@ class OrdersSummaryRadial extends StatelessWidget {
           child: LinearProgressIndicator(
             value: pct > 0 ? pct : 0.05, // minor fill if 0% for aesthetics
             color: color,
-            backgroundColor: const Color(0xFFF1F5F9),
+            backgroundColor: AppTheme.dividerColor,
             minHeight: 6,
           ),
         ),
@@ -225,7 +226,7 @@ class ConcentricRadialPainter extends CustomPainter {
 
       // Draw background track
       final trackPaint = Paint()
-        ..color = const Color(0xFFF1F5F9)
+        ..color = AppTheme.dividerColor
         ..style = PaintingStyle.stroke
         ..strokeWidth = ringWidth;
 
@@ -254,7 +255,7 @@ class ConcentricRadialPainter extends CustomPainter {
     final labelSpan = TextSpan(
       text: 'Total\n',
       style: GoogleFonts.inter(
-        color: const Color(0xFF64748B),
+        color: AppTheme.textLightSecondary,
         fontSize: 12,
         fontWeight: FontWeight.w500,
         height: 1.2,
@@ -263,7 +264,7 @@ class ConcentricRadialPainter extends CustomPainter {
         TextSpan(
           text: totalCount.toString(),
           style: GoogleFonts.outfit(
-            color: const Color(0xFF1E293B),
+            color: AppTheme.textLightPrimary,
             fontSize: 20,
             fontWeight: FontWeight.bold,
           ),

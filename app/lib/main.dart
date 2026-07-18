@@ -54,12 +54,23 @@ class HotelPOSApp extends StatelessWidget {
   Widget build(BuildContext context) {
     final api = APIService.instance;
     // Watch settings to trigger a rebuild of MaterialApp when color or other settings change.
-    context.watch<AppSettingsController>();
+    final settings = context.watch<AppSettingsController>();
+
+    // Queue screen doesn't change theme (always light)
+    if (isQueueScreenMode) {
+      AppTheme.isDarkMode = false;
+    } else {
+      AppTheme.isDarkMode = settings.themeMode == ThemeMode.dark ||
+          (settings.themeMode == ThemeMode.system &&
+              MediaQuery.of(context).platformBrightness == Brightness.dark);
+    }
 
     return MaterialApp(
       title: 'FoodKing POS - LAN-first Restaurant POS System',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.darkTheme,
+      themeMode: isQueueScreenMode ? ThemeMode.light : settings.themeMode,
       // Automatic initial route redirection based on Auth State
       home: isQueueScreenMode
           ? const OrderQueueScreen(isSeparateWindow: true)

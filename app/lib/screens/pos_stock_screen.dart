@@ -42,8 +42,13 @@ class _POSStockScreenState extends State<POSStockScreen> {
 
   // Applied Filters State
   String _appliedProduct = '';
-  String _appliedDate = '';
   String _appliedType = '--';
+  String _appliedDate = '';
+
+  // Date Range Presets
+  String _datePreset = 'all'; // 'all', 'today', 'weekly', 'monthly', 'yearly', 'custom'
+  DateTime? _startDate;
+  DateTime? _endDate;
 
   @override
   void initState() {
@@ -79,6 +84,70 @@ class _POSStockScreenState extends State<POSStockScreen> {
     }
   }
 
+  // Date Filtering Helper
+  bool _isWithinDateRange(String dateStr) {
+    final dateTime = DateTime.tryParse(dateStr);
+    if (dateTime == null) return true;
+    final localDateTime = dateTime.toLocal();
+
+    final now = DateTime.now();
+    final startOfToday = DateTime(now.year, now.month, now.day);
+    final endOfToday = startOfToday.add(const Duration(hours: 23, minutes: 59, seconds: 59));
+
+    switch (_datePreset) {
+      case 'today':
+        return localDateTime.isAfter(startOfToday) && localDateTime.isBefore(endOfToday);
+      case 'weekly':
+        final startOfWeek = startOfToday.subtract(const Duration(days: 7));
+        return localDateTime.isAfter(startOfWeek) && localDateTime.isBefore(endOfToday);
+      case 'monthly':
+        final startOfMonth = startOfToday.subtract(const Duration(days: 30));
+        return localDateTime.isAfter(startOfMonth) && localDateTime.isBefore(endOfToday);
+      case 'yearly':
+        final startOfYear = startOfToday.subtract(const Duration(days: 365));
+        return localDateTime.isAfter(startOfYear) && localDateTime.isBefore(endOfToday);
+      case 'custom':
+        if (_startDate == null || _endDate == null) return true;
+        final customEnd = DateTime(_endDate!.year, _endDate!.month, _endDate!.day, 23, 59, 59);
+        return localDateTime.isAfter(_startDate!) && localDateTime.isBefore(customEnd);
+      case 'all':
+      default:
+        return true;
+    }
+  }
+
+  // Pick Custom Date Range picker
+  Future<void> _selectCustomDateRange() async {
+    final pickedRange = await showDateRangePicker(
+      context: context,
+      initialDateRange: _startDate != null && _endDate != null
+          ? DateTimeRange(start: _startDate!, end: _endDate!)
+          : null,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: ColorScheme.light(
+              primary: AppTheme.primary,
+              onPrimary: Colors.white,
+              surface: AppTheme.cardLight,
+              onSurface: AppTheme.textLightPrimary,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (pickedRange != null) {
+      setState(() {
+        _startDate = pickedRange.start;
+        _endDate = pickedRange.end;
+      });
+    }
+  }
+
   // Filtered logs list getter
   List<dynamic> get _filteredLogs {
     return _logs.where((l) {
@@ -89,6 +158,8 @@ class _POSStockScreenState extends State<POSStockScreen> {
       final matchType = _appliedType == '--' || typeStr == _appliedType.toLowerCase();
 
       final timestampStr = (l['timestamp'] ?? '').toString();
+      if (!_isWithinDateRange(timestampStr)) return false;
+
       final dateFormatted = DateFormat('yyyy-MM-dd').format((DateTime.tryParse(timestampStr) ?? DateTime.now()).toLocal());
       final matchDate = _appliedDate.isEmpty || dateFormatted.contains(_appliedDate);
 
@@ -110,7 +181,7 @@ class _POSStockScreenState extends State<POSStockScreen> {
 
       final resultPath = await FilePicker.platform.saveFile(
         dialogTitle: 'Export POS Product Stock Logs',
-        fileName: 'POS_Stock_Logs.csv',
+        fileName: 'POS_Stock_Logs_${_datePreset.toUpperCase()}.csv',
         type: FileType.custom,
         allowedExtensions: ['csv'],
       );
@@ -128,6 +199,89 @@ class _POSStockScreenState extends State<POSStockScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Export failed: $e'), backgroundColor: AppTheme.danger),
+        );
+      }
+    }
+  }
+
+  // Export PDF ledger file
+  Future<void> _exportToPDF() async {
+    try {
+      final doc = pw.Document();
+      
+      final headers = ['Product', 'Change', 'Log Type', 'Reason', 'Recorder', 'Date & Time'];
+      final data = _filteredLogs.take(_entriesLimit).map((l) {
+        final changeVal = double.tryParse(l['change_qty'].toString()) ?? 0.00;
+        final isPositive = changeVal > 0;
+        final timeFormatted = DateFormat('yyyy-MM-dd HH:mm').format((DateTime.tryParse(l['timestamp']) ?? DateTime.now()).toLocal());
+        
+        return [
+          (l['product_name'] ?? 'N/A').toString(),
+          '${isPositive ? "+" : ""}${changeVal.toStringAsFixed(0)}',
+          l['type'].toString().toUpperCase(),
+          (l['reason'] ?? '').toString(),
+          (l['recorder_name'] ?? 'Admin').toString(),
+          timeFormatted
+        ];
+      }).toList();
+
+      doc.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat.a4,
+          build: (pw.Context context) {
+            return pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text(
+                  'POS Stock Ledger Report (${_datePreset.toUpperCase()})',
+                  style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold),
+                ),
+                pw.SizedBox(height: 10),
+                pw.Text('Generated on: ${DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now())}'),
+                if (_datePreset == 'custom' && _startDate != null && _endDate != null)
+                  pw.Text('Period: ${DateFormat('yyyy-MM-dd').format(_startDate!)} to ${DateFormat('yyyy-MM-dd').format(_endDate!)}'),
+                pw.SizedBox(height: 20),
+                pw.Table.fromTextArray(
+                  headers: headers,
+                  data: data,
+                  border: pw.TableBorder.all(color: PdfColors.grey300),
+                  headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                  cellHeight: 25,
+                  cellAlignments: {
+                    0: pw.Alignment.centerLeft,
+                    1: pw.Alignment.centerRight,
+                    2: pw.Alignment.center,
+                    3: pw.Alignment.centerLeft,
+                    4: pw.Alignment.centerLeft,
+                    5: pw.Alignment.center,
+                  },
+                ),
+              ],
+            );
+          },
+        ),
+      );
+
+      final resultPath = await FilePicker.platform.saveFile(
+        dialogTitle: 'Export PDF Report',
+        fileName: 'POS_Stock_Logs_${_datePreset.toUpperCase()}.pdf',
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+      );
+
+      if (resultPath != null) {
+        final file = File(resultPath);
+        await file.writeAsBytes(await doc.save());
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('PDF saved successfully to: $resultPath'), backgroundColor: AppTheme.accent),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Export PDF failed: $e'), backgroundColor: AppTheme.danger),
         );
       }
     }
@@ -211,9 +365,9 @@ class _POSStockScreenState extends State<POSStockScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       margin: const EdgeInsets.only(bottom: 24),
       decoration: BoxDecoration(
-        color: const Color(0xFFFEE2E2),
+        color: AppTheme.isDarkMode ? const Color(0xFF7F1D1D) : const Color(0xFFFEE2E2),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFFCA5A5)),
+        border: Border.all(color: AppTheme.isDarkMode ? const Color(0xFFEF4444) : const Color(0xFFFCA5A5)),
       ),
       child: Row(
         children: [
@@ -228,7 +382,7 @@ class _POSStockScreenState extends State<POSStockScreen> {
                   style: GoogleFonts.inter(
                     fontSize: 13,
                     fontWeight: FontWeight.bold,
-                    color: const Color(0xFF991B1B),
+                    color: AppTheme.isDarkMode ? const Color(0xFFFCA5A5) : const Color(0xFF991B1B),
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -236,7 +390,7 @@ class _POSStockScreenState extends State<POSStockScreen> {
                   'The following POS items are running low or depleted: $names$suffix. Please replenish stock immediately.',
                   style: GoogleFonts.inter(
                     fontSize: 12,
-                    color: const Color(0xFFB91C1C),
+                    color: AppTheme.isDarkMode ? const Color(0xFFFEE2E2) : const Color(0xFFB91C1C),
                   ),
                 ),
               ],
@@ -288,7 +442,7 @@ class _POSStockScreenState extends State<POSStockScreen> {
                     Row(
                       children: [
                         Text('Dashboard', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
-                        const Icon(Icons.chevron_right, size: 14, color: AppTheme.textLightSecondary),
+                        Icon(Icons.chevron_right, size: 14, color: AppTheme.textLightSecondary),
                         Text('POS Stock', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.primary, fontWeight: FontWeight.w600)),
                       ],
                     ),
@@ -299,15 +453,17 @@ class _POSStockScreenState extends State<POSStockScreen> {
                     // Limit Dropdown
                     Container(
                       decoration: BoxDecoration(
-                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                        border: Border.all(color: AppTheme.borderLight),
                         borderRadius: BorderRadius.circular(8),
-                        color: Colors.white,
+                        color: AppTheme.cardLight,
                       ),
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       height: 42,
                       child: DropdownButtonHideUnderline(
                         child: DropdownButton<int>(
+                          dropdownColor: AppTheme.cardLight,
                           value: _entriesLimit,
+                          style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary),
                           items: const [
                             DropdownMenuItem(value: 10, child: Text('10')),
                             DropdownMenuItem(value: 25, child: Text('25')),
@@ -334,7 +490,9 @@ class _POSStockScreenState extends State<POSStockScreen> {
                     // Export Popup Button
                     PopupMenuButton<String>(
                       onSelected: (val) {
-                        if (val == 'Print') {
+                        if (val == 'PDF') {
+                          _exportToPDF();
+                        } else if (val == 'Print') {
                           _printList();
                         } else if (val == 'XLS') {
                           _exportToCSV();
@@ -343,12 +501,22 @@ class _POSStockScreenState extends State<POSStockScreen> {
                       offset: const Offset(0, 45),
                       itemBuilder: (context) => [
                         PopupMenuItem(
+                          value: 'PDF',
+                          child: Row(
+                            children: [
+                              const Icon(Icons.picture_as_pdf_outlined, size: 16, color: Color(0xFF64748B)),
+                              const SizedBox(width: 8),
+                              Text('Export PDF', style: GoogleFonts.inter(fontSize: 13)),
+                            ],
+                          ),
+                        ),
+                        PopupMenuItem(
                           value: 'Print',
                           child: Row(
                             children: [
                               const Icon(Icons.print_outlined, size: 16, color: Color(0xFF64748B)),
                               const SizedBox(width: 8),
-                              Text('Print', style: GoogleFonts.inter(fontSize: 13)),
+                              Text('Print Report', style: GoogleFonts.inter(fontSize: 13)),
                             ],
                           ),
                         ),
@@ -358,7 +526,7 @@ class _POSStockScreenState extends State<POSStockScreen> {
                             children: [
                               const Icon(Icons.table_view_outlined, size: 16, color: Color(0xFF64748B)),
                               const SizedBox(width: 8),
-                              Text('XLS', style: GoogleFonts.inter(fontSize: 13)),
+                              Text('Export CSV', style: GoogleFonts.inter(fontSize: 13)),
                             ],
                           ),
                         ),
@@ -367,7 +535,7 @@ class _POSStockScreenState extends State<POSStockScreen> {
                         decoration: BoxDecoration(
                           border: Border.all(color: AppTheme.primary),
                           borderRadius: BorderRadius.circular(8),
-                          color: Colors.white,
+                          color: AppTheme.cardLight,
                         ),
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                         child: Row(
@@ -388,6 +556,8 @@ class _POSStockScreenState extends State<POSStockScreen> {
                 ),
               ],
             ),
+            const SizedBox(height: 24),
+            _buildDateFilterCard(),
             const SizedBox(height: 24),
 
             // Warning Banner for low stock
@@ -447,9 +617,9 @@ class _POSStockScreenState extends State<POSStockScreen> {
   Widget _buildFilterSection() {
     return Card(
       elevation: 0,
-      color: Colors.white,
+      color: AppTheme.cardLight,
       shape: RoundedRectangleBorder(
-        side: const BorderSide(color: Color(0xFFE2E8F0)),
+        side: BorderSide(color: AppTheme.borderLight),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Padding(
@@ -482,6 +652,8 @@ class _POSStockScreenState extends State<POSStockScreen> {
                       const SizedBox(height: 6),
                       DropdownButtonFormField<String>(
                         value: _filterType,
+                        dropdownColor: AppTheme.cardLight,
+                        style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary),
                         items: const [
                           DropdownMenuItem(value: '--', child: Text('--')),
                           DropdownMenuItem(value: 'purchase', child: Text('Purchase')),
@@ -589,9 +761,9 @@ class _POSStockScreenState extends State<POSStockScreen> {
 
     return Card(
       elevation: 0,
-      color: Colors.white,
+      color: AppTheme.cardLight,
       shape: RoundedRectangleBorder(
-        side: const BorderSide(color: Color(0xFFE2E8F0)),
+        side: BorderSide(color: AppTheme.borderLight),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Padding(
@@ -610,14 +782,16 @@ class _POSStockScreenState extends State<POSStockScreen> {
 
             _buildFieldLabel('SELECT PRODUCT *'),
             const SizedBox(height: 6),
-            DropdownButtonFormField<ProductModel>(
+             DropdownButtonFormField<ProductModel>(
               value: _selectedStockProduct != null && controller.products.contains(_selectedStockProduct) && _selectedStockProduct!.trackStock ? _selectedStockProduct : null,
+              dropdownColor: AppTheme.cardLight,
+              style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary),
               items: [
                 ...controller.products.where((p) => p.trackStock).map((p) => DropdownMenuItem(
                       value: p,
                       child: Text(
                         '${p.name} ${p.sinhalaName != null ? "(${p.sinhalaName})" : ""} | Current: ${p.stockQty}',
-                        style: const TextStyle(fontSize: 12),
+                        style: TextStyle(fontSize: 12, color: AppTheme.textLightPrimary),
                         overflow: TextOverflow.ellipsis,
                       ),
                     )),
@@ -652,6 +826,8 @@ class _POSStockScreenState extends State<POSStockScreen> {
                       const SizedBox(height: 6),
                       DropdownButtonFormField<String>(
                         value: _stockType,
+                        dropdownColor: AppTheme.cardLight,
+                        style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary),
                         items: const [
                           DropdownMenuItem(value: 'purchase', child: Text('New Purchase / Input')),
                           DropdownMenuItem(value: 'adjustment', child: Text('Correction / Count')),
@@ -697,9 +873,9 @@ class _POSStockScreenState extends State<POSStockScreen> {
   Widget _buildStockListCard(List<ProductModel> products) {
     return Card(
       elevation: 0,
-      color: Colors.white,
+      color: AppTheme.cardLight,
       shape: RoundedRectangleBorder(
-        side: const BorderSide(color: Color(0xFFE2E8F0)),
+        side: BorderSide(color: AppTheme.borderLight),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Padding(
@@ -724,10 +900,10 @@ class _POSStockScreenState extends State<POSStockScreen> {
             Container(
               height: 400,
               child: products.isEmpty
-                  ? Center(child: Text('No matching products found.', style: GoogleFonts.inter(color: const Color(0xFF64748B))))
+                  ? Center(child: Text('No matching products found.', style: GoogleFonts.inter(color: AppTheme.textLightSecondary)))
                   : ListView.separated(
                       itemCount: products.length,
-                      separatorBuilder: (context, index) => const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                      separatorBuilder: (context, index) => Divider(height: 1, color: AppTheme.dividerColor),
                       itemBuilder: (context, index) {
                         final p = products[index];
                         final isLowStock = p.stockQty <= p.minStockLevel;
@@ -750,7 +926,7 @@ class _POSStockScreenState extends State<POSStockScreen> {
                                       const SizedBox(height: 2),
                                       Text(
                                         p.sinhalaName!,
-                                        style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
+                                        style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary),
                                       ),
                                     ],
                                   ],
@@ -775,7 +951,7 @@ class _POSStockScreenState extends State<POSStockScreen> {
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                     decoration: BoxDecoration(
-                                      color: isLowStock ? const Color(0xFFFCE8E6) : const Color(0xFFF1F5F9),
+                                      color: isLowStock ? const Color(0xFFFCE8E6) : AppTheme.bgLight,
                                       borderRadius: BorderRadius.circular(4),
                                     ),
                                     child: Text(
@@ -807,9 +983,9 @@ class _POSStockScreenState extends State<POSStockScreen> {
   Widget _buildLogsCard(List<dynamic> logsList) {
     return Card(
       elevation: 0,
-      color: Colors.white,
+      color: AppTheme.cardLight,
       shape: RoundedRectangleBorder(
-        side: const BorderSide(color: Color(0xFFE2E8F0)),
+        side: BorderSide(color: AppTheme.borderLight),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Padding(
@@ -827,14 +1003,14 @@ class _POSStockScreenState extends State<POSStockScreen> {
                 ? Padding(
                     padding: const EdgeInsets.symmetric(vertical: 40.0),
                     child: Center(
-                      child: Text('No adjustment history logged.', style: GoogleFonts.inter(color: const Color(0xFF64748B))),
+                      child: Text('No adjustment history logged.', style: GoogleFonts.inter(color: AppTheme.textLightSecondary)),
                     ),
                   )
                 : Column(
                     children: [
                       // Table header
                       Container(
-                        color: const Color(0xFFF8FAFC),
+                        color: AppTheme.bgLight,
                         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
                         child: Row(
                           children: [
@@ -852,7 +1028,7 @@ class _POSStockScreenState extends State<POSStockScreen> {
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
                         itemCount: logsList.length,
-                        separatorBuilder: (context, index) => const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                        separatorBuilder: (context, index) => Divider(height: 1, color: AppTheme.dividerColor),
                         itemBuilder: (context, index) {
                           final l = logsList[index];
                           final changeVal = double.tryParse(l['change_qty'].toString()) ?? 0.00;
@@ -926,7 +1102,7 @@ class _POSStockScreenState extends State<POSStockScreen> {
                                   flex: 3,
                                   child: Text(
                                     l['reason'] ?? '',
-                                    style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF475569)),
+                                    style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary),
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
@@ -934,14 +1110,14 @@ class _POSStockScreenState extends State<POSStockScreen> {
                                   flex: 3,
                                   child: Text(
                                     l['recorder_name'] ?? 'Admin',
-                                    style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+                                    style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary),
                                   ),
                                 ),
                                 Expanded(
                                   flex: 4,
                                   child: Text(
                                     timeFormatted,
-                                    style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
+                                    style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary),
                                   ),
                                 ),
                               ],
@@ -960,14 +1136,14 @@ class _POSStockScreenState extends State<POSStockScreen> {
   Widget _buildTableHeaderText(String label) {
     return Text(
       label,
-      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF475569), letterSpacing: 0.5),
+      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary, letterSpacing: 0.5),
     );
   }
 
   Widget _buildFieldLabel(String label) {
     return Text(
       label,
-      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF475569)),
+      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary),
     );
   }
 
@@ -1000,5 +1176,78 @@ class _POSStockScreenState extends State<POSStockScreen> {
         SnackBar(content: Text(e.toString()), backgroundColor: AppTheme.danger),
       );
     }
+  }
+
+  Widget _buildDateFilterCard() {
+    return Card(
+      elevation: 0,
+      color: AppTheme.cardLight,
+      shape: RoundedRectangleBorder(
+        side: BorderSide(color: AppTheme.borderLight),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              Text(
+                'Report Period:',
+                style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+              ),
+              const SizedBox(width: 16),
+              _buildDatePresetChip('all', 'All Time'),
+              const SizedBox(width: 8),
+              _buildDatePresetChip('today', 'Today (Daily)'),
+              const SizedBox(width: 8),
+              _buildDatePresetChip('weekly', 'Weekly'),
+              const SizedBox(width: 8),
+              _buildDatePresetChip('monthly', 'Monthly'),
+              const SizedBox(width: 8),
+              _buildDatePresetChip('yearly', 'Yearly'),
+              const SizedBox(width: 8),
+              _buildDatePresetChip('custom', 'Custom Range'),
+              if (_datePreset == 'custom') ...[
+                const SizedBox(width: 16),
+                TextButton.icon(
+                  onPressed: _selectCustomDateRange,
+                  icon: const Icon(Icons.date_range, size: 16),
+                  label: Text(
+                    _startDate == null || _endDate == null
+                        ? 'Select Range'
+                        : '${DateFormat('yyyy-MM-dd').format(_startDate!)} to ${DateFormat('yyyy-MM-dd').format(_endDate!)}',
+                    style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDatePresetChip(String presetKey, String label) {
+    final isSelected = _datePreset == presetKey;
+    return ChoiceChip(
+      label: Text(label, style: TextStyle(fontSize: 12, color: isSelected ? Colors.white : AppTheme.textLightPrimary)),
+      selectedColor: AppTheme.primary,
+      backgroundColor: AppTheme.bgLight,
+      selected: isSelected,
+      onSelected: (val) {
+        if (val) {
+          setState(() {
+            _datePreset = presetKey;
+            if (presetKey != 'custom') {
+              _startDate = null;
+              _endDate = null;
+            } else if (_startDate == null || _endDate == null) {
+              _selectCustomDateRange();
+            }
+          });
+        }
+      },
+    );
   }
 }

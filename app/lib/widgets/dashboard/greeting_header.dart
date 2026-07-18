@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../api_service.dart';
 import '../../services/translation_service.dart';
+import '../../theme.dart';
 
 class GreetingHeader extends StatelessWidget {
   const GreetingHeader({Key? key}) : super(key: key);
@@ -41,7 +42,7 @@ class GreetingHeader extends StatelessWidget {
               style: GoogleFonts.inter(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
-                color: const Color(0xFF1E293B), // Dark text slate
+                color: AppTheme.textLightPrimary, // Dynamic text color
               ),
             ),
           ],
@@ -51,9 +52,9 @@ class GreetingHeader extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
           decoration: BoxDecoration(
-            color: const Color(0xFFFFF0F5), // Light pink background
+            color: AppTheme.isDarkMode ? const Color(0xFFE91E63).withOpacity(0.12) : const Color(0xFFFFF0F5), // Dynamic pink tint
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: const Color(0xFFFFC0CB), width: 1.5),
+            border: Border.all(color: AppTheme.isDarkMode ? const Color(0xFFE91E63).withOpacity(0.3) : const Color(0xFFFFC0CB), width: 1.5),
           ),
           child: Text(
             'Version : 3.9'.tr(context),

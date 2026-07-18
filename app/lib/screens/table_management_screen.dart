@@ -219,7 +219,7 @@ class _TableManagementScreenState extends State<TableManagementScreen> {
     }).toList();
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: AppTheme.bgLight,
       body: _isLoading
           ? Center(child: CircularProgressIndicator(color: AppTheme.primary))
           : _isListView
@@ -249,9 +249,9 @@ class _TableManagementScreenState extends State<TableManagementScreen> {
           Expanded(
             child: Container(
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: AppTheme.cardLight,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFE2E8F0)),
+                border: Border.all(color: AppTheme.borderLight),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.02),
@@ -266,32 +266,32 @@ class _TableManagementScreenState extends State<TableManagementScreen> {
                   Expanded(
                     child: SingleChildScrollView(
                       child: DataTable(
-                        headingRowColor: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
+                        headingRowColor: WidgetStateProperty.all(AppTheme.bgLight),
                         dataRowMinHeight: 60,
                         dataRowMaxHeight: 60,
                         columns: [
                           DataColumn(
                             label: Text(
                               'NAME',
-                              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF64748B)),
+                              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary),
                             ),
                           ),
                           DataColumn(
                             label: Text(
                               'SIZE',
-                              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF64748B)),
+                              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary),
                             ),
                           ),
                           DataColumn(
                             label: Text(
                               'STATUS',
-                              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF64748B)),
+                              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary),
                             ),
                           ),
                           DataColumn(
                             label: Text(
                               'ACTION',
-                              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF64748B)),
+                              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary),
                             ),
                           ),
                         ],
@@ -302,13 +302,13 @@ class _TableManagementScreenState extends State<TableManagementScreen> {
                               DataCell(
                                 Text(
                                   table.tableNumber,
-                                  style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: const Color(0xFF1E293B)),
+                                  style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.textLightPrimary),
                                 ),
                               ),
                               DataCell(
                                 Text(
                                   '${table.capacity}',
-                                  style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w500, color: const Color(0xFF475569)),
+                                  style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w500, color: AppTheme.textLightSecondary),
                                 ),
                               ),
                               DataCell(
@@ -404,16 +404,16 @@ class _TableManagementScreenState extends State<TableManagementScreen> {
             children: [
               Text(
                 'Dining Seating Layout',
-                style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)),
+                style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
               ),
               ElevatedButton.icon(
                 onPressed: () => setState(() => _isListView = true),
                 icon: const Icon(Icons.list_alt_outlined, size: 16),
                 label: const Text('Back to List'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: const Color(0xFF64748B),
-                  side: const BorderSide(color: Color(0xFFE2E8F0)),
+                  backgroundColor: AppTheme.cardLight,
+                  foregroundColor: AppTheme.textLightSecondary,
+                  side: BorderSide(color: AppTheme.borderLight),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
               ),
@@ -424,7 +424,8 @@ class _TableManagementScreenState extends State<TableManagementScreen> {
           // Status Legend Row
           Card(
             elevation: 0,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: const BorderSide(color: Color(0xFFE2E8F0))),
+            color: AppTheme.cardLight,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: AppTheme.borderLight)),
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
               child: Row(
@@ -458,7 +459,7 @@ class _TableManagementScreenState extends State<TableManagementScreen> {
                   borderRadius: BorderRadius.circular(16),
                   child: Container(
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: AppTheme.cardLight,
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(color: tableColor, width: 2),
                       boxShadow: [
@@ -529,7 +530,7 @@ class _TableManagementScreenState extends State<TableManagementScreen> {
                               ),
                             ),
                             if (table.currentOrderId != null)
-                              const Icon(
+                              Icon(
                                 Icons.receipt_long,
                                 size: 16,
                                 color: AppTheme.textLightSecondary,
@@ -559,7 +560,7 @@ class _TableManagementScreenState extends State<TableManagementScreen> {
         const SizedBox(width: 8),
         Text(
           title,
-          style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF475569)),
+          style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textLightSecondary),
         ),
       ],
     );
@@ -591,9 +592,9 @@ class _TableManagementScreenState extends State<TableManagementScreen> {
             width: isCompact ? double.infinity : 260,
             height: 40,
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: AppTheme.cardLight,
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
+              border: Border.all(color: AppTheme.borderLight),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Row(
@@ -602,9 +603,10 @@ class _TableManagementScreenState extends State<TableManagementScreen> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: TextField(
-                    decoration: const InputDecoration(
+                    style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary),
+                    decoration: InputDecoration(
                       hintText: 'Search Table...',
-                      hintStyle: TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+                      hintStyle: TextStyle(color: AppTheme.textLightSecondary, fontSize: 13),
                       border: InputBorder.none,
                       isDense: true,
                       contentPadding: EdgeInsets.zero,
@@ -626,14 +628,15 @@ class _TableManagementScreenState extends State<TableManagementScreen> {
             height: 40,
             padding: const EdgeInsets.symmetric(horizontal: 12),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: AppTheme.cardLight,
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
+              border: Border.all(color: AppTheme.borderLight),
             ),
             child: DropdownButtonHideUnderline(
               child: DropdownButton<String>(
                 value: _selectedStatus,
-                style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF1E293B), fontWeight: FontWeight.w500),
+                style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary, fontWeight: FontWeight.w500),
+                dropdownColor: AppTheme.cardLight,
                 items: const [
                   DropdownMenuItem(value: 'All', child: Text('All Statuses')),
                   DropdownMenuItem(value: 'Active', child: Text('Active')),
@@ -656,14 +659,15 @@ class _TableManagementScreenState extends State<TableManagementScreen> {
             height: 40,
             padding: const EdgeInsets.symmetric(horizontal: 12),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: AppTheme.cardLight,
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
+              border: Border.all(color: AppTheme.borderLight),
             ),
             child: DropdownButtonHideUnderline(
               child: DropdownButton<int>(
                 value: _rowsPerPage,
-                style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF1E293B), fontWeight: FontWeight.w500),
+                style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary, fontWeight: FontWeight.w500),
+                dropdownColor: AppTheme.cardLight,
                 items: const [
                   DropdownMenuItem(value: 10, child: Text('10 Rows')),
                   DropdownMenuItem(value: 25, child: Text('25 Rows')),
@@ -689,10 +693,10 @@ class _TableManagementScreenState extends State<TableManagementScreen> {
             icon: const Icon(Icons.grid_view_outlined, size: 16),
             label: const Text('Grid Layout'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.white,
-              foregroundColor: const Color(0xFF64748B),
+              backgroundColor: AppTheme.cardLight,
+              foregroundColor: AppTheme.textLightSecondary,
               elevation: 0,
-              side: const BorderSide(color: Color(0xFFE2E8F0)),
+              side: BorderSide(color: AppTheme.borderLight),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               minimumSize: const Size(120, 40),
               textStyle: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold),
@@ -742,7 +746,7 @@ class _TableManagementScreenState extends State<TableManagementScreen> {
             totalRows == 0
                 ? 'Showing 0 to 0 of 0 entries'
                 : 'Showing ${startIdx + 1} to $endIdx of $totalRows entries',
-            style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF64748B)),
+            style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightSecondary),
           ),
           if (totalPages > 1)
             Row(
@@ -766,7 +770,7 @@ class _TableManagementScreenState extends State<TableManagementScreen> {
                         margin: const EdgeInsets.symmetric(horizontal: 2),
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
-                          color: isSelected ? const Color(0xFFFFF0F5) : Colors.transparent,
+                          color: isSelected ? AppTheme.primary.withOpacity(0.08) : Colors.transparent,
                           border: isSelected ? Border.all(color: AppTheme.primary, width: 1) : null,
                           borderRadius: BorderRadius.circular(4),
                         ),
@@ -775,7 +779,7 @@ class _TableManagementScreenState extends State<TableManagementScreen> {
                           style: GoogleFonts.inter(
                             fontSize: 13,
                             fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                            color: isSelected ? AppTheme.primary : Color(0xFF64748B),
+                            color: isSelected ? AppTheme.primary : AppTheme.textLightSecondary,
                           ),
                         ),
                       ),
@@ -866,10 +870,10 @@ class _TableFormDrawerState extends State<_TableFormDrawer> {
     return Container(
       width: size.width > 500 ? 460 : size.width * 0.85,
       height: size.height,
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.only(topLeft: Radius.circular(16), bottomLeft: Radius.circular(16)),
-        boxShadow: [
+      decoration: BoxDecoration(
+        color: AppTheme.cardLight,
+        borderRadius: const BorderRadius.only(topLeft: Radius.circular(16), bottomLeft: Radius.circular(16)),
+        boxShadow: const [
           BoxShadow(color: Colors.black12, blurRadius: 16, offset: Offset(-4, 0)),
         ],
       ),
@@ -880,18 +884,18 @@ class _TableFormDrawerState extends State<_TableFormDrawer> {
             // Drawer Header
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-              decoration: const BoxDecoration(
-                border: Border(bottom: BorderSide(color: Color(0xFFF1F5F9))),
+              decoration: BoxDecoration(
+                border: Border(bottom: BorderSide(color: AppTheme.dividerColor)),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
                     widget.table != null ? 'Edit Table' : 'Add Table',
-                    style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)),
+                    style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close, color: Color(0xFF64748B)),
+                    icon: Icon(Icons.close, color: AppTheme.textLightSecondary),
                     onPressed: () => Navigator.pop(context),
                   ),
                 ],
@@ -909,7 +913,7 @@ class _TableFormDrawerState extends State<_TableFormDrawer> {
                     _buildLabel('NAME *'),
                     TextFormField(
                       controller: _nameController,
-                      style: GoogleFonts.inter(fontSize: 13),
+                      style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary),
                       decoration: _buildInputDecoration('Enter table name (e.g. Table 1)'),
                       validator: (v) => v == null || v.trim().isEmpty ? 'Table name is required' : null,
                     ),
@@ -919,7 +923,7 @@ class _TableFormDrawerState extends State<_TableFormDrawer> {
                     _buildLabel('SIZE *'),
                     TextFormField(
                       controller: _sizeController,
-                      style: GoogleFonts.inter(fontSize: 13),
+                      style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary),
                       decoration: _buildInputDecoration('Enter capacity size (number of seats)'),
                       keyboardType: TextInputType.number,
                       validator: (v) {
@@ -952,8 +956,8 @@ class _TableFormDrawerState extends State<_TableFormDrawer> {
             // Footer buttons
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-              decoration: const BoxDecoration(
-                border: Border(top: BorderSide(color: Color(0xFFF1F5F9))),
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: AppTheme.dividerColor)),
               ),
               child: Row(
                 children: [
@@ -978,11 +982,11 @@ class _TableFormDrawerState extends State<_TableFormDrawer> {
                   OutlinedButton(
                     onPressed: () => Navigator.pop(context),
                     style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: Color(0xFFE2E8F0)),
+                      side: BorderSide(color: AppTheme.borderLight),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       minimumSize: const Size(80, 44),
                     ),
-                    child: Text('Close', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: const Color(0xFF64748B))),
+                    child: Text('Close', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary)),
                   ),
                 ],
               ),
@@ -998,7 +1002,7 @@ class _TableFormDrawerState extends State<_TableFormDrawer> {
       padding: const EdgeInsets.only(bottom: 6.0),
       child: Text(
         text,
-        style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF64748B)),
+        style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary),
       ),
     );
   }
@@ -1015,7 +1019,7 @@ class _TableFormDrawerState extends State<_TableFormDrawer> {
         ),
         Text(
           label,
-          style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF1E293B), fontWeight: FontWeight.w500),
+          style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary, fontWeight: FontWeight.w500),
         ),
       ],
     );
@@ -1024,12 +1028,12 @@ class _TableFormDrawerState extends State<_TableFormDrawer> {
   InputDecoration _buildInputDecoration(String hint) {
     return InputDecoration(
       hintText: hint,
-      hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+      hintStyle: TextStyle(color: AppTheme.textLightSecondary, fontSize: 13),
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       isDense: true,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+        borderSide: BorderSide(color: AppTheme.borderLight),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),

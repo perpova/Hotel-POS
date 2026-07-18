@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../services/translation_service.dart';
+import '../../theme.dart';
 import 'custom_date_range_picker.dart';
 
 class OrderStatistics extends StatelessWidget {
@@ -60,7 +61,7 @@ class OrderStatistics extends StatelessWidget {
               style: GoogleFonts.outfit(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: const Color(0xFF1E293B),
+                color: AppTheme.textLightPrimary,
               ),
             ),
             // Date Picker Button
@@ -79,9 +80,9 @@ class OrderStatistics extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: AppTheme.cardLight,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                  border: Border.all(color: AppTheme.borderLight),
                 ),
                 child: Row(
                   children: [
@@ -89,15 +90,15 @@ class OrderStatistics extends StatelessWidget {
                       dateStr,
                       style: GoogleFonts.inter(
                         fontSize: 12,
-                        color: const Color(0xFF64748B),
+                        color: AppTheme.textLightSecondary,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
                     const SizedBox(width: 8),
-                    const Icon(
+                    Icon(
                       Icons.calendar_today_outlined,
                       size: 14,
-                      color: Color(0xFF64748B),
+                      color: AppTheme.textLightSecondary,
                     ),
                   ],
                 ),
@@ -123,9 +124,9 @@ class OrderStatistics extends StatelessWidget {
             return Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: AppTheme.cardLight,
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: const Color(0xFFF1F5F9)),
+                border: Border.all(color: AppTheme.borderLight),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.01),
@@ -162,7 +163,7 @@ class OrderStatistics extends StatelessWidget {
                           style: GoogleFonts.inter(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: const Color(0xFF64748B),
+                            color: AppTheme.textLightSecondary,
                           ),
                         ),
                         const SizedBox(height: 2),
@@ -171,7 +172,7 @@ class OrderStatistics extends StatelessWidget {
                           style: GoogleFonts.outfit(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
-                            color: const Color(0xFF1E293B),
+                            color: AppTheme.textLightPrimary,
                           ),
                         ),
                       ],

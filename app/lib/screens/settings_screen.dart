@@ -89,9 +89,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           // ── Breadcrumb ───────────────────────────────────────────────────
           Row(children: [
             Text('Dashboard', style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightSecondary)),
-            const Icon(Icons.chevron_right, size: 15, color: AppTheme.textLightSecondary),
+            Icon(Icons.chevron_right, size: 15, color: AppTheme.textLightSecondary),
             Text('Settings', style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightSecondary)),
-            const Icon(Icons.chevron_right, size: 15, color: AppTheme.textLightSecondary),
+            Icon(Icons.chevron_right, size: 15, color: AppTheme.textLightSecondary),
             Text(_tabTitle(_activeTab),
                 style: GoogleFonts.inter(fontSize: 13, color: AppTheme.primary, fontWeight: FontWeight.w600)),
           ]),
@@ -103,9 +103,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Container(
                 width: 220,
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: AppTheme.cardLight,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                  border: Border.all(color: AppTheme.isDarkMode ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
                 ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(12),
@@ -116,14 +116,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       _item(Icons.business_outlined,     'Company',          _SettingsTab.company),
                       _item(Icons.palette_outlined,      'Theme',            _SettingsTab.theme),
                       _item(Icons.store_outlined,        'Branches',         _SettingsTab.branches),
-                      const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                      Divider(height: 1, color: AppTheme.isDarkMode ? const Color(0xFF334155) : const Color(0xFFF1F5F9)),
                       _section('PROFILE'),
                       _item(Icons.person_outline,        'Edit Profile',     _SettingsTab.editProfile),
                       _item(Icons.lock_outline,          'Change Password',  _SettingsTab.changePassword),
-                      const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                      Divider(height: 1, color: AppTheme.isDarkMode ? const Color(0xFF334155) : const Color(0xFFF1F5F9)),
                       _section('USERS'),
                       _item(Icons.shield_outlined,       'Roles & Permissions', _SettingsTab.rolesPermissions),
-                      const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                      Divider(height: 1, color: AppTheme.isDarkMode ? const Color(0xFF334155) : const Color(0xFFF1F5F9)),
                       _section('SYSTEM'),
                       _item(Icons.settings_ethernet,     'API Connection',   _SettingsTab.connection),
                       _item(Icons.monitor,               'External Display', _SettingsTab.externalDisplay),
@@ -139,9 +139,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Expanded(
                 child: Container(
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: AppTheme.cardLight,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                    border: Border.all(color: AppTheme.isDarkMode ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
                   ),
                   padding: _activeTab == _SettingsTab.rolesPermissions
                       ? const EdgeInsets.all(20)
@@ -161,7 +161,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
     child: Text(label, style: GoogleFonts.inter(
         fontSize: 10, fontWeight: FontWeight.bold,
-        color: const Color(0xFF94A3B8), letterSpacing: 0.8)),
+        color: AppTheme.textLightSecondary, letterSpacing: 0.8)),
   );
 
   Widget _item(IconData icon, String label, _SettingsTab tab) {
@@ -177,12 +177,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
           borderRadius: BorderRadius.circular(8),
         ),
         child: Row(children: [
-          Icon(icon, size: 16, color: active ? AppTheme.primary : Color(0xFF64748B)),
+          Icon(icon, size: 16, color: active ? AppTheme.primary : AppTheme.textLightSecondary),
           const SizedBox(width: 10),
           Text(label, style: GoogleFonts.inter(
             fontSize: 13,
             fontWeight: active ? FontWeight.w600 : FontWeight.normal,
-            color: active ? AppTheme.primary : Color(0xFF334155),
+            color: active ? AppTheme.primary : AppTheme.textLightPrimary,
           )),
         ]),
       ),
@@ -235,7 +235,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ]),
         const SizedBox(height: 24),
         Text('Edit Profile', style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
-        const Divider(color: Color(0xFFE2E8F0)),
+        Divider(color: AppTheme.dividerColor),
         const SizedBox(height: 16),
         Row(children: [
           Expanded(child: _field('FIRST NAME *', _firstNameController)),
@@ -272,7 +272,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _buildChangePassword() => SingleChildScrollView(
     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text('Change Password', style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
-      const Divider(color: Color(0xFFE2E8F0)),
+      Divider(color: AppTheme.dividerColor),
       const SizedBox(height: 20),
       Row(children: [
         Expanded(child: _field('OLD PASSWORD *', _oldPasswordController, obscure: true)),
@@ -310,7 +310,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return SingleChildScrollView(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text('API / VPS Connection', style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
-        const Divider(color: Color(0xFFE2E8F0)),
+        Divider(color: AppTheme.dividerColor),
         const SizedBox(height: 8),
         Text('Change the base URL to switch between localhost and your remote VPS server.',
             style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
@@ -347,10 +347,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       {bool obscure = false, TextInputType? keyboardType}) =>
     Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text(label, style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold,
-          color: const Color(0xFF64748B), letterSpacing: 0.5)),
+          color: AppTheme.textLightSecondary, letterSpacing: 0.5)),
       const SizedBox(height: 6),
       TextField(controller: ctrl, obscureText: obscure, keyboardType: keyboardType,
-          style: GoogleFonts.inter(fontSize: 13)),
+          style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary)),
     ]);
 
   Widget _saveButton(String label, VoidCallback onTap) => ElevatedButton.icon(
@@ -371,7 +371,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return SingleChildScrollView(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text('External Display & Queue Window', style: GoogleFonts.outfit(fontSize: 17, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
-        const Divider(color: Color(0xFFE2E8F0)),
+        Divider(color: AppTheme.dividerColor),
         const SizedBox(height: 8),
         Text('Configure the Order Queue display on a secondary customer monitor (connected via HDMI).',
             style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
@@ -396,10 +396,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ]),
         const SizedBox(height: 12),
         Text('When enabled, the Order Queue screen will automatically open as a separate independent window when the system starts.',
-            style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B))),
+            style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary)),
 
         const SizedBox(height: 32),
-        const Divider(color: Color(0xFFE2E8F0)),
+        Divider(color: AppTheme.dividerColor),
         const SizedBox(height: 20),
 
         // Queue Screen Background Media
@@ -417,7 +417,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               decoration: BoxDecoration(
-                border: Border.all(color: const Color(0xFFCBD5E1)),
+                border: Border.all(color: AppTheme.borderLight),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: DropdownButtonHideUnderline(
@@ -529,12 +529,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     constraints: const BoxConstraints(maxWidth: 450),
                     child: TextField(
                       controller: _queueVideoUrlController,
-                      decoration: InputDecoration(
+                    decoration: InputDecoration(
                         hintText: 'Enter YouTube URL or Video Link (e.g. https://youtu.be/...)',
                         labelText: 'Video URL',
                         labelStyle: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary),
-                        hintStyle: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8)),
+                        hintStyle: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary),
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: AppTheme.borderLight)),
                         prefixIcon: const Icon(Icons.link, size: 20),
                       ),
                       style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary),
@@ -662,7 +663,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     max: 1.0,
                     divisions: 20,
                     activeColor: AppTheme.primary,
-                    inactiveColor: const Color(0xFFE2E8F0),
+                    inactiveColor: AppTheme.borderLight,
                     onChanged: (val) async {
                       await appSettings.saveQueueBackground(type: appSettings.queueBgType, opacity: val);
                     },
@@ -672,11 +673,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ],
           ),
           Text('Higher opacity makes the overlay darker, making order tokens more readable.',
-              style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B))),
+              style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary)),
         ],
 
         const SizedBox(height: 32),
-        const Divider(color: Color(0xFFE2E8F0)),
+        Divider(color: AppTheme.dividerColor),
         const SizedBox(height: 20),
 
         // Manual open button
@@ -757,11 +758,11 @@ class _CompanyTabState extends State<_CompanyTab> {
   }
 
   Widget _lbl(String t) => Text(t, style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold,
-      color: const Color(0xFF64748B), letterSpacing: 0.5));
+      color: AppTheme.textLightSecondary, letterSpacing: 0.5));
 
   Widget _tf(TextEditingController c, {int maxLines = 1, TextInputType? kt}) =>
     TextField(controller: c, maxLines: maxLines, keyboardType: kt,
-        style: GoogleFonts.inter(fontSize: 13));
+        style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary));
 
   Widget _row(List<Widget> children) => Row(
     crossAxisAlignment: CrossAxisAlignment.start,
@@ -776,7 +777,7 @@ class _CompanyTabState extends State<_CompanyTab> {
     return SingleChildScrollView(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text('Company', style: GoogleFonts.outfit(fontSize: 17, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
-        const Divider(color: Color(0xFFE2E8F0)),
+        Divider(color: AppTheme.dividerColor),
         const SizedBox(height: 16),
 
         _row([_fld('NAME *', _nameCtrl), _fld('EMAIL', _emailCtrl, kt: TextInputType.emailAddress)]),
@@ -888,9 +889,9 @@ class _ThemeTabState extends State<_ThemeTab> {
   }) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text(label, style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold,
-          color: const Color(0xFF64748B), letterSpacing: 0.5)),
+          color: AppTheme.textLightSecondary, letterSpacing: 0.5)),
       const SizedBox(height: 6),
-      Text(hint, style: GoogleFonts.inter(fontSize: 10, color: const Color(0xFF94A3B8))),
+      Text(hint, style: GoogleFonts.inter(fontSize: 10, color: AppTheme.textLightSecondary)),
       const SizedBox(height: 8),
       Row(children: [
         OutlinedButton.icon(
@@ -899,7 +900,7 @@ class _ThemeTabState extends State<_ThemeTab> {
           label: const Text('Choose File'),
           style: OutlinedButton.styleFrom(
             foregroundColor: AppTheme.textLightPrimary,
-            side: const BorderSide(color: Color(0xFFCBD5E1)),
+            side: BorderSide(color: AppTheme.borderLight),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             textStyle: GoogleFonts.inter(fontSize: 12),
           ),
@@ -917,7 +918,7 @@ class _ThemeTabState extends State<_ThemeTab> {
         Container(
           width: 120, height: 80,
           decoration: BoxDecoration(
-            border: Border.all(color: const Color(0xFFE2E8F0)),
+            border: Border.all(color: AppTheme.borderLight),
             borderRadius: BorderRadius.circular(8),
           ),
           clipBehavior: Clip.antiAlias,
@@ -989,7 +990,7 @@ class _ThemeTabState extends State<_ThemeTab> {
         ),
 
         const SizedBox(height: 32),
-        const Divider(color: Color(0xFFE2E8F0)),
+        Divider(color: AppTheme.dividerColor),
         const SizedBox(height: 20),
 
         // ── Primary Color ─────────────────────────────────────────────────
@@ -1005,7 +1006,7 @@ class _ThemeTabState extends State<_ThemeTab> {
               decoration: BoxDecoration(
                 color: _pickedColor ?? AppTheme.primary,
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFFE2E8F0), width: 2),
+                border: Border.all(color: AppTheme.borderLight, width: 2),
               ),
             ),
           ),
@@ -1015,7 +1016,7 @@ class _ThemeTabState extends State<_ThemeTab> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
-                border: Border.all(color: const Color(0xFFE2E8F0)),
+                border: Border.all(color: AppTheme.borderLight),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
@@ -1028,7 +1029,7 @@ class _ThemeTabState extends State<_ThemeTab> {
 
         const SizedBox(height: 16),
         Text('PRESETS', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold,
-            color: const Color(0xFF94A3B8), letterSpacing: 0.8)),
+            color: AppTheme.textLightSecondary, letterSpacing: 0.8)),
         const SizedBox(height: 8),
         Wrap(spacing: 10, runSpacing: 10, children: _presets.map((c) {
           final selected = c.value == (_pickedColor ?? AppTheme.primary).value;
@@ -1069,7 +1070,7 @@ class _ThemeTabState extends State<_ThemeTab> {
         ),
 
         const SizedBox(height: 32),
-        const Divider(color: Color(0xFFE2E8F0)),
+        Divider(color: AppTheme.dividerColor),
         const SizedBox(height: 20),
 
         // ── POS Layout Toggle ──
@@ -1092,6 +1093,51 @@ class _ThemeTabState extends State<_ThemeTab> {
           Text(
             context.watch<AppSettingsController>().cartOnLeft ? 'Left Hand Side' : 'Right Hand Side (Default)',
             style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.primary),
+          ),
+        ]),
+
+        const SizedBox(height: 32),
+        Divider(color: AppTheme.dividerColor),
+        const SizedBox(height: 20),
+
+        // ── Theme Mode ──
+        Text('App Theme Mode', style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
+        const SizedBox(height: 8),
+        Text('Choose how the application theme is displayed on this device.',
+            style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
+        const SizedBox(height: 16),
+        Row(children: [
+          ChoiceChip(
+            label: const Text('Light Mode'),
+            selected: context.watch<AppSettingsController>().themeMode == ThemeMode.light,
+            selectedColor: AppTheme.primary.withOpacity(0.15),
+            onSelected: (selected) async {
+              if (selected) {
+                await context.read<AppSettingsController>().saveThemeMode(ThemeMode.light);
+              }
+            },
+          ),
+          const SizedBox(width: 12),
+          ChoiceChip(
+            label: const Text('Dark Mode'),
+            selected: context.watch<AppSettingsController>().themeMode == ThemeMode.dark,
+            selectedColor: AppTheme.primary.withOpacity(0.15),
+            onSelected: (selected) async {
+              if (selected) {
+                await context.read<AppSettingsController>().saveThemeMode(ThemeMode.dark);
+              }
+            },
+          ),
+          const SizedBox(width: 12),
+          ChoiceChip(
+            label: const Text('System Default'),
+            selected: context.watch<AppSettingsController>().themeMode == ThemeMode.system,
+            selectedColor: AppTheme.primary.withOpacity(0.15),
+            onSelected: (selected) async {
+              if (selected) {
+                await context.read<AppSettingsController>().saveThemeMode(ThemeMode.system);
+              }
+            },
           ),
         ]),
       ]),
@@ -1281,7 +1327,7 @@ class _BranchesTabState extends State<_BranchesTab> {
         ),
       ]),
       const SizedBox(height: 16),
-      const Divider(color: Color(0xFFE2E8F0)),
+      Divider(color: AppTheme.dividerColor),
       const SizedBox(height: 16),
 
       // ── Branch Cards Grid ─────────────────────────────────────────────────
@@ -1315,9 +1361,9 @@ class _BranchesTabState extends State<_BranchesTab> {
                   final isActive = b.status == 'Active';
                   return Container(
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: AppTheme.cardLight,
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                      border: Border.all(color: AppTheme.borderLight),
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black.withOpacity(0.02),
@@ -1563,9 +1609,9 @@ class _BranchDialogState extends State<_BranchDialog> {
           decoration: InputDecoration(
             contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+                borderSide: BorderSide(color: AppTheme.borderLight)),
             enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+                borderSide: BorderSide(color: AppTheme.borderLight)),
           )),
     ]);
 
@@ -1580,6 +1626,7 @@ class _BranchDialogState extends State<_BranchDialog> {
   Widget build(BuildContext context) {
     final isEdit = widget.editing != null;
     return Dialog(
+      backgroundColor: AppTheme.cardLight,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: SizedBox(
         width: 560,
@@ -1590,12 +1637,12 @@ class _BranchDialogState extends State<_BranchDialog> {
               // Title
               Row(children: [
                 Text(isEdit ? 'Edit Branch' : 'Add Branch',
-                    style: GoogleFonts.outfit(fontSize: 17, fontWeight: FontWeight.bold)),
+                    style: GoogleFonts.outfit(fontSize: 17, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
                 const Spacer(),
                 IconButton(onPressed: () => Navigator.pop(context),
                     icon: const Icon(Icons.close, size: 20)),
               ]),
-              const Divider(color: Color(0xFFE2E8F0)),
+              Divider(color: AppTheme.dividerColor),
               const SizedBox(height: 16),
 
               // Name + Status row
@@ -1659,7 +1706,7 @@ class _BranchDialogState extends State<_BranchDialog> {
                     width: 50, height: 50,
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                      border: Border.all(color: AppTheme.borderLight),
                     ),
                     clipBehavior: Clip.antiAlias,
                     child: Base64ImageWidget(base64Str: _imageBase64, fit: BoxFit.cover),
@@ -1836,9 +1883,9 @@ class _KotSoundTabState extends State<_KotSoundTab> {
 
                     return Container(
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: AppTheme.cardLight,
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                        border: Border.all(color: AppTheme.borderLight),
                         boxShadow: [
                           BoxShadow(
                             color: Colors.black.withOpacity(0.01),
@@ -1960,7 +2007,7 @@ class _KotSoundTabState extends State<_KotSoundTab> {
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
                                   decoration: BoxDecoration(
-                                    border: Border.all(color: const Color(0xFFCBD5E1)),
+                                    border: Border.all(color: AppTheme.borderLight),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: DropdownButton<String>(
@@ -2125,6 +2172,7 @@ class _RecordSoundDialogState extends State<_RecordSoundDialog> {
   @override
   Widget build(BuildContext context) {
     return Dialog(
+      backgroundColor: AppTheme.cardLight,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Container(
         width: 380,
@@ -2134,7 +2182,7 @@ class _RecordSoundDialogState extends State<_RecordSoundDialog> {
           children: [
             Text(
               'Record Voice Alert',
-              style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold),
+              style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
             ),
             const SizedBox(height: 6),
             Text(
@@ -2147,17 +2195,17 @@ class _RecordSoundDialogState extends State<_RecordSoundDialog> {
               width: 100,
               height: 100,
               decoration: BoxDecoration(
-                color: _recording ? AppTheme.danger.withOpacity(0.08) : Colors.grey.shade100,
+                color: _recording ? AppTheme.danger.withOpacity(0.08) : AppTheme.bgLight,
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: _recording ? AppTheme.danger : Colors.grey.shade300,
+                  color: _recording ? AppTheme.danger : AppTheme.borderLight,
                   width: 2,
                 ),
               ),
               child: Icon(
                 _recording ? Icons.mic : Icons.mic_none,
                 size: 44,
-                color: _recording ? AppTheme.danger : Colors.grey.shade600,
+                color: _recording ? AppTheme.danger : AppTheme.textLightSecondary,
               ),
             ),
             const SizedBox(height: 20),

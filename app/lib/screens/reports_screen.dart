@@ -119,7 +119,7 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
                     Row(
                       children: [
                         Text('Dashboard', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
-                        const Icon(Icons.chevron_right, size: 14, color: AppTheme.textLightSecondary),
+                        Icon(Icons.chevron_right, size: 14, color: AppTheme.textLightSecondary),
                         Text('Reports & Logs', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.primary, fontWeight: FontWeight.w600)),
                       ],
                     ),
@@ -131,9 +131,9 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
 
             // Tab bar selector
             Container(
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
+              decoration: BoxDecoration(
+                color: AppTheme.cardLight,
+                border: Border(bottom: BorderSide(color: AppTheme.dividerColor)),
               ),
               child: TabBar(
                 controller: _tabController,
@@ -233,7 +233,7 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
                     icon: const Icon(Icons.calendar_month, size: 16),
                     label: Text(_selectedEodDate != null ? DateFormat('yyyy-MM-dd').format(_selectedEodDate!) : 'Select Date'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
+                      backgroundColor: AppTheme.cardLight,
                       foregroundColor: AppTheme.primary,
                       elevation: 0,
                       side: BorderSide(color: AppTheme.primary),
@@ -277,9 +277,9 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
               Expanded(
                 child: Card(
                   elevation: 0,
-                  color: const Color(0xFFFFF5F5), // Light pink tint
+                  color: AppTheme.isDarkMode ? AppTheme.primary.withOpacity(0.08) : const Color(0xFFFFF5F5), // Dynamic pinkish tint
                   shape: RoundedRectangleBorder(
-                    side: const BorderSide(color: Color(0xFFFFD1D1)),
+                    side: BorderSide(color: AppTheme.isDarkMode ? AppTheme.primary.withOpacity(0.2) : const Color(0xFFFFD1D1)),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Padding(
@@ -288,18 +288,18 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text('Sales Breakdown', style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold, color: AppTheme.primary)),
-                        const Divider(height: 32, color: Color(0xFFFFD1D1)),
+                        Divider(height: 32, color: AppTheme.isDarkMode ? AppTheme.primary.withOpacity(0.2) : const Color(0xFFFFD1D1)),
                         ...sales.map((s) => Padding(
                           padding: const EdgeInsets.symmetric(vertical: 8),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text('${s['payment_method'].toString().toUpperCase()} (${s['count']} bills)', style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569))),
+                              Text('${s['payment_method'].toString().toUpperCase()} (${s['count']} bills)', style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightSecondary)),
                               Text('LKR ${(double.parse(s['total'].toString())).toStringAsFixed(2)}', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
                             ],
                           ),
                         )).toList(),
-                        const Divider(height: 32, color: Color(0xFFFFD1D1)),
+                        Divider(height: 32, color: AppTheme.isDarkMode ? AppTheme.primary.withOpacity(0.2) : const Color(0xFFFFD1D1)),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
@@ -320,9 +320,9 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
                   children: [
                     Card(
                       elevation: 0,
-                      color: const Color(0xFFFFF5F5), // Light pink tint
+                      color: AppTheme.isDarkMode ? AppTheme.primary.withOpacity(0.08) : const Color(0xFFFFF5F5), // Dynamic pinkish tint
                       shape: RoundedRectangleBorder(
-                        side: const BorderSide(color: Color(0xFFFFD1D1)),
+                        side: BorderSide(color: AppTheme.isDarkMode ? AppTheme.primary.withOpacity(0.2) : const Color(0xFFFFD1D1)),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Padding(
@@ -331,7 +331,7 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text('Expenses Summary', style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold, color: AppTheme.primary)),
-                            const Divider(height: 32, color: Color(0xFFFFD1D1)),
+                            Divider(height: 32, color: AppTheme.isDarkMode ? AppTheme.primary.withOpacity(0.2) : const Color(0xFFFFD1D1)),
                             if (expenses.isEmpty)
                               Padding(
                                 padding: const EdgeInsets.symmetric(vertical: 8),
@@ -343,12 +343,12 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
                                 child: Row(
                                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
-                                    Text(e['category'].toString().toUpperCase(), style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569))),
+                                    Text(e['category'].toString().toUpperCase(), style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightSecondary)),
                                     Text('LKR ${(double.parse(e['total'].toString())).toStringAsFixed(2)}', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
                                   ],
                                 ),
                               )).toList(),
-                            const Divider(height: 32, color: Color(0xFFFFD1D1)),
+                            Divider(height: 32, color: AppTheme.isDarkMode ? AppTheme.primary.withOpacity(0.2) : const Color(0xFFFFD1D1)),
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
@@ -363,9 +363,9 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
                     const SizedBox(height: 16),
                     Card(
                       elevation: 0,
-                      color: const Color(0xFFFFF5F5), // Light pink tint
+                      color: AppTheme.isDarkMode ? AppTheme.primary.withOpacity(0.08) : const Color(0xFFFFF5F5), // Dynamic pinkish tint
                       shape: RoundedRectangleBorder(
-                        side: const BorderSide(color: Color(0xFFFFD1D1)),
+                        side: BorderSide(color: AppTheme.isDarkMode ? AppTheme.primary.withOpacity(0.2) : const Color(0xFFFFD1D1)),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Padding(
@@ -401,9 +401,9 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
           flex: 2,
           child: Card(
             elevation: 0,
-            color: const Color(0xFFFFF5F5), // Soft pink tint
+            color: AppTheme.isDarkMode ? AppTheme.primary.withOpacity(0.08) : const Color(0xFFFFF5F5),
             shape: RoundedRectangleBorder(
-              side: const BorderSide(color: Color(0xFFFFD1D1)),
+              side: BorderSide(color: AppTheme.isDarkMode ? AppTheme.primary.withOpacity(0.2) : const Color(0xFFFFD1D1)),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Padding(
@@ -438,6 +438,8 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
                   const SizedBox(height: 6),
                   DropdownButtonFormField<String>(
                     value: _expenseCategory,
+                    dropdownColor: AppTheme.cardLight,
+                    style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary),
                     items: const [
                       DropdownMenuItem(value: 'ingredients', child: Text('Ingredients / Gas / Veg')),
                       DropdownMenuItem(value: 'salary', child: Text('Employee Salaries')),
@@ -453,6 +455,8 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
                   const SizedBox(height: 6),
                   DropdownButtonFormField<String>(
                     value: _expenseSource,
+                    dropdownColor: AppTheme.cardLight,
+                    style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary),
                     items: const [
                       DropdownMenuItem(value: 'drawer', child: Text('Drawer Cash (Logs Drawer Cashout)')),
                       DropdownMenuItem(value: 'bank', child: Text('Bank Transfer / Check')),
@@ -483,9 +487,9 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
           flex: 3,
           child: Card(
             elevation: 0,
-            color: const Color(0xFFFFF5F5), // Soft pink tint
+            color: AppTheme.isDarkMode ? AppTheme.primary.withOpacity(0.08) : const Color(0xFFFFF5F5),
             shape: RoundedRectangleBorder(
-              side: const BorderSide(color: Color(0xFFFFD1D1)),
+              side: BorderSide(color: AppTheme.isDarkMode ? AppTheme.primary.withOpacity(0.2) : const Color(0xFFFFD1D1)),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Padding(
@@ -504,7 +508,7 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
                               )
                             : ListView.separated(
                                 itemCount: _expenses.length,
-                                separatorBuilder: (context, index) => const Divider(height: 1, color: Color(0xFFFFD1D1)),
+                                separatorBuilder: (context, index) => Divider(height: 1, color: AppTheme.isDarkMode ? AppTheme.primary.withOpacity(0.2) : const Color(0xFFFFD1D1)),
                                 itemBuilder: (context, index) {
                                   final e = _expenses[index];
                                   final dateFormatted = DateFormat('yyyy-MM-dd').format(DateTime.tryParse(e.expenseDate) ?? DateTime.now());
@@ -521,7 +525,7 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
                                               const SizedBox(height: 4),
                                               Text(
                                                 '${e.category.toUpperCase()} | Date: $dateFormatted (${e.paymentSource.toUpperCase()})',
-                                                style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
+                                                style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary),
                                               ),
                                             ],
                                           ),
@@ -584,7 +588,7 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
   Widget _buildFieldLabel(String label) {
     return Text(
       label,
-      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF475569)),
+      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary),
     );
   }
 
@@ -638,9 +642,9 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
                         final s = _suppliers[index];
                         return Card(
                           elevation: 0,
-                          color: Colors.white,
+                          color: AppTheme.cardLight,
                           shape: RoundedRectangleBorder(
-                            side: const BorderSide(color: Color(0xFFE2E8F0)),
+                            side: BorderSide(color: AppTheme.borderLight),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: InkWell(
@@ -711,7 +715,7 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
                                       ),
                                     ],
                                   ),
-                                  const Divider(height: 20, color: Color(0xFFE2E8F0)),
+                                  Divider(height: 20, color: AppTheme.dividerColor),
                                   SizedBox(
                                     width: double.infinity,
                                     child: ElevatedButton.icon(
@@ -751,25 +755,29 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: Text(isEdit ? 'Edit Supplier' : 'Add Supplier', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+          backgroundColor: AppTheme.cardLight,
+          title: Text(isEdit ? 'Edit Supplier' : 'Add Supplier', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 TextField(
                   controller: nameController,
+                  style: TextStyle(color: AppTheme.textLightPrimary),
                   decoration: const InputDecoration(labelText: 'Supplier Name *'),
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: balanceController,
                   keyboardType: TextInputType.number,
+                  style: TextStyle(color: AppTheme.textLightPrimary),
                   decoration: const InputDecoration(labelText: 'Outstanding Balance (LKR)'),
                   enabled: !isEdit,
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: deliveryController,
+                  style: TextStyle(color: AppTheme.textLightPrimary),
                   decoration: const InputDecoration(labelText: 'Delivery Cycle (e.g. Weekly, Daily)'),
                 ),
               ],
@@ -778,7 +786,7 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
+              child: Text('Cancel', style: TextStyle(color: AppTheme.textLightSecondary)),
             ),
             ElevatedButton(
               onPressed: () async {
@@ -831,12 +839,13 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
       context: context,
       builder: (context) {
         return AlertDialog(
+          backgroundColor: AppTheme.cardLight,
           title: Text('Delete Supplier', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: AppTheme.danger)),
-          content: Text('Are you sure you want to delete "${supplier.name}"? This action cannot be undone.'),
+          content: Text('Are you sure you want to delete "${supplier.name}"? This action cannot be undone.', style: TextStyle(color: AppTheme.textLightPrimary)),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
+              child: Text('Cancel', style: TextStyle(color: AppTheme.textLightSecondary)),
             ),
             ElevatedButton(
               onPressed: () async {
@@ -874,7 +883,8 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
         return StatefulBuilder(
           builder: (context, setState) {
             return AlertDialog(
-              title: Text('Pay Supplier - ${supplier.name}', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+              backgroundColor: AppTheme.cardLight,
+              title: Text('Pay Supplier - ${supplier.name}', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -884,19 +894,23 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
                     const SizedBox(height: 16),
                     TextField(
                       controller: amountController,
+                      style: TextStyle(color: AppTheme.textLightPrimary),
                       keyboardType: TextInputType.number,
                       decoration: const InputDecoration(labelText: 'Payment Amount (LKR) *'),
                     ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: remarksController,
+                      style: TextStyle(color: AppTheme.textLightPrimary),
                       decoration: const InputDecoration(labelText: 'Remarks / Invoice No'),
                     ),
                     const SizedBox(height: 16),
-                    Text('PAID FROM', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF475569))),
+                    Text('PAID FROM', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary)),
                     const SizedBox(height: 6),
                     DropdownButtonFormField<String>(
                       value: paymentSource,
+                      dropdownColor: AppTheme.cardLight,
+                      style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary),
                       items: const [
                         DropdownMenuItem(value: 'drawer', child: Text('Drawer Cash (Logs Drawer Cashout)')),
                         DropdownMenuItem(value: 'bank', child: Text('Bank Transfer / Check')),
@@ -909,7 +923,7 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel'),
+                  child: Text('Cancel', style: TextStyle(color: AppTheme.textLightSecondary)),
                 ),
                 ElevatedButton(
                   onPressed: () async {
@@ -962,8 +976,10 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
               style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
             ),
             const Spacer(),
-            ChoiceChip(
-              label: const Text('Monthly Summary'),
+             ChoiceChip(
+              label: Text('Monthly Summary', style: TextStyle(color: _historicalPeriod == 'monthly' ? Colors.white : AppTheme.textLightPrimary)),
+              selectedColor: AppTheme.primary,
+              backgroundColor: AppTheme.cardLight,
               selected: _historicalPeriod == 'monthly',
               onSelected: (val) {
                 setState(() => _historicalPeriod = 'monthly');
@@ -972,7 +988,9 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
             ),
             const SizedBox(width: 8),
             ChoiceChip(
-              label: const Text('Yearly Summary'),
+              label: Text('Yearly Summary', style: TextStyle(color: _historicalPeriod == 'yearly' ? Colors.white : AppTheme.textLightPrimary)),
+              selectedColor: AppTheme.primary,
+              backgroundColor: AppTheme.cardLight,
               selected: _historicalPeriod == 'yearly',
               onSelected: (val) {
                 setState(() => _historicalPeriod = 'yearly');
@@ -985,9 +1003,9 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
         Expanded(
           child: Card(
             elevation: 0,
-            color: Colors.white,
+            color: AppTheme.cardLight,
             shape: RoundedRectangleBorder(
-              side: const BorderSide(color: Color(0xFFE2E8F0)),
+              side: BorderSide(color: AppTheme.dividerColor),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Padding(
@@ -995,16 +1013,16 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
               child: _loadingData
                   ? Center(child: CircularProgressIndicator(color: AppTheme.primary))
                   : _historicalReports.isEmpty
-                      ? Center(child: Text('No historical summaries found.', style: GoogleFonts.inter(color: const Color(0xFF64748B))))
+                      ? Center(child: Text('No historical summaries found.', style: GoogleFonts.inter(color: AppTheme.textLightSecondary)))
                       : ListView.separated(
                           itemCount: _historicalReports.length,
-                          separatorBuilder: (context, index) => const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                          separatorBuilder: (context, index) => Divider(height: 1, color: AppTheme.dividerColor),
                           itemBuilder: (context, index) {
                             final r = _historicalReports[index];
                             return ListTile(
                               leading: Icon(Icons.calendar_month, color: AppTheme.primary),
                               title: Text('Period: ${r['period']}', style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
-                              subtitle: Text('Total Orders: ${r['total_orders']} completed transactions.', style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B))),
+                              subtitle: Text('Total Orders: ${r['total_orders']} completed transactions.', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
                               trailing: Text('LKR ${(double.parse(r['revenue'].toString())).toStringAsFixed(2)}', style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: AppTheme.primary)),
                             );
                           },
@@ -1065,7 +1083,7 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
                   icon: const Icon(Icons.calendar_month, size: 16),
                   label: Text(_selectedLogsDate != null ? DateFormat('yyyy-MM-dd').format(_selectedLogsDate!) : 'Select Date'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
+                    backgroundColor: AppTheme.cardLight,
                     foregroundColor: AppTheme.primary,
                     elevation: 0,
                     side: BorderSide(color: AppTheme.primary),
@@ -1093,8 +1111,8 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.primary,
                     foregroundColor: Colors.white,
-                    disabledBackgroundColor: Colors.grey[300],
-                    disabledForegroundColor: Colors.grey[600],
+                    disabledBackgroundColor: AppTheme.isDarkMode ? Colors.grey[800] : Colors.grey[300],
+                    disabledForegroundColor: AppTheme.isDarkMode ? Colors.grey[600] : Colors.grey[600],
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   ),
@@ -1107,9 +1125,9 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
         Expanded(
           child: Card(
             elevation: 0,
-            color: Colors.white,
+            color: AppTheme.cardLight,
             shape: RoundedRectangleBorder(
-              side: const BorderSide(color: Color(0xFFE2E8F0)),
+              side: BorderSide(color: AppTheme.borderLight),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Padding(
@@ -1117,10 +1135,10 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
               child: _loadingData
                   ? Center(child: CircularProgressIndicator(color: AppTheme.primary))
                   : _logs.isEmpty
-                      ? Center(child: Text('No audit logs available.', style: GoogleFonts.inter(color: const Color(0xFF64748B))))
+                      ? Center(child: Text('No audit logs available.', style: GoogleFonts.inter(color: AppTheme.textLightSecondary)))
                       : ListView.separated(
                           itemCount: _logs.length,
-                          separatorBuilder: (context, index) => const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                          separatorBuilder: (context, index) => Divider(height: 1, color: AppTheme.dividerColor),
                           itemBuilder: (context, index) {
                             final l = _logs[index];
                             final isDanger = l.actionType == 'delete_bill' || l.actionType == 'cancel_order';
@@ -1145,7 +1163,7 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
                                         const SizedBox(height: 4),
                                         Text(
                                           'User: ${l.username ?? "Admin"} (${(l.role ?? "admin").toUpperCase()}) | Time: ${l.timestamp}',
-                                          style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
+                                          style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary),
                                         ),
                                       ],
                                     ),

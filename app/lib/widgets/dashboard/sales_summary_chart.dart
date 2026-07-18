@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 import '../../models.dart';
+import '../../theme.dart';
 import 'custom_date_range_picker.dart';
 
 class SalesSummaryChart extends StatelessWidget {
@@ -37,10 +38,10 @@ class SalesSummaryChart extends StatelessWidget {
 
     return Card(
       elevation: 0,
-      color: Colors.white,
+      color: AppTheme.cardLight,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: Color(0xFFF1F5F9)),
+        side: BorderSide(color: AppTheme.borderLight),
       ),
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -56,7 +57,7 @@ class SalesSummaryChart extends StatelessWidget {
                   style: GoogleFonts.outfit(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: const Color(0xFF1E293B),
+                    color: AppTheme.textLightPrimary,
                   ),
                 ),
                 InkWell(
@@ -74,9 +75,9 @@ class SalesSummaryChart extends StatelessWidget {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: AppTheme.cardLight,
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                      border: Border.all(color: AppTheme.borderLight),
                     ),
                     child: Row(
                       children: [
@@ -84,15 +85,15 @@ class SalesSummaryChart extends StatelessWidget {
                           dateStr,
                           style: GoogleFonts.inter(
                             fontSize: 11,
-                            color: const Color(0xFF64748B),
+                            color: AppTheme.textLightSecondary,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
                         const SizedBox(width: 6),
-                        const Icon(
+                        Icon(
                           Icons.calendar_today_outlined,
                           size: 12,
-                          color: Color(0xFF64748B),
+                          color: AppTheme.textLightSecondary,
                         ),
                       ],
                     ),
@@ -110,14 +111,14 @@ class SalesSummaryChart extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.bar_chart, color: Color(0xFF64748B), size: 16),
+                        Icon(Icons.bar_chart, color: AppTheme.textLightSecondary, size: 16),
                         const SizedBox(width: 4),
                         Text(
                           'LKR ${totalSales.toStringAsFixed(2)}',
                           style: GoogleFonts.outfit(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
-                            color: const Color(0xFF1E293B),
+                            color: AppTheme.textLightPrimary,
                           ),
                         ),
                       ],
@@ -127,7 +128,7 @@ class SalesSummaryChart extends StatelessWidget {
                       'Total Sales',
                       style: GoogleFonts.inter(
                         fontSize: 11,
-                        color: const Color(0xFF94A3B8),
+                        color: AppTheme.textLightSecondary,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
@@ -139,14 +140,14 @@ class SalesSummaryChart extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.show_chart, color: Color(0xFF64748B), size: 16),
+                        Icon(Icons.show_chart, color: AppTheme.textLightSecondary, size: 16),
                         const SizedBox(width: 4),
                         Text(
                           'LKR ${avgSales.toStringAsFixed(2)}',
                           style: GoogleFonts.outfit(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
-                            color: const Color(0xFF1E293B),
+                            color: AppTheme.textLightPrimary,
                           ),
                         ),
                       ],
@@ -156,7 +157,7 @@ class SalesSummaryChart extends StatelessWidget {
                       'Avg. Sales Per Day',
                       style: GoogleFonts.inter(
                         fontSize: 11,
-                        color: const Color(0xFF94A3B8),
+                        color: AppTheme.textLightSecondary,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
@@ -199,7 +200,7 @@ class SalesLineChartPainter extends CustomPainter {
     final paintFill = Paint()..style = PaintingStyle.fill;
 
     final paintGrid = Paint()
-      ..color = const Color(0xFFF1F5F9)
+      ..color = AppTheme.borderLight
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.0;
 
@@ -280,7 +281,7 @@ class SalesLineChartPainter extends CustomPainter {
       final textSpan = TextSpan(
         text: '${hour}:00',
         style: GoogleFonts.inter(
-          color: const Color(0xFF94A3B8),
+          color: AppTheme.textLightSecondary,
           fontSize: 10,
           fontWeight: FontWeight.w500,
         ),

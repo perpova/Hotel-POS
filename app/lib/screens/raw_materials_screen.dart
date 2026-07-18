@@ -46,8 +46,13 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
 
   // Applied Filters State
   String _appliedIngredient = '';
-  String _appliedDate = '';
   String _appliedType = '--';
+  String _appliedDate = '';
+
+  // Date Range Presets
+  String _datePreset = 'all'; // 'all', 'today', 'weekly', 'monthly', 'yearly', 'custom'
+  DateTime? _startDate;
+  DateTime? _endDate;
 
   @override
   void initState() {
@@ -87,6 +92,70 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
     }
   }
 
+  // Date Filtering Helper
+  bool _isWithinDateRange(String dateStr) {
+    final dateTime = DateTime.tryParse(dateStr);
+    if (dateTime == null) return true;
+    final localDateTime = dateTime.toLocal();
+
+    final now = DateTime.now();
+    final startOfToday = DateTime(now.year, now.month, now.day);
+    final endOfToday = startOfToday.add(const Duration(hours: 23, minutes: 59, seconds: 59));
+
+    switch (_datePreset) {
+      case 'today':
+        return localDateTime.isAfter(startOfToday) && localDateTime.isBefore(endOfToday);
+      case 'weekly':
+        final startOfWeek = startOfToday.subtract(const Duration(days: 7));
+        return localDateTime.isAfter(startOfWeek) && localDateTime.isBefore(endOfToday);
+      case 'monthly':
+        final startOfMonth = startOfToday.subtract(const Duration(days: 30));
+        return localDateTime.isAfter(startOfMonth) && localDateTime.isBefore(endOfToday);
+      case 'yearly':
+        final startOfYear = startOfToday.subtract(const Duration(days: 365));
+        return localDateTime.isAfter(startOfYear) && localDateTime.isBefore(endOfToday);
+      case 'custom':
+        if (_startDate == null || _endDate == null) return true;
+        final customEnd = DateTime(_endDate!.year, _endDate!.month, _endDate!.day, 23, 59, 59);
+        return localDateTime.isAfter(_startDate!) && localDateTime.isBefore(customEnd);
+      case 'all':
+      default:
+        return true;
+    }
+  }
+
+  // Pick Custom Date Range picker
+  Future<void> _selectCustomDateRange() async {
+    final pickedRange = await showDateRangePicker(
+      context: context,
+      initialDateRange: _startDate != null && _endDate != null
+          ? DateTimeRange(start: _startDate!, end: _endDate!)
+          : null,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: ColorScheme.light(
+              primary: AppTheme.primary,
+              onPrimary: Colors.white,
+              surface: AppTheme.cardLight,
+              onSurface: AppTheme.textLightPrimary,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (pickedRange != null) {
+      setState(() {
+        _startDate = pickedRange.start;
+        _endDate = pickedRange.end;
+      });
+    }
+  }
+
   // Filtered logs getter
   List<dynamic> get _filteredLogs {
     return _logs.where((l) {
@@ -97,6 +166,8 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
       final matchType = _appliedType == '--' || typeStr == _appliedType.toLowerCase();
 
       final timestampStr = (l['timestamp'] ?? '').toString();
+      if (!_isWithinDateRange(timestampStr)) return false;
+
       final dateFormatted = DateFormat('yyyy-MM-dd').format((DateTime.tryParse(timestampStr) ?? DateTime.now()).toLocal());
       final matchDate = _appliedDate.isEmpty || dateFormatted.contains(_appliedDate);
 
@@ -118,7 +189,7 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
 
       final resultPath = await FilePicker.platform.saveFile(
         dialogTitle: 'Export Ingredient Transaction Logs',
-        fileName: 'Ingredient_Stock_Logs.csv',
+        fileName: 'Ingredient_Stock_Logs_${_datePreset.toUpperCase()}.csv',
         type: FileType.custom,
         allowedExtensions: ['csv'],
       );
@@ -136,6 +207,89 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Export failed: $e'), backgroundColor: AppTheme.danger),
+        );
+      }
+    }
+  }
+
+  // Export PDF transaction log file
+  Future<void> _exportToPDF() async {
+    try {
+      final doc = pw.Document();
+      
+      final headers = ['Ingredient', 'Change', 'Log Type', 'Reason', 'Recorder', 'Date & Time'];
+      final data = _filteredLogs.take(_entriesLimit).map((l) {
+        final changeVal = double.tryParse(l['change_qty'].toString()) ?? 0.00;
+        final isPositive = changeVal > 0;
+        final timeFormatted = DateFormat('yyyy-MM-dd HH:mm').format((DateTime.tryParse(l['timestamp']) ?? DateTime.now()).toLocal());
+        
+        return [
+          (l['ingredient_name'] ?? 'N/A').toString(),
+          '${isPositive ? "+" : ""}${changeVal.toStringAsFixed(1)}',
+          l['type'].toString().toUpperCase(),
+          (l['reason'] ?? '').toString(),
+          (l['recorder_name'] ?? 'Admin').toString(),
+          timeFormatted
+        ];
+      }).toList();
+
+      doc.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat.a4,
+          build: (pw.Context context) {
+            return pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text(
+                  'Ingredient Stock Log (${_datePreset.toUpperCase()})',
+                  style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold),
+                ),
+                pw.SizedBox(height: 10),
+                pw.Text('Generated on: ${DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now())}'),
+                if (_datePreset == 'custom' && _startDate != null && _endDate != null)
+                  pw.Text('Period: ${DateFormat('yyyy-MM-dd').format(_startDate!)} to ${DateFormat('yyyy-MM-dd').format(_endDate!)}'),
+                pw.SizedBox(height: 20),
+                pw.Table.fromTextArray(
+                  headers: headers,
+                  data: data,
+                  border: pw.TableBorder.all(color: PdfColors.grey300),
+                  headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                  cellHeight: 25,
+                  cellAlignments: {
+                    0: pw.Alignment.centerLeft,
+                    1: pw.Alignment.centerRight,
+                    2: pw.Alignment.center,
+                    3: pw.Alignment.centerLeft,
+                    4: pw.Alignment.centerLeft,
+                    5: pw.Alignment.center,
+                  },
+                ),
+              ],
+            );
+          },
+        ),
+      );
+
+      final resultPath = await FilePicker.platform.saveFile(
+        dialogTitle: 'Export PDF Report',
+        fileName: 'Ingredient_Stock_Logs_${_datePreset.toUpperCase()}.pdf',
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+      );
+
+      if (resultPath != null) {
+        final file = File(resultPath);
+        await file.writeAsBytes(await doc.save());
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('PDF saved successfully to: $resultPath'), backgroundColor: AppTheme.accent),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Export PDF failed: $e'), backgroundColor: AppTheme.danger),
         );
       }
     }
@@ -218,9 +372,9 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       margin: const EdgeInsets.only(bottom: 24),
       decoration: BoxDecoration(
-        color: const Color(0xFFFEE2E2),
+        color: AppTheme.isDarkMode ? const Color(0xFF7F1D1D) : const Color(0xFFFEE2E2),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFFCA5A5)),
+        border: Border.all(color: AppTheme.isDarkMode ? const Color(0xFFEF4444) : const Color(0xFFFCA5A5)),
       ),
       child: Row(
         children: [
@@ -235,7 +389,7 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
                   style: GoogleFonts.inter(
                     fontSize: 13,
                     fontWeight: FontWeight.bold,
-                    color: const Color(0xFF991B1B),
+                    color: AppTheme.isDarkMode ? const Color(0xFFFCA5A5) : const Color(0xFF991B1B),
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -243,7 +397,7 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
                   'The following ingredients are out of stock or negative: $names. Please update stock level immediately to prevent recipe deduction errors.',
                   style: GoogleFonts.inter(
                     fontSize: 12,
-                    color: const Color(0xFFB91C1C),
+                    color: AppTheme.isDarkMode ? const Color(0xFFFEE2E2) : const Color(0xFFB91C1C),
                   ),
                 ),
               ],
@@ -287,7 +441,7 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
                     Row(
                       children: [
                         Text('Dashboard', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
-                        const Icon(Icons.chevron_right, size: 14, color: AppTheme.textLightSecondary),
+                        Icon(Icons.chevron_right, size: 14, color: AppTheme.textLightSecondary),
                         Text('Raw Materials', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.primary, fontWeight: FontWeight.w600)),
                       ],
                     ),
@@ -298,15 +452,17 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
                     // Limit Dropdown
                     Container(
                       decoration: BoxDecoration(
-                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                        border: Border.all(color: AppTheme.borderLight),
                         borderRadius: BorderRadius.circular(8),
-                        color: Colors.white,
+                        color: AppTheme.cardLight,
                       ),
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       height: 42,
                       child: DropdownButtonHideUnderline(
                         child: DropdownButton<int>(
+                          dropdownColor: AppTheme.cardLight,
                           value: _entriesLimit,
+                          style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary),
                           items: const [
                             DropdownMenuItem(value: 10, child: Text('10')),
                             DropdownMenuItem(value: 25, child: Text('25')),
@@ -333,7 +489,9 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
                     // Export Popup Button
                     PopupMenuButton<String>(
                       onSelected: (val) {
-                        if (val == 'Print') {
+                        if (val == 'PDF') {
+                          _exportToPDF();
+                        } else if (val == 'Print') {
                           _printList();
                         } else if (val == 'XLS') {
                           _exportToCSV();
@@ -342,12 +500,22 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
                       offset: const Offset(0, 45),
                       itemBuilder: (context) => [
                         PopupMenuItem(
+                          value: 'PDF',
+                          child: Row(
+                            children: [
+                              const Icon(Icons.picture_as_pdf_outlined, size: 16, color: Color(0xFF64748B)),
+                              const SizedBox(width: 8),
+                              Text('Export PDF', style: GoogleFonts.inter(fontSize: 13)),
+                            ],
+                          ),
+                        ),
+                        PopupMenuItem(
                           value: 'Print',
                           child: Row(
                             children: [
                               const Icon(Icons.print_outlined, size: 16, color: Color(0xFF64748B)),
                               const SizedBox(width: 8),
-                              Text('Print', style: GoogleFonts.inter(fontSize: 13)),
+                              Text('Print Report', style: GoogleFonts.inter(fontSize: 13)),
                             ],
                           ),
                         ),
@@ -357,7 +525,7 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
                             children: [
                               const Icon(Icons.table_view_outlined, size: 16, color: Color(0xFF64748B)),
                               const SizedBox(width: 8),
-                              Text('XLS', style: GoogleFonts.inter(fontSize: 13)),
+                              Text('Export CSV', style: GoogleFonts.inter(fontSize: 13)),
                             ],
                           ),
                         ),
@@ -366,7 +534,7 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
                         decoration: BoxDecoration(
                           border: Border.all(color: AppTheme.primary),
                           borderRadius: BorderRadius.circular(8),
-                          color: Colors.white,
+                          color: AppTheme.cardLight,
                         ),
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                         child: Row(
@@ -387,6 +555,8 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
                 ),
               ],
             ),
+            const SizedBox(height: 24),
+            _buildDateFilterCard(),
             const SizedBox(height: 24),
 
             // Warning Banner for low stock
@@ -491,9 +661,9 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
               margin: const EdgeInsets.only(right: 12),
               child: Card(
                 elevation: 0,
-                color: isDepleted ? const Color(0xFFFEF2F2) : Colors.white,
+                color: isDepleted ? (AppTheme.isDarkMode ? const Color(0xFF7F1D1D) : const Color(0xFFFEF2F2)) : AppTheme.cardLight,
                 shape: RoundedRectangleBorder(
-                  side: BorderSide(color: isDepleted ? const Color(0xFFFCA5A5) : const Color(0xFFE2E8F0), width: isDepleted ? 1.5 : 1.0),
+                  side: BorderSide(color: isDepleted ? const Color(0xFFFCA5A5) : (AppTheme.isDarkMode ? const Color(0xFF334155) : const Color(0xFFE2E8F0)), width: isDepleted ? 1.5 : 1.0),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Padding(
@@ -544,9 +714,9 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
   Widget _buildFilterSection() {
     return Card(
       elevation: 0,
-      color: Colors.white,
+      color: AppTheme.cardLight,
       shape: RoundedRectangleBorder(
-        side: const BorderSide(color: Color(0xFFE2E8F0)),
+        side: BorderSide(color: AppTheme.borderLight),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Padding(
@@ -579,6 +749,8 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
                       const SizedBox(height: 6),
                       DropdownButtonFormField<String>(
                         value: _filterType,
+                        dropdownColor: AppTheme.cardLight,
+                        style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary),
                         items: const [
                           DropdownMenuItem(value: '--', child: Text('--')),
                           DropdownMenuItem(value: 'purchase', child: Text('Purchase')),
@@ -643,7 +815,7 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
                   icon: const Icon(Icons.clear, size: 14),
                   label: const Text('Clear'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF475569),
+                    backgroundColor: AppTheme.textLightSecondary,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
@@ -664,7 +836,7 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
     if (!hasSeniorAccess) {
       return Card(
         color: AppTheme.danger.withOpacity(0.08),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: const BorderSide(color: AppTheme.danger)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: AppTheme.danger)),
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(
@@ -685,9 +857,9 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
 
     return Card(
       elevation: 0,
-      color: Colors.white,
+      color: AppTheme.cardLight,
       shape: RoundedRectangleBorder(
-        side: const BorderSide(color: Color(0xFFE2E8F0)),
+        side: BorderSide(color: AppTheme.borderLight),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Padding(
@@ -708,12 +880,14 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
             const SizedBox(height: 6),
             DropdownButtonFormField<IngredientModel>(
               value: _selectedIngredient,
+              dropdownColor: AppTheme.cardLight,
+              style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary),
               items: [
                 ..._ingredients.map((i) => DropdownMenuItem(
                       value: i,
                       child: Text(
                         '${i.name} | Current: ${i.stockQty} ${i.unit}',
-                        style: const TextStyle(fontSize: 12),
+                        style: TextStyle(fontSize: 12, color: AppTheme.textLightPrimary),
                       ),
                     )),
               ],
@@ -747,6 +921,8 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
                       const SizedBox(height: 6),
                       DropdownButtonFormField<String>(
                         value: _ingType,
+                        dropdownColor: AppTheme.cardLight,
+                        style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary),
                         items: const [
                           DropdownMenuItem(value: 'purchase', child: Text('New Purchase / Input')),
                           DropdownMenuItem(value: 'adjustment', child: Text('Correction / Count')),
@@ -794,9 +970,9 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
 
     return Card(
       elevation: 0,
-      color: Colors.white,
+      color: AppTheme.cardLight,
       shape: RoundedRectangleBorder(
-        side: const BorderSide(color: Color(0xFFE2E8F0)),
+        side: BorderSide(color: AppTheme.borderLight),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Padding(
@@ -826,6 +1002,8 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
             const SizedBox(height: 6),
             DropdownButtonFormField<String>(
               value: _newIngUnit,
+              dropdownColor: AppTheme.cardLight,
+              style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary),
               items: const [
                 DropdownMenuItem(value: 'kg', child: Text('Kilogram (kg)')),
                 DropdownMenuItem(value: 'units', child: Text('Units / Pieces')),
@@ -866,9 +1044,9 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
   Widget _buildLogsCard(List<dynamic> logsList) {
     return Card(
       elevation: 0,
-      color: Colors.white,
+      color: AppTheme.cardLight,
       shape: RoundedRectangleBorder(
-        side: const BorderSide(color: Color(0xFFE2E8F0)),
+        side: BorderSide(color: AppTheme.borderLight),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Padding(
@@ -886,14 +1064,14 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
                 ? Padding(
                     padding: const EdgeInsets.symmetric(vertical: 40.0),
                     child: Center(
-                      child: Text('No adjustment history logged.', style: GoogleFonts.inter(color: const Color(0xFF64748B))),
+                      child: Text('No adjustment history logged.', style: GoogleFonts.inter(color: AppTheme.textLightSecondary)),
                     ),
                   )
                 : Column(
                     children: [
                       // Table header
                       Container(
-                        color: const Color(0xFFF8FAFC),
+                        color: AppTheme.bgLight,
                         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
                         child: Row(
                           children: [
@@ -911,7 +1089,7 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
                         itemCount: logsList.length,
-                        separatorBuilder: (context, index) => const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                        separatorBuilder: (context, index) => Divider(height: 1, color: AppTheme.dividerColor),
                         itemBuilder: (context, index) {
                           final l = logsList[index];
                           final changeVal = double.tryParse(l['change_qty'].toString()) ?? 0.00;
@@ -924,18 +1102,18 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
                           
                           switch (l['type'].toString().toLowerCase()) {
                             case 'purchase':
-                              badgeColor = const Color(0xFFE6F4EA);
-                              badgeTextColor = const Color(0xFF137333);
+                              badgeColor = AppTheme.isDarkMode ? const Color(0xFF137333).withOpacity(0.2) : const Color(0xFFE6F4EA);
+                              badgeTextColor = AppTheme.isDarkMode ? const Color(0xFF81C784) : const Color(0xFF137333);
                               badgeLabel = 'PURCHASE';
                               break;
                             case 'wastage':
-                              badgeColor = const Color(0xFFFCE8E6);
-                              badgeTextColor = const Color(0xFFC5221F);
+                              badgeColor = AppTheme.isDarkMode ? const Color(0xFFC5221F).withOpacity(0.2) : const Color(0xFFFCE8E6);
+                              badgeTextColor = AppTheme.isDarkMode ? const Color(0xFFE57373) : const Color(0xFFC5221F);
                               badgeLabel = 'WASTAGE';
                               break;
                             default:
-                              badgeColor = const Color(0xFFE8F0FE);
-                              badgeTextColor = const Color(0xFF1A73E8);
+                              badgeColor = AppTheme.isDarkMode ? const Color(0xFF1A73E8).withOpacity(0.2) : const Color(0xFFE8F0FE);
+                              badgeTextColor = AppTheme.isDarkMode ? const Color(0xFF64B5F6) : const Color(0xFF1A73E8);
                               badgeLabel = 'CORRECTION';
                           }
 
@@ -979,7 +1157,7 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
                                   flex: 3,
                                   child: Text(
                                     l['reason'] ?? '',
-                                    style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF475569)),
+                                    style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary),
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
@@ -987,14 +1165,14 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
                                   flex: 3,
                                   child: Text(
                                     l['recorder_name'] ?? 'Admin',
-                                    style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+                                    style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary),
                                   ),
                                 ),
                                 Expanded(
                                   flex: 4,
                                   child: Text(
                                     timeFormatted,
-                                    style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
+                                    style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary),
                                   ),
                                 ),
                               ],
@@ -1013,14 +1191,14 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
   Widget _buildTableHeaderText(String label) {
     return Text(
       label,
-      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF475569), letterSpacing: 0.5),
+      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary, letterSpacing: 0.5),
     );
   }
 
   Widget _buildFieldLabel(String label) {
     return Text(
       label,
-      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF475569)),
+      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary),
     );
   }
 
@@ -1087,12 +1265,13 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
+              backgroundColor: AppTheme.cardLight,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               title: Row(
                 children: [
                   Icon(Icons.edit_outlined, color: AppTheme.primary),
                   const SizedBox(width: 8),
-                  Text('Edit Ingredient', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                  Text('Edit Ingredient', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
                 ],
               ),
               content: SingleChildScrollView(
@@ -1105,7 +1284,7 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
                     TextField(
                       controller: nameCtrl,
                       decoration: const InputDecoration(hintText: 'e.g. Sugar, Cardamom'),
-                      style: GoogleFonts.inter(fontSize: 13),
+                      style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary),
                     ),
                     const SizedBox(height: 16),
                     
@@ -1113,6 +1292,8 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
                     const SizedBox(height: 6),
                     DropdownButtonFormField<String>(
                       value: selectedUnit,
+                      dropdownColor: AppTheme.cardLight,
+                      style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary),
                       items: const [
                         DropdownMenuItem(value: 'kg', child: Text('Kilogram (kg)')),
                         DropdownMenuItem(value: 'units', child: Text('Units / Pieces')),
@@ -1129,7 +1310,7 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
                       controller: minStockCtrl,
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
                       decoration: const InputDecoration(hintText: 'e.g. 10.0, 50.0'),
-                      style: GoogleFonts.inter(fontSize: 13),
+                      style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary),
                     ),
                   ],
                 ),
@@ -1145,12 +1326,13 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
                           context: context,
                           builder: (confirmContext) {
                             return AlertDialog(
-                              title: const Text('Delete Ingredient'),
-                              content: Text('Are you sure you want to delete ${ingredient.name}? This will permanently remove it from stock records.'),
+                              backgroundColor: AppTheme.cardLight,
+                              title: Text('Delete Ingredient', style: TextStyle(color: AppTheme.textLightPrimary)),
+                              content: Text('Are you sure you want to delete ${ingredient.name}? This will permanently remove it from stock records.', style: TextStyle(color: AppTheme.textLightPrimary)),
                               actions: [
                                 TextButton(
                                   onPressed: () => Navigator.pop(confirmContext),
-                                  child: const Text('Cancel'),
+                                  child: Text('Cancel', style: TextStyle(color: AppTheme.textLightSecondary)),
                                 ),
                                 ElevatedButton(
                                   onPressed: () async {
@@ -1189,7 +1371,7 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
                       children: [
                         TextButton(
                           onPressed: () => Navigator.pop(context),
-                          child: const Text('Cancel'),
+                          child: Text('Cancel', style: TextStyle(color: AppTheme.textLightSecondary)),
                         ),
                         const SizedBox(width: 8),
                         ElevatedButton(
@@ -1232,6 +1414,79 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
             );
           },
         );
+      },
+    );
+  }
+
+  Widget _buildDateFilterCard() {
+    return Card(
+      elevation: 0,
+      color: AppTheme.cardLight,
+      shape: RoundedRectangleBorder(
+        side: BorderSide(color: AppTheme.borderLight),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              Text(
+                'Report Period:',
+                style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+              ),
+              const SizedBox(width: 16),
+              _buildDatePresetChip('all', 'All Time'),
+              const SizedBox(width: 8),
+              _buildDatePresetChip('today', 'Today (Daily)'),
+              const SizedBox(width: 8),
+              _buildDatePresetChip('weekly', 'Weekly'),
+              const SizedBox(width: 8),
+              _buildDatePresetChip('monthly', 'Monthly'),
+              const SizedBox(width: 8),
+              _buildDatePresetChip('yearly', 'Yearly'),
+              const SizedBox(width: 8),
+              _buildDatePresetChip('custom', 'Custom Range'),
+              if (_datePreset == 'custom') ...[
+                const SizedBox(width: 16),
+                TextButton.icon(
+                  onPressed: _selectCustomDateRange,
+                  icon: const Icon(Icons.date_range, size: 16),
+                  label: Text(
+                    _startDate == null || _endDate == null
+                        ? 'Select Range'
+                        : '${DateFormat('yyyy-MM-dd').format(_startDate!)} to ${DateFormat('yyyy-MM-dd').format(_endDate!)}',
+                    style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDatePresetChip(String presetKey, String label) {
+    final isSelected = _datePreset == presetKey;
+    return ChoiceChip(
+      label: Text(label, style: TextStyle(fontSize: 12, color: isSelected ? Colors.white : AppTheme.textLightPrimary)),
+      selectedColor: AppTheme.primary,
+      backgroundColor: AppTheme.bgLight,
+      selected: isSelected,
+      onSelected: (val) {
+        if (val) {
+          setState(() {
+            _datePreset = presetKey;
+            if (presetKey != 'custom') {
+              _startDate = null;
+              _endDate = null;
+            } else if (_startDate == null || _endDate == null) {
+              _selectCustomDateRange();
+            }
+          });
+        }
       },
     );
   }

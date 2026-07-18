@@ -32,9 +32,14 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
 
   // Applied Filters State
   String _appliedId = '';
-  String _appliedDate = '';
   String _appliedPaymentType = '';
   String _appliedStatus = '--';
+  String _appliedDate = '';
+
+  // Date Range Presets
+  String _datePreset = 'all'; // 'all', 'today', 'weekly', 'monthly', 'yearly', 'custom'
+  DateTime? _startDate;
+  DateTime? _endDate;
 
   // Pagination Limit
   int _entriesLimit = 10;
@@ -77,6 +82,70 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
     }
   }
 
+  // Date Filtering Helper
+  bool _isWithinDateRange(String dateStr) {
+    final dateTime = DateTime.tryParse(dateStr);
+    if (dateTime == null) return true;
+    final localDateTime = dateTime.toLocal();
+
+    final now = DateTime.now();
+    final startOfToday = DateTime(now.year, now.month, now.day);
+    final endOfToday = startOfToday.add(const Duration(hours: 23, minutes: 59, seconds: 59));
+
+    switch (_datePreset) {
+      case 'today':
+        return localDateTime.isAfter(startOfToday) && localDateTime.isBefore(endOfToday);
+      case 'weekly':
+        final startOfWeek = startOfToday.subtract(const Duration(days: 7));
+        return localDateTime.isAfter(startOfWeek) && localDateTime.isBefore(endOfToday);
+      case 'monthly':
+        final startOfMonth = startOfToday.subtract(const Duration(days: 30));
+        return localDateTime.isAfter(startOfMonth) && localDateTime.isBefore(endOfToday);
+      case 'yearly':
+        final startOfYear = startOfToday.subtract(const Duration(days: 365));
+        return localDateTime.isAfter(startOfYear) && localDateTime.isBefore(endOfToday);
+      case 'custom':
+        if (_startDate == null || _endDate == null) return true;
+        final customEnd = DateTime(_endDate!.year, _endDate!.month, _endDate!.day, 23, 59, 59);
+        return localDateTime.isAfter(_startDate!) && localDateTime.isBefore(customEnd);
+      case 'all':
+      default:
+        return true;
+    }
+  }
+
+  // Pick Custom Date Range picker
+  Future<void> _selectCustomDateRange() async {
+    final pickedRange = await showDateRangePicker(
+      context: context,
+      initialDateRange: _startDate != null && _endDate != null
+          ? DateTimeRange(start: _startDate!, end: _endDate!)
+          : null,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: ColorScheme.light(
+              primary: AppTheme.primary,
+              onPrimary: Colors.white,
+              surface: AppTheme.cardLight,
+              onSurface: AppTheme.textLightPrimary,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (pickedRange != null) {
+      setState(() {
+        _startDate = pickedRange.start;
+        _endDate = pickedRange.end;
+      });
+    }
+  }
+
   // Filtered Orders List
   List<OrderModel> get _filteredOrders {
     return _orders.where((o) {
@@ -84,7 +153,9 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
       
       final matchId = _appliedId.isEmpty || orderIdStr.contains(_appliedId);
       
-      // Date formatting match
+      // Filter by dynamic date preset
+      if (!_isWithinDateRange(o.createdAt)) return false;
+      
       final dateFormatted = DateFormat('yyyy-MM-dd').format((DateTime.tryParse(o.createdAt) ?? DateTime.now()).toLocal());
       final matchDate = _appliedDate.isEmpty || dateFormatted.contains(_appliedDate);
       
@@ -93,7 +164,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
       
       final matchStatus = _appliedStatus == '--' || o.paymentStatus.toLowerCase() == _appliedStatus;
 
-      return matchId && matchDate && matchPayType && matchStatus;
+      return matchId && matchPayType && matchStatus && matchDate;
     }).toList();
   }
 
@@ -110,7 +181,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
 
       final resultPath = await FilePicker.platform.saveFile(
         dialogTitle: 'Export Sales Report',
-        fileName: 'Sales_Report.csv',
+        fileName: 'Sales_Report_${_datePreset.toUpperCase()}.csv',
         type: FileType.custom,
         allowedExtensions: ['csv'],
       );
@@ -128,6 +199,89 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Export failed: $e'), backgroundColor: AppTheme.danger),
+        );
+      }
+    }
+  }
+
+  // Export PDF Report File
+  Future<void> _exportToPDF() async {
+    try {
+      final doc = pw.Document();
+      
+      final headers = ['Order ID', 'Date', 'Total', 'Discount', 'Delivery', 'Payment Type', 'Status'];
+      final data = _filteredOrders.take(_entriesLimit).map((o) {
+        final dateFormatted = DateFormat('hh:mm a, dd-MM-yyyy').format((DateTime.tryParse(o.createdAt) ?? DateTime.now()).toLocal());
+        final deliveryCharge = o.orderType == 'delivery' ? '150.00' : '0.00';
+        return [
+          o.orderNumber.length > 12 ? o.orderNumber.substring(o.orderNumber.length - 8) : o.orderNumber,
+          dateFormatted,
+          o.total.toStringAsFixed(2),
+          o.discount.toStringAsFixed(2),
+          deliveryCharge,
+          o.paymentMethod ?? 'N/A',
+          o.paymentStatus
+        ];
+      }).toList();
+
+      doc.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat.a4,
+          build: (pw.Context context) {
+            return pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text(
+                  'Sales Report (${_datePreset.toUpperCase()})',
+                  style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold),
+                ),
+                pw.SizedBox(height: 10),
+                pw.Text('Generated on: ${DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now())}'),
+                if (_datePreset == 'custom' && _startDate != null && _endDate != null)
+                  pw.Text('Period: ${DateFormat('yyyy-MM-dd').format(_startDate!)} to ${DateFormat('yyyy-MM-dd').format(_endDate!)}'),
+                pw.SizedBox(height: 20),
+                pw.Table.fromTextArray(
+                  headers: headers,
+                  data: data,
+                  border: pw.TableBorder.all(color: PdfColors.grey300),
+                  headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                  cellHeight: 25,
+                  cellAlignments: {
+                    0: pw.Alignment.centerLeft,
+                    1: pw.Alignment.centerLeft,
+                    2: pw.Alignment.centerRight,
+                    3: pw.Alignment.centerRight,
+                    4: pw.Alignment.centerRight,
+                    5: pw.Alignment.center,
+                    6: pw.Alignment.center,
+                  },
+                ),
+              ],
+            );
+          },
+        ),
+      );
+
+      final resultPath = await FilePicker.platform.saveFile(
+        dialogTitle: 'Export PDF Report',
+        fileName: 'Sales_Report_${_datePreset.toUpperCase()}.pdf',
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+      );
+
+      if (resultPath != null) {
+        final file = File(resultPath);
+        await file.writeAsBytes(await doc.save());
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('PDF saved successfully to: $resultPath'), backgroundColor: AppTheme.accent),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Export PDF failed: $e'), backgroundColor: AppTheme.danger),
         );
       }
     }
@@ -235,7 +389,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                     Row(
                       children: [
                         Text('Dashboard', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
-                        const Icon(Icons.chevron_right, size: 14, color: AppTheme.textLightSecondary),
+                        Icon(Icons.chevron_right, size: 14, color: AppTheme.textLightSecondary),
                         Text('Sales Report', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.primary, fontWeight: FontWeight.w600)),
                       ],
                     ),
@@ -246,15 +400,17 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                     // Entries Limit Dropdown
                     Container(
                       decoration: BoxDecoration(
-                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                        border: Border.all(color: AppTheme.borderLight),
                         borderRadius: BorderRadius.circular(8),
-                        color: Colors.white,
+                        color: AppTheme.cardLight,
                       ),
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       height: 42,
                       child: DropdownButtonHideUnderline(
                         child: DropdownButton<int>(
+                          dropdownColor: AppTheme.cardLight,
                           value: _entriesLimit,
+                          style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary),
                           items: const [
                             DropdownMenuItem(value: 10, child: Text('10')),
                             DropdownMenuItem(value: 25, child: Text('25')),
@@ -281,7 +437,9 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                     // Export Popup Button
                     PopupMenuButton<String>(
                       onSelected: (val) {
-                        if (val == 'Print') {
+                        if (val == 'PDF') {
+                          _exportToPDF();
+                        } else if (val == 'Print') {
                           _printList();
                         } else if (val == 'XLS') {
                           _exportToCSV();
@@ -290,12 +448,22 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                       offset: const Offset(0, 45),
                       itemBuilder: (context) => [
                         PopupMenuItem(
+                          value: 'PDF',
+                          child: Row(
+                            children: [
+                              const Icon(Icons.picture_as_pdf_outlined, size: 16, color: Color(0xFF64748B)),
+                              const SizedBox(width: 8),
+                              Text('Export PDF', style: GoogleFonts.inter(fontSize: 13)),
+                            ],
+                          ),
+                        ),
+                        PopupMenuItem(
                           value: 'Print',
                           child: Row(
                             children: [
                               const Icon(Icons.print_outlined, size: 16, color: Color(0xFF64748B)),
                               const SizedBox(width: 8),
-                              Text('Print', style: GoogleFonts.inter(fontSize: 13)),
+                              Text('Print Report', style: GoogleFonts.inter(fontSize: 13)),
                             ],
                           ),
                         ),
@@ -305,7 +473,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                             children: [
                               const Icon(Icons.table_view_outlined, size: 16, color: Color(0xFF64748B)),
                               const SizedBox(width: 8),
-                              Text('XLS', style: GoogleFonts.inter(fontSize: 13)),
+                              Text('Export CSV', style: GoogleFonts.inter(fontSize: 13)),
                             ],
                           ),
                         ),
@@ -314,7 +482,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                         decoration: BoxDecoration(
                           border: Border.all(color: AppTheme.primary),
                           borderRadius: BorderRadius.circular(8),
-                          color: Colors.white,
+                          color: AppTheme.cardLight,
                         ),
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                         child: Row(
@@ -335,6 +503,8 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                 ),
               ],
             ),
+            const SizedBox(height: 24),
+            _buildDateFilterCard(),
             const SizedBox(height: 24),
 
             // Statistics Counters Row Cards
@@ -361,9 +531,9 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
             Expanded(
               child: Card(
                 elevation: 0,
-                color: Colors.white,
+                color: AppTheme.cardLight,
                 shape: RoundedRectangleBorder(
-                  side: const BorderSide(color: Color(0xFFE2E8F0)),
+                  side: BorderSide(color: AppTheme.borderLight),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: _isLoading
@@ -384,9 +554,9 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
   Widget _buildStatCard(String label, String value, IconData icon, Color color) {
     return Card(
       elevation: 0,
-      color: Colors.white,
+      color: AppTheme.cardLight,
       shape: RoundedRectangleBorder(
-        side: const BorderSide(color: Color(0xFFE2E8F0)),
+        side: BorderSide(color: AppTheme.borderLight),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Padding(
@@ -420,7 +590,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
   Widget _buildFilterSection() {
     return Card(
       elevation: 0,
-      color: Colors.white,
+      color: AppTheme.cardLight,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: const EdgeInsets.all(20.0),
@@ -482,6 +652,8 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                       const SizedBox(height: 6),
                       DropdownButtonFormField<String>(
                         value: _filterStatus,
+                        dropdownColor: AppTheme.cardLight,
+                        style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary),
                         items: const [
                           DropdownMenuItem(value: '--', child: Text('--')),
                           DropdownMenuItem(value: 'paid', child: Text('Paid')),
@@ -533,7 +705,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                   icon: const Icon(Icons.clear, size: 14),
                   label: const Text('Clear'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF475569),
+                    backgroundColor: AppTheme.textLightSecondary,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
@@ -550,7 +722,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
   Widget _buildFieldLabel(String label) {
     return Text(
       label,
-      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF475569)),
+      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary),
     );
   }
 
@@ -563,7 +735,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           const SizedBox(height: 16),
           Text(
             'No sales records available.',
-            style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: const Color(0xFF64748B)),
+            style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary),
           ),
         ],
       ),
@@ -576,7 +748,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
       children: [
         // Table Header
         Container(
-          color: const Color(0xFFF8FAFC),
+          color: AppTheme.bgLight,
           padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
           child: Row(
             children: [
@@ -594,7 +766,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
         Expanded(
           child: ListView.separated(
             itemCount: list.length,
-            separatorBuilder: (context, index) => const Divider(height: 1, color: Color(0xFFF1F5F9)),
+            separatorBuilder: (context, index) => Divider(height: 1, color: AppTheme.dividerColor),
             itemBuilder: (context, index) {
               final o = list[index];
               final dateFormatted = DateFormat('hh:mm a, dd-MM-yyyy').format((DateTime.tryParse(o.createdAt) ?? DateTime.now()).toLocal());
@@ -618,7 +790,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                       flex: 4,
                       child: Text(
                         dateFormatted,
-                        style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF475569)),
+                        style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary),
                       ),
                     ),
                     // TOTAL
@@ -626,7 +798,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                       flex: 2,
                       child: Text(
                         o.total.toStringAsFixed(2),
-                        style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF475569)),
+                        style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary),
                       ),
                     ),
                     // DISCOUNT
@@ -634,7 +806,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                       flex: 2,
                       child: Text(
                         o.discount.toStringAsFixed(2),
-                        style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF475569)),
+                        style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary),
                       ),
                     ),
                     // DELIVERY CHARGE
@@ -642,7 +814,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                       flex: 3,
                       child: Text(
                         deliveryCharge.toStringAsFixed(2),
-                        style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF475569)),
+                        style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary),
                       ),
                     ),
                     // PAYMENT TYPE
@@ -650,7 +822,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                       flex: 3,
                       child: Text(
                         (o.paymentMethod ?? 'N/A').toUpperCase(),
-                        style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF475569)),
+                        style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary),
                       ),
                     ),
                     // PAYMENT STATUS
@@ -684,7 +856,80 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
   Widget _buildTableHeaderText(String label) {
     return Text(
       label,
-      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF475569), letterSpacing: 0.5),
+      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary, letterSpacing: 0.5),
+    );
+  }
+
+  Widget _buildDateFilterCard() {
+    return Card(
+      elevation: 0,
+      color: AppTheme.cardLight,
+      shape: RoundedRectangleBorder(
+        side: BorderSide(color: AppTheme.borderLight),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              Text(
+                'Report Period:',
+                style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+              ),
+              const SizedBox(width: 16),
+              _buildDatePresetChip('all', 'All Time'),
+              const SizedBox(width: 8),
+              _buildDatePresetChip('today', 'Today (Daily)'),
+              const SizedBox(width: 8),
+              _buildDatePresetChip('weekly', 'Weekly'),
+              const SizedBox(width: 8),
+              _buildDatePresetChip('monthly', 'Monthly'),
+              const SizedBox(width: 8),
+              _buildDatePresetChip('yearly', 'Yearly'),
+              const SizedBox(width: 8),
+              _buildDatePresetChip('custom', 'Custom Range'),
+              if (_datePreset == 'custom') ...[
+                const SizedBox(width: 16),
+                TextButton.icon(
+                  onPressed: _selectCustomDateRange,
+                  icon: const Icon(Icons.date_range, size: 16),
+                  label: Text(
+                    _startDate == null || _endDate == null
+                        ? 'Select Range'
+                        : '${DateFormat('yyyy-MM-dd').format(_startDate!)} to ${DateFormat('yyyy-MM-dd').format(_endDate!)}',
+                    style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDatePresetChip(String presetKey, String label) {
+    final isSelected = _datePreset == presetKey;
+    return ChoiceChip(
+      label: Text(label, style: TextStyle(fontSize: 12, color: isSelected ? Colors.white : AppTheme.textLightPrimary)),
+      selectedColor: AppTheme.primary,
+      backgroundColor: AppTheme.bgLight,
+      selected: isSelected,
+      onSelected: (val) {
+        if (val) {
+          setState(() {
+            _datePreset = presetKey;
+            if (presetKey != 'custom') {
+              _startDate = null;
+              _endDate = null;
+            } else if (_startDate == null || _endDate == null) {
+              _selectCustomDateRange();
+            }
+          });
+        }
+      },
     );
   }
 }

@@ -95,7 +95,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                     Row(
                       children: [
                         Text('Dashboard', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
-                        const Icon(Icons.chevron_right, size: 14, color: AppTheme.textLightSecondary),
+                        Icon(Icons.chevron_right, size: 14, color: AppTheme.textLightSecondary),
                         Text('Change Password', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.primary, fontWeight: FontWeight.w600)),
                       ],
                     ),

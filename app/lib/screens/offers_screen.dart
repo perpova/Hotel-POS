@@ -646,7 +646,7 @@ class _OffersScreenState extends State<OffersScreen> {
                           Row(
                             children: [
                               Text('Dashboard', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
-                              const Icon(Icons.chevron_right, size: 14, color: AppTheme.textLightSecondary),
+                              Icon(Icons.chevron_right, size: 14, color: AppTheme.textLightSecondary),
                               Text('Offers', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.primary, fontWeight: FontWeight.w600)),
                             ],
                           ),
@@ -688,16 +688,16 @@ class _OffersScreenState extends State<OffersScreen> {
                   // Search Bar
                   Card(
                     elevation: 0,
-                    color: Colors.white,
+                    color: AppTheme.cardLight,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
                       child: Container(
                         height: 44,
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF8FAFC),
+                          color: AppTheme.bgLight,
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                          border: Border.all(color: AppTheme.borderLight),
                         ),
                         padding: const EdgeInsets.symmetric(horizontal: 12),
                         child: Row(
@@ -737,7 +737,7 @@ class _OffersScreenState extends State<OffersScreen> {
                                     // SECTION 1: Banner Offers
                                     Card(
                                       elevation: 0,
-                                      color: Colors.white,
+                                      color: AppTheme.cardLight,
                                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                                       child: Padding(
                                         padding: const EdgeInsets.all(20.0),
@@ -761,7 +761,7 @@ class _OffersScreenState extends State<OffersScreen> {
                                     // SECTION 2: Happy Hour Offers
                                     Card(
                                       elevation: 0,
-                                      color: Colors.white,
+                                      color: AppTheme.cardLight,
                                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                                       child: Padding(
                                         padding: const EdgeInsets.all(20.0),
@@ -827,12 +827,13 @@ class _OffersScreenState extends State<OffersScreen> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
-              title: Text('Filter Offers', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+              backgroundColor: AppTheme.cardLight,
+              title: Text('Filter Offers', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Filter by Status:', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
+                  Text('Filter by Status:', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textLightSecondary)),
                   const SizedBox(height: 10),
                   Wrap(
                     spacing: 8,
@@ -857,7 +858,7 @@ class _OffersScreenState extends State<OffersScreen> {
                 ],
               ),
               actions: [
-                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+                TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancel', style: TextStyle(color: AppTheme.textLightSecondary))),
                 ElevatedButton(
                   onPressed: () {
                     setState(() {
@@ -921,7 +922,7 @@ class _OffersScreenState extends State<OffersScreen> {
           const SizedBox(height: 16),
           Text(
             'No data available.',
-            style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: const Color(0xFF64748B)),
+            style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary),
           ),
         ],
       ),
@@ -934,7 +935,7 @@ class _OffersScreenState extends State<OffersScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Container(
-          color: const Color(0xFFF8FAFC),
+          color: AppTheme.bgLight,
           padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
           child: Row(
             children: [
@@ -951,7 +952,7 @@ class _OffersScreenState extends State<OffersScreen> {
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           itemCount: offers.length,
-          separatorBuilder: (context, index) => const Divider(height: 1, color: Color(0xFFF1F5F9)),
+          separatorBuilder: (context, index) => Divider(height: 1, color: AppTheme.dividerColor),
           itemBuilder: (context, index) {
             final offer = offers[index];
             return Padding(
@@ -968,7 +969,7 @@ class _OffersScreenState extends State<OffersScreen> {
                             child: Container(
                               width: 36,
                               height: 36,
-                              color: const Color(0xFFF1F5F9),
+                              color: AppTheme.bgLight,
                               child: Base64ImageWidget(base64Str: offer.imageBase64, fit: BoxFit.cover),
                             ),
                           )
@@ -976,7 +977,7 @@ class _OffersScreenState extends State<OffersScreen> {
                           Container(
                             width: 36,
                             height: 36,
-                            decoration: BoxDecoration(color: const Color(0xFFFFF0F5), borderRadius: BorderRadius.circular(6)),
+                            decoration: BoxDecoration(color: AppTheme.primary.withOpacity(0.12), borderRadius: BorderRadius.circular(6)),
                             child: Icon(Icons.local_offer_outlined, color: AppTheme.primary, size: 18),
                           ),
                         const SizedBox(width: 12),
@@ -1001,14 +1002,14 @@ class _OffersScreenState extends State<OffersScreen> {
                     flex: 3,
                     child: Text(
                       offer.startDate,
-                      style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF475569)),
+                      style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary),
                     ),
                   ),
                   Expanded(
                     flex: 3,
                     child: Text(
                       offer.endDate,
-                      style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF475569)),
+                      style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary),
                     ),
                   ),
                   Expanded(
@@ -1026,7 +1027,7 @@ class _OffersScreenState extends State<OffersScreen> {
                           onTap: () => _openPromoDrawer(offer),
                           child: Container(
                             padding: const EdgeInsets.all(6),
-                            decoration: BoxDecoration(color: const Color(0xFFFFF0F5), borderRadius: BorderRadius.circular(6)),
+                            decoration: BoxDecoration(color: AppTheme.primary.withOpacity(0.12), borderRadius: BorderRadius.circular(6)),
                             child: Icon(Icons.edit, color: AppTheme.primary, size: 14),
                           ),
                         ),
@@ -1035,7 +1036,7 @@ class _OffersScreenState extends State<OffersScreen> {
                           onTap: () => _deleteOffer(offer),
                           child: Container(
                             padding: const EdgeInsets.all(6),
-                            decoration: BoxDecoration(color: const Color(0xFFFEF2F2), borderRadius: BorderRadius.circular(6)),
+                            decoration: BoxDecoration(color: AppTheme.danger.withOpacity(0.12), borderRadius: BorderRadius.circular(6)),
                             child: const Icon(Icons.delete, color: AppTheme.danger, size: 14),
                           ),
                         ),
@@ -1096,7 +1097,7 @@ class _OffersScreenState extends State<OffersScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Container(
-          color: const Color(0xFFF8FAFC),
+          color: AppTheme.bgLight,
           padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
           child: Row(
             children: [
@@ -1112,7 +1113,7 @@ class _OffersScreenState extends State<OffersScreen> {
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           itemCount: groupedList.length,
-          separatorBuilder: (context, index) => const Divider(height: 1, color: Color(0xFFF1F5F9)),
+          separatorBuilder: (context, index) => Divider(height: 1, color: AppTheme.dividerColor),
           itemBuilder: (context, index) {
             final group = groupedList[index];
             final promoName = group['name'] ?? 'N/A';
@@ -1158,9 +1159,9 @@ class _OffersScreenState extends State<OffersScreen> {
                                   text: TextSpan(
                                     style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightPrimary),
                                     children: [
-                                      const TextSpan(text: 'Category: ', style: TextStyle(color: Color(0xFF64748B))),
+                                      TextSpan(text: 'Category: ', style: TextStyle(color: AppTheme.textLightSecondary)),
                                       TextSpan(text: categoryName ?? 'Unknown Category', style: const TextStyle(fontWeight: FontWeight.bold)),
-                                      TextSpan(text: ' ($categoryProductsCount items)', style: const TextStyle(color: Color(0xFF64748B))),
+                                      TextSpan(text: ' ($categoryProductsCount items)', style: TextStyle(color: AppTheme.textLightSecondary)),
                                     ],
                                   ),
                                 );
@@ -1180,7 +1181,7 @@ class _OffersScreenState extends State<OffersScreen> {
                                       TextSpan(text: 'LKR ${p['promo_price']} ', style: const TextStyle(color: AppTheme.accent, fontWeight: FontWeight.bold)),
                                       TextSpan(
                                         text: '(was LKR ${p['original_price']})',
-                                        style: const TextStyle(color: Color(0xFF94A3B8), decoration: TextDecoration.lineThrough, fontSize: 10),
+                                        style: TextStyle(color: AppTheme.textLightSecondary, decoration: TextDecoration.lineThrough, fontSize: 10),
                                       ),
                                     ],
                                   ),
@@ -1195,7 +1196,7 @@ class _OffersScreenState extends State<OffersScreen> {
                       padding: const EdgeInsets.only(top: 4.0),
                       child: Text(
                         '${_formatTimeString(start)} to ${_formatTimeString(end)}',
-                        style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF475569)),
+                        style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary),
                       ),
                     ),
                   ),
@@ -1205,7 +1206,7 @@ class _OffersScreenState extends State<OffersScreen> {
                       padding: const EdgeInsets.only(top: 4.0),
                       child: Text(
                         daysDesc,
-                        style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF475569)),
+                        style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary),
                       ),
                     ),
                   ),
@@ -1217,7 +1218,7 @@ class _OffersScreenState extends State<OffersScreen> {
                           onTap: () => _openHappyHourDrawer(group),
                           child: Container(
                             padding: const EdgeInsets.all(6),
-                            decoration: BoxDecoration(color: const Color(0xFFFFF0F5), borderRadius: BorderRadius.circular(6)),
+                            decoration: BoxDecoration(color: AppTheme.primary.withOpacity(0.12), borderRadius: BorderRadius.circular(6)),
                             child: Icon(Icons.edit, color: AppTheme.primary, size: 14),
                           ),
                         ),
@@ -1226,7 +1227,7 @@ class _OffersScreenState extends State<OffersScreen> {
                           onTap: () => _deactivateHappyHourGroup(ids, posController),
                           child: Container(
                             padding: const EdgeInsets.all(6),
-                            decoration: BoxDecoration(color: const Color(0xFFFEF2F2), borderRadius: BorderRadius.circular(6)),
+                            decoration: BoxDecoration(color: AppTheme.danger.withOpacity(0.12), borderRadius: BorderRadius.circular(6)),
                             child: const Icon(Icons.cancel_outlined, color: AppTheme.danger, size: 14),
                           ),
                         ),
@@ -1245,7 +1246,7 @@ class _OffersScreenState extends State<OffersScreen> {
   Widget _buildTableHeaderText(String label) {
     return Text(
       label,
-      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF475569), letterSpacing: 0.5),
+      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary, letterSpacing: 0.5),
     );
   }
 
@@ -1268,10 +1269,10 @@ class _OffersScreenState extends State<OffersScreen> {
   Widget _buildDrawerForm(POSController posController) {
     return Container(
       width: 420,
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(left: BorderSide(color: Color(0xFFE2E8F0))),
-        boxShadow: [
+      decoration: BoxDecoration(
+        color: AppTheme.cardLight,
+        border: Border(left: BorderSide(color: AppTheme.dividerColor)),
+        boxShadow: const [
           BoxShadow(color: Colors.black12, blurRadius: 15, offset: Offset(-4, 0)),
         ],
       ),
@@ -1299,7 +1300,7 @@ class _OffersScreenState extends State<OffersScreen> {
               IconButton(icon: const Icon(Icons.close, size: 18), onPressed: _closeDrawer),
             ],
           ),
-          const Divider(height: 24, color: Color(0xFFF1F5F9)),
+          Divider(height: 24, color: AppTheme.dividerColor),
           const SizedBox(height: 12),
 
           Expanded(
@@ -1419,7 +1420,7 @@ class _OffersScreenState extends State<OffersScreen> {
           ),
           
           const SizedBox(height: 20),
-          const Divider(height: 1, color: Color(0xFFF1F5F9)),
+          Divider(height: 1, color: AppTheme.dividerColor),
           const SizedBox(height: 20),
 
           Row(
@@ -1443,11 +1444,11 @@ class _OffersScreenState extends State<OffersScreen> {
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: _closeDrawer,
-                  icon: const Icon(Icons.close, size: 16, color: Color(0xFF475569)),
+                  icon: Icon(Icons.close, size: 16, color: AppTheme.textLightSecondary),
                   label: const Text('Close'),
                   style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: Color(0xFFE2E8F0)),
-                    foregroundColor: const Color(0xFF475569),
+                    side: BorderSide(color: AppTheme.borderLight),
+                    foregroundColor: AppTheme.textLightSecondary,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     padding: const EdgeInsets.symmetric(vertical: 14),
                   ),
@@ -1477,7 +1478,7 @@ class _OffersScreenState extends State<OffersScreen> {
               IconButton(icon: const Icon(Icons.close, size: 18), onPressed: _closeDrawer),
             ],
           ),
-          const Divider(height: 24, color: Color(0xFFF1F5F9)),
+          Divider(height: 24, color: AppTheme.dividerColor),
           const SizedBox(height: 12),
 
           Expanded(
@@ -1542,14 +1543,14 @@ class _OffersScreenState extends State<OffersScreen> {
                             const SizedBox(height: 6),
                             Container(
                               decoration: BoxDecoration(
-                                border: Border.all(color: const Color(0xFFE2E8F0)),
+                                border: Border.all(color: AppTheme.borderLight),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               constraints: const BoxConstraints(maxHeight: 250),
                               child: Column(
                                 children: [
                                   Container(
-                                    color: const Color(0xFFF8FAFC),
+                                    color: AppTheme.bgLight,
                                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                     child: Row(
                                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1583,7 +1584,7 @@ class _OffersScreenState extends State<OffersScreen> {
                                       ],
                                     ),
                                   ),
-                                  const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                                  Divider(height: 1, color: AppTheme.dividerColor),
                                   Expanded(
                                     child: ListView.builder(
                                       itemCount: posController.products.length,
@@ -1597,7 +1598,7 @@ class _OffersScreenState extends State<OffersScreen> {
                                             p.name,
                                             style: GoogleFonts.inter(
                                               fontSize: 12,
-                                              color: isEligible ? const Color(0xFF1E293B) : const Color(0xFF94A3B8),
+                                              color: isEligible ? AppTheme.textLightPrimary : AppTheme.textLightSecondary,
                                               decoration: isEligible ? null : TextDecoration.lineThrough,
                                             ),
                                           ),
@@ -1605,7 +1606,7 @@ class _OffersScreenState extends State<OffersScreen> {
                                             isEligible ? 'LKR ${p.price.toStringAsFixed(0)}' : 'LKR ${p.price.toStringAsFixed(0)} (Not Eligible)',
                                             style: GoogleFonts.inter(
                                               fontSize: 10,
-                                              color: isEligible ? const Color(0xFF64748B) : const Color(0xFFEF4444).withOpacity(0.7),
+                                              color: isEligible ? AppTheme.textLightSecondary : const Color(0xFFEF4444).withOpacity(0.7),
                                             ),
                                           ),
                                           dense: true,
@@ -1755,11 +1756,11 @@ class _OffersScreenState extends State<OffersScreen> {
                         ElevatedButton(
                           onPressed: _pickHappyHourImage,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white,
+                            backgroundColor: AppTheme.cardLight,
                             foregroundColor: AppTheme.primary,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(8),
-                              side: const BorderSide(color: Color(0xFFE2E8F0)),
+                              side: BorderSide(color: AppTheme.borderLight),
                             ),
                           ),
                           child: Text('Choose File', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600)),
@@ -1792,7 +1793,7 @@ class _OffersScreenState extends State<OffersScreen> {
           ),
           
           const SizedBox(height: 20),
-          const Divider(height: 1, color: Color(0xFFF1F5F9)),
+          Divider(height: 1, color: AppTheme.dividerColor),
           const SizedBox(height: 20),
 
           Row(
@@ -1816,11 +1817,11 @@ class _OffersScreenState extends State<OffersScreen> {
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: _closeDrawer,
-                  icon: const Icon(Icons.close, size: 16, color: Color(0xFF475569)),
+                  icon: Icon(Icons.close, size: 16, color: AppTheme.textLightSecondary),
                   label: const Text('Close'),
                   style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: Color(0xFFE2E8F0)),
-                    foregroundColor: const Color(0xFF475569),
+                    side: BorderSide(color: AppTheme.borderLight),
+                    foregroundColor: AppTheme.textLightSecondary,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     padding: const EdgeInsets.symmetric(vertical: 14),
                   ),
@@ -1836,7 +1837,7 @@ class _OffersScreenState extends State<OffersScreen> {
   Widget _buildFieldLabel(String label) {
     return Text(
       label,
-      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF475569)),
+      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary),
     );
   }
 }

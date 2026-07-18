@@ -491,7 +491,7 @@ class _PreOrdersScreenState extends State<PreOrdersScreen> {
             final size = MediaQuery.of(context).size;
             return Dialog(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              backgroundColor: const Color(0xFFF1F5F9),
+              backgroundColor: AppTheme.bgLight,
               child: Container(
                 width: size.width * 0.8,
                 constraints: const BoxConstraints(maxWidth: 780, maxHeight: 700),
@@ -499,7 +499,7 @@ class _PreOrdersScreenState extends State<PreOrdersScreen> {
                   children: [
                     // Action headers
                     Container(
-                      color: Colors.white,
+                      color: AppTheme.cardLight,
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       child: Row(
                         children: [
@@ -576,7 +576,7 @@ class _PreOrdersScreenState extends State<PreOrdersScreen> {
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      color: Colors.white,
+      color: AppTheme.cardLight,
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -585,11 +585,11 @@ class _PreOrdersScreenState extends State<PreOrdersScreen> {
             Center(
               child: Text(
                 'PRE-ORDER BILL / ESTIMATE',
-                style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.primary),
+                style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
               ),
             ),
             const SizedBox(height: 12),
-            const Divider(color: Colors.black26),
+            Divider(color: AppTheme.dividerColor),
             const SizedBox(height: 8),
             _buildTextRow('Estimate No:', po['pre_order_number'] ?? ''),
             _buildTextRow('Due Date:', DateFormat('yyyy-MM-dd hh:mm a').format(date)),
@@ -597,9 +597,9 @@ class _PreOrdersScreenState extends State<PreOrdersScreen> {
             _buildTextRow('Phone:', po['customer_phone'] ?? ''),
             _buildTextRow('Status:', (po['status'] ?? 'pending').toString().toUpperCase()),
             const SizedBox(height: 8),
-            const Divider(color: Colors.black26),
+            Divider(color: AppTheme.dividerColor),
             const SizedBox(height: 8),
-            Text('Items:', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13)),
+            Text('Items:', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.textLightPrimary)),
             const SizedBox(height: 6),
             ...itemsList.map((i) {
               return Padding(
@@ -610,32 +610,32 @@ class _PreOrdersScreenState extends State<PreOrdersScreen> {
                     Expanded(
                       child: Text(
                         "${i['product_name']} x${i['quantity']}",
-                        style: GoogleFonts.inter(fontSize: 12),
+                        style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightPrimary),
                       ),
                     ),
                     Text(
                       "LKR ${(double.parse(i['price'].toString()) * i['quantity']).toStringAsFixed(2)}",
-                      style: GoogleFonts.inter(fontSize: 12),
+                      style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightPrimary),
                     ),
                   ],
                 ),
               );
             }).toList(),
             const SizedBox(height: 8),
-            const Divider(color: Colors.black26),
+            Divider(color: AppTheme.dividerColor),
             const SizedBox(height: 8),
             _buildTextRow('Subtotal:', 'LKR ${subtotal.toStringAsFixed(2)}'),
             if (discount > 0)
               _buildTextRow('Discount:', '-LKR ${discount.toStringAsFixed(2)}', isDiscount: true),
-            const Divider(color: Colors.black38),
+            Divider(color: AppTheme.dividerColor),
             _buildTextRow('Total Payable:', 'LKR ${total.toStringAsFixed(2)}', isBold: true),
             _buildTextRow('Advance Paid:', 'LKR ${advance.toStringAsFixed(2)}'),
             if (po['status'] == 'converted') ...[
               _buildTextRow('Balance Settled:', 'LKR ${balance.toStringAsFixed(2)}'),
-              const Divider(color: Colors.black26),
+              Divider(color: AppTheme.dividerColor),
               _buildTextRow('Remaining Balance:', 'LKR 0.00', isBold: true),
             ] else ...[
-              const Divider(color: Colors.black26),
+              Divider(color: AppTheme.dividerColor),
               _buildTextRow('Balance Due:', 'LKR ${balance.toStringAsFixed(2)}', isBold: true),
             ],
             const SizedBox(height: 12),
@@ -655,7 +655,7 @@ class _PreOrdersScreenState extends State<PreOrdersScreen> {
               child: Text(
                 'Please present this estimate at checkout.'.tr(context),
                 textAlign: TextAlign.center,
-                style: GoogleFonts.inter(fontSize: 10, fontStyle: FontStyle.italic, color: Colors.grey),
+                style: GoogleFonts.inter(fontSize: 10, fontStyle: FontStyle.italic, color: AppTheme.textLightSecondary),
               ),
             ),
           ],
@@ -670,8 +670,8 @@ class _PreOrdersScreenState extends State<PreOrdersScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: GoogleFonts.inter(fontSize: 12, fontWeight: isBold ? FontWeight.bold : FontWeight.normal, color: Colors.black87)),
-          Text(value, style: GoogleFonts.inter(fontSize: 12, fontWeight: isBold ? FontWeight.bold : FontWeight.normal, color: isDiscount ? Colors.red : Colors.black)),
+          Text(label, style: GoogleFonts.inter(fontSize: 12, fontWeight: isBold ? FontWeight.bold : FontWeight.normal, color: AppTheme.textLightPrimary)),
+          Text(value, style: GoogleFonts.inter(fontSize: 12, fontWeight: isBold ? FontWeight.bold : FontWeight.normal, color: isDiscount ? Colors.red : AppTheme.textLightPrimary)),
         ],
       ),
     );
@@ -874,13 +874,14 @@ class _PreOrdersScreenState extends State<PreOrdersScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.cardLight,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
               po['pre_order_number'] ?? '',
-              style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+              style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
             ),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -905,7 +906,7 @@ class _PreOrdersScreenState extends State<PreOrdersScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Divider(),
+              Divider(color: AppTheme.dividerColor),
               const SizedBox(height: 8),
               // Customer & Booking details
               _buildDialogInfoRow(Icons.person_outline, 'Customer Name', po['customer_name'] ?? ''),
@@ -917,30 +918,30 @@ class _PreOrdersScreenState extends State<PreOrdersScreen> {
               
               Text(
                 'Items Summary'.tr(context),
-                style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13),
+                style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.textLightPrimary),
               ),
               const SizedBox(height: 6),
               Container(
                 constraints: const BoxConstraints(maxHeight: 180),
                 decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey[200]!),
+                  border: Border.all(color: AppTheme.borderLight),
                   borderRadius: BorderRadius.circular(8),
-                  color: const Color(0xFFF8FAFC),
+                  color: AppTheme.bgLight,
                 ),
                 child: ListView.separated(
                   shrinkWrap: true,
                   itemCount: itemsList.length,
-                  separatorBuilder: (context, idx) => const Divider(height: 1),
+                  separatorBuilder: (context, idx) => Divider(height: 1, color: AppTheme.dividerColor),
                   itemBuilder: (context, idx) {
                     final item = itemsList[idx];
                     final double itemPrice = double.parse((item['price'] ?? 0.0).toString());
                     final int itemQty = int.parse((item['quantity'] ?? 1).toString());
                     return ListTile(
                       dense: true,
-                      title: Text(item['product_name'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold)),
+                      title: Text(item['product_name'] ?? '', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
                       trailing: Text(
                         '$itemQty x LKR ${itemPrice.toStringAsFixed(2)} = LKR ${(itemPrice * itemQty).toStringAsFixed(2)}',
-                        style: GoogleFonts.inter(fontWeight: FontWeight.w600),
+                        style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: AppTheme.textLightPrimary),
                       ),
                     );
                   },
@@ -952,7 +953,7 @@ class _PreOrdersScreenState extends State<PreOrdersScreen> {
               _buildDialogTotalRow('Subtotal:', 'LKR ${subtotal.toStringAsFixed(2)}'),
               if (discount > 0)
                 _buildDialogTotalRow('Discount:', '-LKR ${discount.toStringAsFixed(2)}', isDiscount: true),
-              const Divider(),
+              Divider(color: AppTheme.dividerColor),
               _buildDialogTotalRow('Total Estimate:', 'LKR ${total.toStringAsFixed(2)}', isBold: true),
               _buildDialogTotalRow('Advance Paid:', 'LKR ${advance.toStringAsFixed(2)}', isGreen: true),
               _buildDialogTotalRow('Balance Due:', 'LKR ${balance.toStringAsFixed(2)}', isBold: true, isRed: true),
@@ -1004,16 +1005,16 @@ class _PreOrdersScreenState extends State<PreOrdersScreen> {
   Widget _buildDialogInfoRow(IconData icon, String label, String val) {
     return Row(
       children: [
-        Icon(icon, size: 16, color: Colors.grey[500]),
+        Icon(icon, size: 16, color: AppTheme.textLightSecondary),
         const SizedBox(width: 8),
-        Text('$label: ', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: Colors.grey)),
-        Text(val, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+        Text('$label: ', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: AppTheme.textLightSecondary)),
+        Text(val, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppTheme.textLightPrimary)),
       ],
     );
   }
 
   Widget _buildDialogTotalRow(String label, String val, {bool isBold = false, bool isDiscount = false, bool isGreen = false, bool isRed = false}) {
-    Color col = Colors.black87;
+    Color col = AppTheme.textLightPrimary;
     if (isDiscount) col = Colors.red;
     if (isGreen) col = Colors.green;
     if (isRed) col = Colors.red[800]!;
@@ -1022,7 +1023,7 @@ class _PreOrdersScreenState extends State<PreOrdersScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label.tr(context), style: TextStyle(fontWeight: isBold ? FontWeight.bold : FontWeight.normal, fontSize: 12)),
+          Text(label.tr(context), style: TextStyle(fontWeight: isBold ? FontWeight.bold : FontWeight.normal, fontSize: 12, color: AppTheme.textLightPrimary)),
           Text(val, style: TextStyle(fontWeight: isBold ? FontWeight.bold : FontWeight.w600, fontSize: isBold ? 13 : 12, color: col)),
         ],
       ),
@@ -1248,10 +1249,11 @@ class _PreOrderWizardState extends State<_PreOrderWizard> {
     }).toList();
 
     return AlertDialog(
+      backgroundColor: AppTheme.cardLight,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       title: Text(
         widget.preOrder == null ? 'Create Pre Order'.tr(context) : 'Edit Pre Order'.tr(context),
-        style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+        style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
       ),
       content: Container(
         width: size.width * 0.85,
@@ -1395,25 +1397,25 @@ class _PreOrderWizardState extends State<_PreOrderWizard> {
                     // Active Wizard Cart list
                     Text(
                       'Ordered Items'.tr(context),
-                      style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14),
+                      style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14, color: AppTheme.textLightPrimary),
                     ),
                     const SizedBox(height: 8),
                     Expanded(
                       child: Container(
                         decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey[300]!),
+                          border: Border.all(color: AppTheme.borderLight),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: _wizardCart.isEmpty
-                            ? Center(child: Text('No items added. Select from right panel.'.tr(context)))
+                            ? Center(child: Text('No items added. Select from right panel.'.tr(context), style: TextStyle(color: AppTheme.textLightSecondary)))
                             : ListView.separated(
                                 itemCount: _wizardCart.length,
-                                separatorBuilder: (context, index) => const Divider(height: 1),
+                                separatorBuilder: (context, index) => Divider(height: 1, color: AppTheme.dividerColor),
                                 itemBuilder: (context, index) {
                                   final item = _wizardCart[index];
                                   return ListTile(
-                                    title: Text(item['product_name']),
-                                    subtitle: Text("LKR ${item['price'].toStringAsFixed(2)}"),
+                                    title: Text(item['product_name'], style: TextStyle(color: AppTheme.textLightPrimary, fontWeight: FontWeight.bold)),
+                                    subtitle: Text("LKR ${item['price'].toStringAsFixed(2)}", style: TextStyle(color: AppTheme.textLightSecondary)),
                                     trailing: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
@@ -1440,10 +1442,11 @@ class _PreOrderWizardState extends State<_PreOrderWizard> {
                                                 controller: ctrl,
                                                 keyboardType: TextInputType.number,
                                                 textAlign: TextAlign.center,
-                                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                                                decoration: const InputDecoration(
+                                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.textLightPrimary),
+                                                decoration: InputDecoration(
                                                   contentPadding: EdgeInsets.zero,
-                                                  border: OutlineInputBorder(),
+                                                  border: const OutlineInputBorder(),
+                                                  enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: AppTheme.borderLight)),
                                                 ),
                                                 onChanged: (val) {
                                                   final q = int.tryParse(val) ?? 0;
@@ -1504,7 +1507,7 @@ class _PreOrderWizardState extends State<_PreOrderWizard> {
                     Expanded(
                       child: Container(
                         decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey[300]!),
+                          border: Border.all(color: AppTheme.borderLight),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: ListView.builder(
@@ -1512,8 +1515,8 @@ class _PreOrderWizardState extends State<_PreOrderWizard> {
                           itemBuilder: (context, index) {
                             final p = filteredProducts[index];
                             return ListTile(
-                              title: Text(p.name),
-                              subtitle: Text("LKR ${p.price.toStringAsFixed(2)}"),
+                              title: Text(p.name, style: TextStyle(color: AppTheme.textLightPrimary, fontWeight: FontWeight.bold)),
+                              subtitle: Text("LKR ${p.price.toStringAsFixed(2)}", style: TextStyle(color: AppTheme.textLightSecondary)),
                               trailing: const Icon(Icons.add, color: Colors.blue),
                               onTap: () {
                                 final existingIdx = _wizardCart.indexWhere((item) => item['product_id'] == p.id);
@@ -1542,7 +1545,7 @@ class _PreOrderWizardState extends State<_PreOrderWizard> {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.grey[100],
+                        color: AppTheme.bgLight,
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Column(
@@ -1552,18 +1555,19 @@ class _PreOrderWizardState extends State<_PreOrderWizard> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text('Discount (Fixed):'.tr(context), style: const TextStyle(fontSize: 12)),
+                              Text('Discount (Fixed):'.tr(context), style: TextStyle(fontSize: 12, color: AppTheme.textLightPrimary)),
                               SizedBox(
                                 width: 100,
                                 height: 32,
                                 child: TextFormField(
                                   controller: _discountCtrl,
                                   keyboardType: TextInputType.number,
-                                  style: const TextStyle(fontSize: 12),
+                                  style: TextStyle(fontSize: 12, color: AppTheme.textLightPrimary),
                                   textAlign: TextAlign.end,
-                                  decoration: const InputDecoration(
-                                    contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                                    border: OutlineInputBorder(),
+                                  decoration: InputDecoration(
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                    border: const OutlineInputBorder(),
+                                    enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: AppTheme.borderLight)),
                                   ),
                                   onTap: () {
                                     if (_discountCtrl.text == '0.00' || _discountCtrl.text == '0.0' || _discountCtrl.text == '0') {
@@ -1581,18 +1585,19 @@ class _PreOrderWizardState extends State<_PreOrderWizard> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text('Advance Paid:'.tr(context), style: const TextStyle(fontSize: 12)),
+                              Text('Advance Paid:'.tr(context), style: TextStyle(fontSize: 12, color: AppTheme.textLightPrimary)),
                               SizedBox(
                                 width: 100,
                                 height: 32,
                                 child: TextFormField(
                                   controller: _advancePayCtrl,
                                   keyboardType: TextInputType.number,
-                                  style: const TextStyle(fontSize: 12),
+                                  style: TextStyle(fontSize: 12, color: AppTheme.textLightPrimary),
                                   textAlign: TextAlign.end,
-                                  decoration: const InputDecoration(
-                                    contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                                    border: OutlineInputBorder(),
+                                  decoration: InputDecoration(
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                    border: const OutlineInputBorder(),
+                                    enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: AppTheme.borderLight)),
                                   ),
                                   onTap: () {
                                     if (_advancePayCtrl.text == '0.00' || _advancePayCtrl.text == '0.0' || _advancePayCtrl.text == '0') {
@@ -1606,7 +1611,7 @@ class _PreOrderWizardState extends State<_PreOrderWizard> {
                               ),
                             ],
                           ),
-                          const Divider(height: 16),
+                          Divider(height: 16, color: AppTheme.dividerColor),
                           _buildSummaryRow('Total Estimate:', 'LKR ${_total.toStringAsFixed(2)}', isBold: true),
                           const SizedBox(height: 4),
                           _buildSummaryRow(
@@ -1642,8 +1647,8 @@ class _PreOrderWizardState extends State<_PreOrderWizard> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label.tr(context), style: TextStyle(fontSize: 12, fontWeight: isBold ? FontWeight.bold : FontWeight.normal)),
-        Text(value, style: TextStyle(fontSize: 12, fontWeight: isBold ? FontWeight.bold : FontWeight.normal)),
+        Text(label.tr(context), style: TextStyle(fontSize: 12, fontWeight: isBold ? FontWeight.bold : FontWeight.normal, color: AppTheme.textLightPrimary)),
+        Text(value, style: TextStyle(fontSize: 12, fontWeight: isBold ? FontWeight.bold : FontWeight.normal, color: AppTheme.textLightPrimary)),
       ],
     );
   }

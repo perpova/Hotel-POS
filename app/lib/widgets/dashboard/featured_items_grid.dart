@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../controllers/pos_controller.dart';
+import '../../theme.dart';
 import '../image_helper.dart';
 
 class FeaturedItemsGrid extends StatelessWidget {
@@ -31,10 +32,10 @@ class FeaturedItemsGrid extends StatelessWidget {
 
     return Card(
       elevation: 0,
-      color: Colors.white,
+      color: AppTheme.cardLight,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: Color(0xFFF1F5F9)),
+        side: BorderSide(color: AppTheme.borderLight),
       ),
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -46,7 +47,7 @@ class FeaturedItemsGrid extends StatelessWidget {
               style: GoogleFonts.outfit(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: const Color(0xFF1E293B),
+                color: AppTheme.textLightPrimary,
               ),
             ),
             const SizedBox(height: 16),
@@ -77,7 +78,7 @@ class FeaturedItemsGrid extends StatelessWidget {
                 return Container(
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                    border: Border.all(color: AppTheme.borderLight),
                   ),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(9),
@@ -106,7 +107,7 @@ class FeaturedItemsGrid extends StatelessWidget {
                         Container(
                           width: double.infinity,
                           padding: const EdgeInsets.all(8),
-                          color: Colors.white,
+                          color: AppTheme.cardLight,
                           child: Text(
                             name,
                             maxLines: 1,
@@ -114,7 +115,7 @@ class FeaturedItemsGrid extends StatelessWidget {
                             style: GoogleFonts.inter(
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
-                              color: const Color(0xFF1E293B),
+                              color: AppTheme.textLightPrimary,
                             ),
                           ),
                         ),

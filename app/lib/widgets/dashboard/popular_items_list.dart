@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../controllers/pos_controller.dart';
 import '../../models/models.dart';
+import '../../theme.dart';
 import '../image_helper.dart';
 
 class PopularItemsList extends StatelessWidget {
@@ -36,10 +37,10 @@ class PopularItemsList extends StatelessWidget {
 
     return Card(
       elevation: 0,
-      color: Colors.white,
+      color: AppTheme.cardLight,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: Color(0xFFF1F5F9)),
+        side: BorderSide(color: AppTheme.borderLight),
       ),
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -51,7 +52,7 @@ class PopularItemsList extends StatelessWidget {
               style: GoogleFonts.outfit(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: const Color(0xFF1E293B),
+                color: AppTheme.textLightPrimary,
               ),
             ),
             const SizedBox(height: 16),
@@ -83,9 +84,9 @@ class PopularItemsList extends StatelessWidget {
                 return Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: AppTheme.cardLight,
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFFF1F5F9)),
+                    border: Border.all(color: AppTheme.borderLight),
                   ),
                   child: Row(
                     children: [
@@ -123,7 +124,7 @@ class PopularItemsList extends StatelessWidget {
                               style: GoogleFonts.inter(
                                 fontSize: 12,
                                 fontWeight: FontWeight.bold,
-                                color: const Color(0xFF1E293B),
+                                color: AppTheme.textLightPrimary,
                               ),
                             ),
                             const SizedBox(height: 2),
@@ -147,7 +148,7 @@ class PopularItemsList extends StatelessWidget {
                         style: GoogleFonts.outfit(
                           fontSize: 13,
                           fontWeight: FontWeight.bold,
-                          color: const Color(0xFF1E293B),
+                          color: AppTheme.textLightPrimary,
                         ),
                       ),
                     ],

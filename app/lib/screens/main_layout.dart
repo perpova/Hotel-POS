@@ -243,6 +243,7 @@ class _MainLayoutState extends State<MainLayout> {
       barrierDismissible: true,
       builder: (dialogCtx) {
         return Dialog(
+          backgroundColor: AppTheme.cardLight,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           child: Container(
             width: 500,
@@ -262,15 +263,15 @@ class _MainLayoutState extends State<MainLayout> {
                     const SizedBox(height: 6),
                     Text(
                       'Count drawer cash and compare with expected balances. Closing shift prints a final Z-Report.'.tr(dialogCtx),
-                      style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+                      style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary),
                     ),
-                    const Divider(height: 24, color: Color(0xFFE2E8F0)),
+                    Divider(height: 24, color: AppTheme.borderLight),
 
                     // Session Info
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('Session User:'.tr(dialogCtx), style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF475569))),
+                        Text('Session User:'.tr(dialogCtx), style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textLightSecondary)),
                         Text(currentUser, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primary)),
                       ],
                     ),
@@ -278,14 +279,14 @@ class _MainLayoutState extends State<MainLayout> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('Logout Time:'.tr(dialogCtx), style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF475569))),
-                        Text(logoutTime, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
+                        Text('Logout Time:'.tr(dialogCtx), style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textLightSecondary)),
+                        Text(logoutTime, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
                       ],
                     ),
-                    const Divider(height: 24, color: Color(0xFFE2E8F0)),
+                    Divider(height: 24, color: AppTheme.borderLight),
 
                     // Cash Drawer Reconciliation
-                    Text('CASH DRAWER RECONCILIATION', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: const Color(0xFF64748B), letterSpacing: 0.5)),
+                    Text('CASH DRAWER RECONCILIATION', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary, letterSpacing: 0.5)),
                     const SizedBox(height: 12),
                     _buildReconcileRow('Starting Cash Balance', stats['cash_sales'] == 0 ? posController.activeShift!.openingBalance : (stats['expected_cash']! - stats['cash_sales']! - stats['credit_settlements']! - stats['other_cash_in']! + stats['supplier_payments']! + stats['other_cash_out']!)),
                     _buildReconcileRow('Cash Sales (+)', stats['cash_sales']!, color: const Color(0xFF16A34A)),
@@ -293,23 +294,23 @@ class _MainLayoutState extends State<MainLayout> {
                     _buildReconcileRow('Other Cash In (+)', stats['other_cash_in']!, color: const Color(0xFF16A34A)),
                     _buildReconcileRow('Supplier Payments (-)', -stats['supplier_payments']!, color: const Color(0xFFDC2626)),
                     _buildReconcileRow('Other Cash Out (-)', -stats['other_cash_out']!, color: const Color(0xFFDC2626)),
-                    const Divider(height: 16, color: Color(0xFFF1F5F9)),
+                    Divider(height: 16, color: AppTheme.dividerColor),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('EXPECTED CASH IN DRAWER', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
-                        Text('LKR ${stats['expected_cash']!.toStringAsFixed(2)}', style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
+                        Text('EXPECTED CASH IN DRAWER', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
+                        Text('LKR ${stats['expected_cash']!.toStringAsFixed(2)}', style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
                       ],
                     ),
-                    const Divider(height: 24, color: Color(0xFFE2E8F0)),
+                    Divider(height: 24, color: AppTheme.borderLight),
 
                     // Non-Cash Sales Summary
-                    Text('NON-CASH SALES SUMMARY', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: const Color(0xFF64748B), letterSpacing: 0.5)),
+                    Text('NON-CASH SALES SUMMARY', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary, letterSpacing: 0.5)),
                     const SizedBox(height: 12),
                     _buildReconcileRow('Card Payments', stats['card_sales']!),
                     _buildReconcileRow('LankaQR Payments', stats['qr_sales']!),
                     _buildReconcileRow('Credit Sales (Outstanding Added)', stats['credit_sales']!),
-                    const Divider(height: 16, color: Color(0xFFF1F5F9)),
+                    Divider(height: 16, color: AppTheme.dividerColor),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -317,10 +318,10 @@ class _MainLayoutState extends State<MainLayout> {
                         Text('LKR ${stats['total_sales']!.toStringAsFixed(2)}', style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.primary)),
                       ],
                     ),
-                    const Divider(height: 24, color: Color(0xFFE2E8F0)),
+                    Divider(height: 24, color: AppTheme.borderLight),
 
                     // Actual counted cash input
-                    Text('ACTUAL DRAWER CASH COUNT', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: const Color(0xFF64748B), letterSpacing: 0.5)),
+                    Text('ACTUAL DRAWER CASH COUNT', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary, letterSpacing: 0.5)),
                     const SizedBox(height: 8),
                     TextFormField(
                       controller: actualCashController,
@@ -389,7 +390,7 @@ class _MainLayoutState extends State<MainLayout> {
                       children: [
                         TextButton(
                           onPressed: () => Navigator.pop(dialogCtx),
-                          child: Text('Cancel'.tr(dialogCtx), style: GoogleFonts.inter(color: const Color(0xFF64748B), fontWeight: FontWeight.bold)),
+                          child: Text('Cancel'.tr(dialogCtx), style: GoogleFonts.inter(color: AppTheme.textLightSecondary, fontWeight: FontWeight.bold)),
                         ),
                         TextButton.icon(
                           onPressed: () async {
@@ -431,13 +432,13 @@ class _MainLayoutState extends State<MainLayout> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B))),
+          Text(label, style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
           Text(
             'LKR ${val.toStringAsFixed(2)}',
             style: GoogleFonts.inter(
               fontSize: 12,
               fontWeight: FontWeight.bold,
-              color: color ?? const Color(0xFF1E293B),
+              color: color ?? AppTheme.textLightPrimary,
             ),
           ),
         ],
@@ -561,7 +562,7 @@ class _MainLayoutState extends State<MainLayout> {
       final part2 = companyName.substring(half);
 
       return Container(
-        color: Colors.white,
+        color: AppTheme.cardLight,
         child: Column(
           children: [
             // Logo area - beautifully combines logo image / favicon and company name
@@ -826,6 +827,9 @@ class _MainLayoutState extends State<MainLayout> {
     final isPosExtended = _selectedIndex == 1 && appSettings.extendPosScreen;
     final isFullScreenMode = isQueueExtended || isPosExtended;
 
+    final borderStyleColor = AppTheme.isDarkMode ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+    final dividerColor = AppTheme.isDarkMode ? const Color(0xFF334155) : const Color(0xFFF1F5F9);
+
     final Widget scaffold = Scaffold(
       key: _scaffoldKey,
       drawer: (!isDesktop && !isFullScreenMode) ? Drawer(child: buildSidebarContent()) : null,
@@ -838,7 +842,7 @@ class _MainLayoutState extends State<MainLayout> {
               child: buildSidebarContent(),
             ),
           if (isDesktop && !_isSidebarCollapsed && !isFullScreenMode)
-            const VerticalDivider(width: 1, color: Color(0xFFE2E8F0)),
+            VerticalDivider(width: 1, color: borderStyleColor),
 
           // Main Body Area
           Expanded(
@@ -848,7 +852,7 @@ class _MainLayoutState extends State<MainLayout> {
                 if (!isFullScreenMode)
                   Container(
                     height: 70,
-                    color: Colors.white,
+                    color: AppTheme.cardLight,
                     padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: Row(
                     children: [
@@ -1011,12 +1015,12 @@ class _MainLayoutState extends State<MainLayout> {
                                     style: GoogleFonts.inter(
                                       fontSize: 11,
                                       fontWeight: FontWeight.bold,
-                                      color: const Color(0xFF1E293B),
+                                      color: AppTheme.textLightPrimary,
                                     ),
                                     items: branchNames.map<DropdownMenuItem<String>>((String value) {
                                       return DropdownMenuItem<String>(
                                         value: value,
-                                        child: Text(value),
+                                        child: Text(value, style: TextStyle(color: AppTheme.textLightPrimary)),
                                       );
                                     }).toList(),
                                     onChanged: (String? newValue) {
@@ -1051,7 +1055,7 @@ class _MainLayoutState extends State<MainLayout> {
                               style: GoogleFonts.inter(
                                 fontSize: 11,
                                 fontWeight: FontWeight.bold,
-                                color: const Color(0xFF1E293B),
+                                color: AppTheme.textLightPrimary,
                               ),
                               items: <String>['English', 'Sinhala']
                                   .map<DropdownMenuItem<String>>((String value) {
@@ -1259,7 +1263,7 @@ class _MainLayoutState extends State<MainLayout> {
                                                 style: GoogleFonts.inter(
                                                   fontSize: 12,
                                                   fontWeight: FontWeight.bold,
-                                                  color: isRead ? const Color(0xFF64748B) : AppTheme.primary,
+                                                  color: isRead ? AppTheme.textLightSecondary : AppTheme.primary,
                                                 ),
                                               ),
                                             ),
@@ -1281,13 +1285,13 @@ class _MainLayoutState extends State<MainLayout> {
                                           overflow: TextOverflow.ellipsis,
                                           style: GoogleFonts.inter(
                                             fontSize: 11,
-                                            color: isRead ? const Color(0xFF94A3B8) : const Color(0xFF334155),
+                                            color: isRead ? AppTheme.textLightSecondary : AppTheme.textLightPrimary,
                                           ),
                                         ),
                                         const SizedBox(height: 4),
                                         Text(
                                           DateFormat('yyyy-MM-dd hh:mm a').format(DateTime.tryParse(n['created_at'])?.toLocal() ?? DateTime.now()),
-                                          style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF94A3B8)),
+                                          style: GoogleFonts.inter(fontSize: 9, color: AppTheme.textLightSecondary),
                                         ),
                                       ],
                                     ),
@@ -1332,7 +1336,7 @@ class _MainLayoutState extends State<MainLayout> {
                                       'Hello'.tr(context),
                                       style: GoogleFonts.inter(
                                         fontSize: 9,
-                                        color: const Color(0xFF94A3B8),
+                                        color: AppTheme.textLightSecondary,
                                         fontWeight: FontWeight.w500,
                                       ),
                                     ),
@@ -1340,7 +1344,7 @@ class _MainLayoutState extends State<MainLayout> {
                                       APIService.instance.currentUser?.name ?? 'John Doe',
                                       style: GoogleFonts.inter(
                                         fontSize: 12,
-                                        color: const Color(0xFF1E293B),
+                                        color: AppTheme.textLightPrimary,
                                         fontWeight: FontWeight.bold,
                                       ),
                                     ),
@@ -1397,18 +1401,18 @@ class _MainLayoutState extends State<MainLayout> {
                                     const SizedBox(height: 12),
                                     Text(
                                       user?.name ?? 'John Doe',
-                                      style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)),
+                                      style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
                                       user?.email ?? 'admin@example.com',
-                                      style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
+                                      style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary),
                                     ),
                                     if ((user?.phone ?? '').isNotEmpty) ...[
                                       const SizedBox(height: 2),
                                       Text(
                                         user?.phone ?? '',
-                                        style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
+                                        style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary),
                                       ),
                                     ],
                                     const SizedBox(height: 8),
@@ -1428,13 +1432,13 @@ class _MainLayoutState extends State<MainLayout> {
                               ),
                             ),
                             const PopupMenuDivider(),
-                            PopupMenuItem<int>(
+                             PopupMenuItem<int>(
                               value: 1,
                               child: Row(
                                 children: [
-                                  const Icon(Icons.edit_outlined, size: 16, color: Color(0xFF64748B)),
+                                  Icon(Icons.edit_outlined, size: 16, color: AppTheme.textLightSecondary),
                                   const SizedBox(width: 10),
-                                  Text('Edit Profile', style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF1E293B))),
+                                  Text('Edit Profile', style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary)),
                                 ],
                               ),
                             ),
@@ -1442,9 +1446,9 @@ class _MainLayoutState extends State<MainLayout> {
                               value: 2,
                               child: Row(
                                 children: [
-                                  const Icon(Icons.key_outlined, size: 16, color: Color(0xFF64748B)),
+                                  Icon(Icons.key_outlined, size: 16, color: AppTheme.textLightSecondary),
                                   const SizedBox(width: 10),
-                                  Text('Change Password', style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF1E293B))),
+                                  Text('Change Password', style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary)),
                                 ],
                               ),
                             ),
@@ -1464,7 +1468,7 @@ class _MainLayoutState extends State<MainLayout> {
                     ],
                   ),
                 ),
-                const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                Divider(height: 1, color: dividerColor),
 
                 // Screen Content - always keep the screen widget in the tree
                 // so its State is never disposed during background reloads.

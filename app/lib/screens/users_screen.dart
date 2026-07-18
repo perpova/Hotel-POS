@@ -509,6 +509,79 @@ class _UsersScreenState extends State<UsersScreen> {
     }
   }
 
+  // Export PDF file download
+  Future<void> _exportToPDF() async {
+    try {
+      final doc = pw.Document();
+      
+      final headers = ['Name', 'Email', 'Phone', 'Status'];
+      final data = _filteredItems.map((item) {
+        if (item is CustomerModel) {
+          return [item.name, item.email ?? 'N/A', item.phone, 'Active'];
+        } else {
+          final u = item as UserModel;
+          return [u.name, u.email ?? u.username, u.phone ?? 'N/A', u.status];
+        }
+      }).toList();
+
+      doc.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat.a4,
+          build: (pw.Context context) {
+            return pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text(
+                  widget.userType,
+                  style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold),
+                ),
+                pw.SizedBox(height: 10),
+                pw.Text('Exported on: ${DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now())}'),
+                pw.SizedBox(height: 20),
+                pw.Table.fromTextArray(
+                  headers: headers,
+                  data: data,
+                  border: pw.TableBorder.all(color: PdfColors.grey300),
+                  headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                  cellHeight: 30,
+                  cellAlignments: {
+                    0: pw.Alignment.centerLeft,
+                    1: pw.Alignment.centerLeft,
+                    2: pw.Alignment.centerLeft,
+                    3: pw.Alignment.center,
+                  },
+                ),
+              ],
+            );
+          },
+        ),
+      );
+
+      final resultPath = await FilePicker.platform.saveFile(
+        dialogTitle: 'Export PDF Report',
+        fileName: '${widget.userType.replaceAll(" ", "_")}_list.pdf',
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+      );
+
+      if (resultPath != null) {
+        final file = File(resultPath);
+        await file.writeAsBytes(await doc.save());
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('PDF saved successfully to: $resultPath'), backgroundColor: AppTheme.accent),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Export PDF failed: $e'), backgroundColor: AppTheme.danger),
+        );
+      }
+    }
+  }
+
   // Print list table to PDF layout
   Future<void> _printList() async {
     try {
@@ -992,7 +1065,7 @@ class _UsersScreenState extends State<UsersScreen> {
                                 Row(
                                   children: [
                                     Text('Dashboard', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
-                                    const Icon(Icons.chevron_right, size: 14, color: AppTheme.textLightSecondary),
+                                    Icon(Icons.chevron_right, size: 14, color: AppTheme.textLightSecondary),
                                     Text(widget.userType, style: GoogleFonts.inter(fontSize: 12, color: AppTheme.primary, fontWeight: FontWeight.w600)),
                                   ],
                                 ),
@@ -1011,7 +1084,9 @@ class _UsersScreenState extends State<UsersScreen> {
                                 // Export Dropdown Popup Button
                                 PopupMenuButton<String>(
                                   onSelected: (val) {
-                                    if (val == 'Print') {
+                                    if (val == 'PDF') {
+                                      _exportToPDF();
+                                    } else if (val == 'Print') {
                                       _printList();
                                     } else if (val == 'XLS') {
                                       _exportToCSV();
@@ -1020,12 +1095,22 @@ class _UsersScreenState extends State<UsersScreen> {
                                   offset: const Offset(0, 45),
                                   itemBuilder: (context) => [
                                     PopupMenuItem(
+                                      value: 'PDF',
+                                      child: Row(
+                                        children: [
+                                          const Icon(Icons.picture_as_pdf_outlined, size: 16, color: Color(0xFF64748B)),
+                                          const SizedBox(width: 8),
+                                          Text('Export PDF', style: GoogleFonts.inter(fontSize: 13)),
+                                        ],
+                                      ),
+                                    ),
+                                    PopupMenuItem(
                                       value: 'Print',
                                       child: Row(
                                         children: [
                                           const Icon(Icons.print_outlined, size: 16, color: Color(0xFF64748B)),
                                           const SizedBox(width: 8),
-                                          Text('Print', style: GoogleFonts.inter(fontSize: 13)),
+                                          Text('Print Report', style: GoogleFonts.inter(fontSize: 13)),
                                         ],
                                       ),
                                     ),
@@ -1035,7 +1120,7 @@ class _UsersScreenState extends State<UsersScreen> {
                                         children: [
                                           const Icon(Icons.table_view_outlined, size: 16, color: Color(0xFF64748B)),
                                           const SizedBox(width: 8),
-                                          Text('XLS', style: GoogleFonts.inter(fontSize: 13)),
+                                          Text('Export CSV', style: GoogleFonts.inter(fontSize: 13)),
                                         ],
                                       ),
                                     ),
@@ -1044,6 +1129,7 @@ class _UsersScreenState extends State<UsersScreen> {
                                     decoration: BoxDecoration(
                                       border: Border.all(color: AppTheme.primary),
                                       borderRadius: BorderRadius.circular(8),
+                                      color: AppTheme.cardLight,
                                     ),
                                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                                     child: Row(
@@ -1086,34 +1172,35 @@ class _UsersScreenState extends State<UsersScreen> {
                         // Search Bar
                         Card(
                           elevation: 0,
-                          color: Colors.white,
+                          color: AppTheme.cardLight,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           child: Padding(
                             padding: const EdgeInsets.all(16.0),
                             child: Container(
                               height: 44,
                               decoration: BoxDecoration(
-                                color: const Color(0xFFF8FAFC),
+                                color: AppTheme.bgLight,
                                 borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: const Color(0xFFE2E8F0)),
+                                border: Border.all(color: AppTheme.borderLight),
                               ),
                               padding: const EdgeInsets.symmetric(horizontal: 12),
                               child: Row(
                                 children: [
-                                  const Icon(Icons.search, color: Color(0xFF94A3B8), size: 18),
+                                  Icon(Icons.search, color: AppTheme.textLightSecondary, size: 18),
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: TextField(
                                       onChanged: (val) => setState(() => _searchQuery = val),
-                                      decoration: const InputDecoration(
+                                      decoration: InputDecoration(
                                         hintText: 'Search by name, email, or phone...',
+                                        hintStyle: TextStyle(color: AppTheme.textLightSecondary),
                                         border: InputBorder.none,
                                         enabledBorder: InputBorder.none,
                                         focusedBorder: InputBorder.none,
                                         contentPadding: EdgeInsets.zero,
                                         isDense: true,
                                       ),
-                                      style: GoogleFonts.inter(fontSize: 13),
+                                      style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary),
                                     ),
                                   ),
                                 ],
@@ -1127,7 +1214,7 @@ class _UsersScreenState extends State<UsersScreen> {
                         Expanded(
                           child: Card(
                             elevation: 0,
-                            color: Colors.white,
+                            color: AppTheme.cardLight,
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                             child: _isLoading
                                 ? Center(child: CircularProgressIndicator(color: AppTheme.primary))
@@ -1154,7 +1241,7 @@ class _UsersScreenState extends State<UsersScreen> {
   Widget _buildFilterSection() {
     return Card(
       elevation: 0,
-      color: Colors.white,
+      color: AppTheme.cardLight,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: const EdgeInsets.all(20.0),
@@ -1349,7 +1436,7 @@ class _UsersScreenState extends State<UsersScreen> {
           const SizedBox(height: 16),
           Text(
             'No data available.',
-            style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: const Color(0xFF64748B)),
+            style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary),
           ),
         ],
       ),
@@ -1363,7 +1450,7 @@ class _UsersScreenState extends State<UsersScreen> {
       children: [
         // Table Header
         Container(
-          color: const Color(0xFFF8FAFC),
+          color: AppTheme.bgLight,
           padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
           child: Row(
             children: [
@@ -1379,7 +1466,7 @@ class _UsersScreenState extends State<UsersScreen> {
         Expanded(
           child: ListView.separated(
             itemCount: items.length,
-            separatorBuilder: (context, index) => const Divider(height: 1, color: Color(0xFFF1F5F9)),
+            separatorBuilder: (context, index) => Divider(height: 1, color: AppTheme.dividerColor),
             itemBuilder: (context, index) {
               final item = items[index];
               
@@ -1418,7 +1505,7 @@ class _UsersScreenState extends State<UsersScreen> {
                               child: Container(
                                 width: 36,
                                 height: 36,
-                                color: const Color(0xFFF1F5F9),
+                                color: AppTheme.bgLight,
                                 child: Base64ImageWidget(base64Str: imageBase64, fit: BoxFit.cover),
                               ),
                             )
@@ -1426,7 +1513,7 @@ class _UsersScreenState extends State<UsersScreen> {
                             Container(
                               width: 36,
                               height: 36,
-                              decoration: BoxDecoration(color: const Color(0xFFFFF0F5), borderRadius: BorderRadius.circular(18)),
+                              decoration: BoxDecoration(color: AppTheme.primary.withOpacity(0.1), borderRadius: BorderRadius.circular(18)),
                               child: Icon(Icons.person_outline, color: AppTheme.primary, size: 18),
                             ),
                           const SizedBox(width: 12),
@@ -1445,7 +1532,7 @@ class _UsersScreenState extends State<UsersScreen> {
                       flex: 3,
                       child: Text(
                         email,
-                        style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF475569)),
+                        style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -1454,7 +1541,7 @@ class _UsersScreenState extends State<UsersScreen> {
                       flex: 3,
                       child: Text(
                         phone,
-                        style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF475569)),
+                        style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary),
                       ),
                     ),
                     // STATUS
@@ -1475,7 +1562,7 @@ class _UsersScreenState extends State<UsersScreen> {
                             onTap: () => _viewDetails(item),
                             child: Container(
                               padding: const EdgeInsets.all(6),
-                              decoration: BoxDecoration(color: const Color(0xFFFFF0F5), borderRadius: BorderRadius.circular(6)),
+                              decoration: BoxDecoration(color: AppTheme.primary.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
                               child: Icon(Icons.visibility_outlined, color: AppTheme.primary, size: 14),
                             ),
                           ),
@@ -1485,7 +1572,7 @@ class _UsersScreenState extends State<UsersScreen> {
                               onTap: () => _showPasswordResetDialog(item),
                               child: Container(
                                 padding: const EdgeInsets.all(6),
-                                decoration: BoxDecoration(color: const Color(0xFFE0F2FE), borderRadius: BorderRadius.circular(6)),
+                                decoration: BoxDecoration(color: Colors.blue.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
                                 child: const Icon(Icons.vpn_key_outlined, color: Colors.blue, size: 14),
                               ),
                             ),
@@ -1495,7 +1582,7 @@ class _UsersScreenState extends State<UsersScreen> {
                             onTap: () => _openDrawer(item),
                             child: Container(
                               padding: const EdgeInsets.all(6),
-                              decoration: BoxDecoration(color: const Color(0xFFFFF0F5), borderRadius: BorderRadius.circular(6)),
+                              decoration: BoxDecoration(color: AppTheme.primary.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
                               child: Icon(Icons.edit, color: AppTheme.primary, size: 14),
                             ),
                           ),
@@ -1504,7 +1591,7 @@ class _UsersScreenState extends State<UsersScreen> {
                             onTap: () => _deleteItem(item),
                             child: Container(
                               padding: const EdgeInsets.all(6),
-                              decoration: BoxDecoration(color: const Color(0xFFFEF2F2), borderRadius: BorderRadius.circular(6)),
+                              decoration: BoxDecoration(color: AppTheme.danger.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
                               child: Icon(
                                 item is CustomerModel ? Icons.delete : Icons.block,
                                 color: AppTheme.danger,
@@ -1528,7 +1615,7 @@ class _UsersScreenState extends State<UsersScreen> {
   Widget _buildTableHeaderText(String label) {
     return Text(
       label,
-      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF475569), letterSpacing: 0.5),
+      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary, letterSpacing: 0.5),
     );
   }
 
@@ -1574,9 +1661,9 @@ class _UsersScreenState extends State<UsersScreen> {
                   Row(
                     children: [
                       Text('Dashboard', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
-                      const Icon(Icons.chevron_right, size: 14, color: AppTheme.textLightSecondary),
+                      Icon(Icons.chevron_right, size: 14, color: AppTheme.textLightSecondary),
                       Text(widget.userType, style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
-                      const Icon(Icons.chevron_right, size: 14, color: AppTheme.textLightSecondary),
+                      Icon(Icons.chevron_right, size: 14, color: AppTheme.textLightSecondary),
                       Text('View', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.primary, fontWeight: FontWeight.w600)),
                     ],
                   ),
@@ -1599,7 +1686,7 @@ class _UsersScreenState extends State<UsersScreen> {
           // User Header Card
           Card(
             elevation: 0,
-            color: Colors.white,
+            color: AppTheme.cardLight,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             child: Padding(
               padding: const EdgeInsets.all(24.0),
@@ -1612,7 +1699,7 @@ class _UsersScreenState extends State<UsersScreen> {
                       child: Container(
                         width: 80,
                         height: 80,
-                        color: const Color(0xFFF1F5F9),
+                        color: AppTheme.bgLight,
                         child: Base64ImageWidget(base64Str: imageBase64, fit: BoxFit.cover),
                       ),
                     )
@@ -1620,7 +1707,7 @@ class _UsersScreenState extends State<UsersScreen> {
                     Container(
                       width: 80,
                       height: 80,
-                      decoration: BoxDecoration(color: const Color(0xFFFFF0F5), borderRadius: BorderRadius.circular(40)),
+                      decoration: BoxDecoration(color: AppTheme.primary.withOpacity(0.1), borderRadius: BorderRadius.circular(40)),
                       child: Icon(Icons.person, color: AppTheme.primary, size: 40),
                     ),
                   const SizedBox(width: 24),
@@ -1679,7 +1766,7 @@ class _UsersScreenState extends State<UsersScreen> {
           // Tab content block
           Card(
             elevation: 0,
-            color: Colors.white,
+            color: AppTheme.cardLight,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             child: Padding(
               padding: const EdgeInsets.all(24.0),
@@ -1704,14 +1791,14 @@ class _UsersScreenState extends State<UsersScreen> {
     final active = _activeTab == index;
     return ElevatedButton.icon(
       onPressed: () => setState(() => _activeTab = index),
-      icon: Icon(icon, size: 14, color: active ? Colors.white : const Color(0xFF64748B)),
+      icon: Icon(icon, size: 14, color: active ? Colors.white : AppTheme.textLightSecondary),
       label: Text(label),
       style: ElevatedButton.styleFrom(
-        backgroundColor: active ? AppTheme.primary : Colors.white,
-        foregroundColor: active ? Colors.white : const Color(0xFF475569),
+        backgroundColor: active ? AppTheme.primary : AppTheme.cardLight,
+        foregroundColor: active ? Colors.white : AppTheme.textLightSecondary,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8),
-          side: active ? BorderSide.none : const BorderSide(color: Color(0xFFE2E8F0)),
+          side: active ? BorderSide.none : BorderSide(color: AppTheme.borderLight),
         ),
         elevation: 0,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -1781,7 +1868,7 @@ class _UsersScreenState extends State<UsersScreen> {
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 12.0),
-          child: Text(label, style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
+          child: Text(label, style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textLightSecondary)),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 12.0),
@@ -1790,13 +1877,13 @@ class _UsersScreenState extends State<UsersScreen> {
       ],
     );
   }
-
+ 
   TableRow _buildProfileTableRowWidget(String label, Widget widget) {
     return TableRow(
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 12.0),
-          child: Text(label, style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
+          child: Text(label, style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textLightSecondary)),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 12.0),
@@ -1929,7 +2016,7 @@ class _UsersScreenState extends State<UsersScreen> {
             child: Center(
               child: Text(
                 'No saved addresses.',
-                style: GoogleFonts.inter(color: const Color(0xFF64748B)),
+                style: GoogleFonts.inter(color: AppTheme.textLightSecondary),
               ),
             ),
           )
@@ -1939,7 +2026,7 @@ class _UsersScreenState extends State<UsersScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Container(
-                color: const Color(0xFFF8FAFC),
+                color: AppTheme.bgLight,
                 padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
                 child: Row(
                   children: [
@@ -1953,7 +2040,7 @@ class _UsersScreenState extends State<UsersScreen> {
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: _addresses.length,
-                separatorBuilder: (context, index) => const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                separatorBuilder: (context, index) => Divider(height: 1, color: AppTheme.dividerColor),
                 itemBuilder: (context, index) {
                   final addr = _addresses[index];
                   return Padding(
@@ -1971,7 +2058,7 @@ class _UsersScreenState extends State<UsersScreen> {
                           flex: 6,
                           child: Text(
                             addr.addressLine,
-                            style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569)),
+                            style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightSecondary),
                           ),
                         ),
                         Expanded(
@@ -1982,7 +2069,7 @@ class _UsersScreenState extends State<UsersScreen> {
                               onTap: () => _deleteAddress(addr),
                               child: Container(
                                 padding: const EdgeInsets.all(6),
-                                decoration: BoxDecoration(color: const Color(0xFFFEF2F2), borderRadius: BorderRadius.circular(6)),
+                                decoration: BoxDecoration(color: AppTheme.danger.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
                                 child: const Icon(Icons.delete, color: AppTheme.danger, size: 14),
                               ),
                             ),
@@ -2304,7 +2391,7 @@ class _UsersScreenState extends State<UsersScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               decoration: BoxDecoration(
-                border: Border.all(color: const Color(0xFFE2E8F0)),
+                border: Border.all(color: AppTheme.borderLight),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: DropdownButtonHideUnderline(
@@ -2431,7 +2518,7 @@ class _UsersScreenState extends State<UsersScreen> {
             child: Center(
               child: Text(
                 isChef ? 'No prepared items found matching the filter.' : 'No orders found matching the filter.',
-                style: GoogleFonts.inter(color: const Color(0xFF64748B)),
+                style: GoogleFonts.inter(color: AppTheme.textLightSecondary),
               ),
             ),
           )
@@ -2439,9 +2526,9 @@ class _UsersScreenState extends State<UsersScreen> {
           // Prepared items table layout
           Container(
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: AppTheme.cardLight,
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
+              border: Border.all(color: AppTheme.borderLight),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2464,7 +2551,7 @@ class _UsersScreenState extends State<UsersScreen> {
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   itemCount: prepared.length,
-                  separatorBuilder: (context, index) => const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                  separatorBuilder: (context, index) => Divider(height: 1, color: AppTheme.dividerColor),
                   itemBuilder: (context, index) {
                     final item = prepared[index];
                     final dateFormatted = DateFormat('hh:mm a, dd-MM-yyyy').format((DateTime.tryParse(item['created_at']?.toString() ?? '') ?? DateTime.now()).toLocal());
@@ -2517,14 +2604,14 @@ class _UsersScreenState extends State<UsersScreen> {
                             flex: 1,
                             child: Text(
                               '${qty.toStringAsFixed(0)}',
-                              style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF475569)),
+                              style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textLightSecondary),
                             ),
                           ),
                           Expanded(
                             flex: 3,
                             child: Text(
                               dateFormatted,
-                              style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF475569)),
+                              style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary),
                             ),
                           ),
                           Expanded(
@@ -2542,7 +2629,7 @@ class _UsersScreenState extends State<UsersScreen> {
                             flex: 5,
                             child: Text(
                               ingredientsDisplay,
-                              style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B), fontStyle: FontStyle.italic),
+                              style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary, fontStyle: FontStyle.italic),
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -2567,7 +2654,7 @@ class _UsersScreenState extends State<UsersScreen> {
                                       },
                                       child: Container(
                                         padding: const EdgeInsets.all(6),
-                                        decoration: BoxDecoration(color: const Color(0xFFFFF0F5), borderRadius: BorderRadius.circular(6)),
+                                        decoration: BoxDecoration(color: AppTheme.primary.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
                                         child: Icon(Icons.visibility_outlined, color: AppTheme.primary, size: 14),
                                       ),
                                     ),
@@ -2586,9 +2673,9 @@ class _UsersScreenState extends State<UsersScreen> {
           // General orders table layout
           Container(
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: AppTheme.cardLight,
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
+              border: Border.all(color: AppTheme.borderLight),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2610,7 +2697,7 @@ class _UsersScreenState extends State<UsersScreen> {
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   itemCount: orders.length,
-                  separatorBuilder: (context, index) => const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                  separatorBuilder: (context, index) => Divider(height: 1, color: AppTheme.dividerColor),
                   itemBuilder: (context, index) {
                     final o = orders[index];
                     final dateFormatted = DateFormat('hh:mm a, dd-MM-yyyy').format((DateTime.tryParse(o.createdAt) ?? DateTime.now()).toLocal());
@@ -2630,7 +2717,7 @@ class _UsersScreenState extends State<UsersScreen> {
                             flex: 4,
                             child: Text(
                               dateFormatted,
-                              style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF475569)),
+                              style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary),
                             ),
                           ),
                           Expanded(
@@ -2657,7 +2744,7 @@ class _UsersScreenState extends State<UsersScreen> {
                                     onTap: () => _showUserOrderDetailDialog(o),
                                     child: Container(
                                       padding: const EdgeInsets.all(6),
-                                      decoration: BoxDecoration(color: const Color(0xFFFFF0F5), borderRadius: BorderRadius.circular(6)),
+                                      decoration: BoxDecoration(color: AppTheme.primary.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
                                       child: Icon(Icons.visibility_outlined, color: AppTheme.primary, size: 14),
                                     ),
                                   ),
@@ -2678,8 +2765,8 @@ class _UsersScreenState extends State<UsersScreen> {
   }
 
   Widget _buildOrderBadge(String status) {
-    Color bg = const Color(0xFFF1F5F9);
-    Color fg = const Color(0xFF475569);
+    Color bg = AppTheme.isDarkMode ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9);
+    Color fg = AppTheme.isDarkMode ? const Color(0xFF94A3B8) : const Color(0xFF475569);
 
     if (status == 'delivered') {
       bg = const Color(0xFFE6F4EA);
@@ -2717,7 +2804,7 @@ class _UsersScreenState extends State<UsersScreen> {
               width: 480,
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: AppTheme.cardLight,
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10)],
               ),
@@ -2752,20 +2839,20 @@ class _UsersScreenState extends State<UsersScreen> {
                             style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
                           ),
                           IconButton(
-                            icon: const Icon(Icons.close, size: 18),
+                            icon: Icon(Icons.close, size: 18, color: AppTheme.textLightSecondary),
                             onPressed: () => Navigator.pop(context),
                           ),
                         ],
                       ),
-                      const Divider(height: 20),
+                      Divider(height: 20, color: AppTheme.dividerColor),
                       Text(
                         'Order Number: #${order.orderNumber}',
-                        style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF64748B)),
+                        style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         'Date: ${DateFormat('yyyy-MM-dd hh:mm a').format((DateTime.tryParse(order.createdAt) ?? DateTime.now()).toLocal())}',
-                        style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+                        style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary),
                       ),
                       const SizedBox(height: 16),
                       
@@ -2777,24 +2864,24 @@ class _UsersScreenState extends State<UsersScreen> {
                       Container(
                         constraints: const BoxConstraints(maxHeight: 180),
                         decoration: BoxDecoration(
-                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                          border: Border.all(color: AppTheme.borderLight),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: ListView.separated(
                           shrinkWrap: true,
                           itemCount: items.length,
-                          separatorBuilder: (context, idx) => const Divider(height: 1),
+                          separatorBuilder: (context, idx) => Divider(height: 1, color: AppTheme.dividerColor),
                           itemBuilder: (context, idx) {
                             final item = items[idx];
                             return ListTile(
                               dense: true,
-                              title: Text(item.productName, style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
+                              title: Text(item.productName, style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: AppTheme.textLightPrimary)),
                               subtitle: item.notes != null && item.notes!.isNotEmpty
-                                  ? Text('Notes: ${item.notes}', style: GoogleFonts.inter(fontSize: 10, fontStyle: FontStyle.italic))
+                                  ? Text('Notes: ${item.notes}', style: GoogleFonts.inter(fontSize: 10, fontStyle: FontStyle.italic, color: AppTheme.textLightSecondary))
                                   : null,
                               trailing: Text(
                                 '${item.quantity} x LKR ${item.price.toStringAsFixed(2)}',
-                                style: GoogleFonts.inter(fontWeight: FontWeight.bold),
+                                style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
                               ),
                             );
                           },
@@ -2806,8 +2893,8 @@ class _UsersScreenState extends State<UsersScreen> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text('Subtotal:', style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B))),
-                          Text('LKR ${order.subtotal.toStringAsFixed(2)}', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600)),
+                          Text('Subtotal:', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
+                          Text('LKR ${order.subtotal.toStringAsFixed(2)}', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textLightPrimary)),
                         ],
                       ),
                       const SizedBox(height: 4),
@@ -2835,7 +2922,7 @@ class _UsersScreenState extends State<UsersScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('Total Amount:', style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold)),
+                        Text('Total Amount:', style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
                         Text('LKR ${order.total.toStringAsFixed(2)}', style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold, color: AppTheme.primary)),
                       ],
                     ),
@@ -2869,10 +2956,10 @@ class _UsersScreenState extends State<UsersScreen> {
   Widget _buildDrawer() {
     return Container(
       width: 420,
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(left: BorderSide(color: Color(0xFFE2E8F0))),
-        boxShadow: [
+      decoration: BoxDecoration(
+        color: AppTheme.cardLight,
+        border: Border(left: BorderSide(color: AppTheme.borderLight)),
+        boxShadow: const [
           BoxShadow(color: Colors.black12, blurRadius: 15, offset: Offset(-4, 0)),
         ],
       ),
@@ -2895,10 +2982,10 @@ class _UsersScreenState extends State<UsersScreen> {
                 _editingItem == null ? 'Add ${_getSingleName(widget.userType)}' : 'Edit ${_getSingleName(widget.userType)}',
                 style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
               ),
-              IconButton(icon: const Icon(Icons.close, size: 18), onPressed: _closeDrawer),
+              IconButton(icon: Icon(Icons.close, size: 18, color: AppTheme.textLightSecondary), onPressed: _closeDrawer),
             ],
           ),
-          const Divider(height: 24, color: Color(0xFFF1F5F9)),
+          Divider(height: 24, color: AppTheme.dividerColor),
           const SizedBox(height: 12),
 
           Expanded(
@@ -2963,6 +3050,8 @@ class _UsersScreenState extends State<UsersScreen> {
                   const SizedBox(height: 6),
                   DropdownButtonFormField<String>(
                     value: _roleVal,
+                    dropdownColor: AppTheme.cardLight,
+                    style: TextStyle(color: AppTheme.textLightPrimary, fontSize: 13),
                     items: const [
                       DropdownMenuItem(value: 'admin', child: Text('Administrator')),
                       DropdownMenuItem(value: 'owner', child: Text('Hotel Owner')),
@@ -2985,15 +3074,17 @@ class _UsersScreenState extends State<UsersScreen> {
                     const SizedBox(height: 6),
                     DropdownButtonFormField<int?>(
                       value: _selectedCategoryId,
-                      hint: const Text('Select category (e.g. Koththu)'),
+                      dropdownColor: AppTheme.cardLight,
+                      style: TextStyle(color: AppTheme.textLightPrimary, fontSize: 13),
+                      hint: Text('Select category (e.g. Koththu)', style: TextStyle(color: AppTheme.textLightSecondary)),
                       items: [
-                        const DropdownMenuItem<int?>(
+                        DropdownMenuItem<int?>(
                           value: null,
-                          child: Text('None'),
+                          child: Text('None', style: TextStyle(color: AppTheme.textLightSecondary)),
                         ),
                         ..._categories.map((c) => DropdownMenuItem<int?>(
                               value: c.id,
-                              child: Text(c.name),
+                              child: Text(c.name, style: TextStyle(color: AppTheme.textLightPrimary)),
                             )),
                       ],
                       onChanged: (val) => setState(() => _selectedCategoryId = val),
@@ -3013,7 +3104,7 @@ class _UsersScreenState extends State<UsersScreen> {
                           activeColor: AppTheme.primary,
                           onChanged: (val) => setState(() => _branchVal = val!),
                         ),
-                        Text('Current Branch', style: GoogleFonts.inter(fontSize: 13)),
+                        Text('Current Branch', style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary)),
                         const SizedBox(width: 20),
                         Radio<String>(
                           value: 'all',
@@ -3021,7 +3112,7 @@ class _UsersScreenState extends State<UsersScreen> {
                           activeColor: AppTheme.primary,
                           onChanged: (val) => setState(() => _branchVal = val!),
                         ),
-                        Text('All Branch', style: GoogleFonts.inter(fontSize: 13)),
+                        Text('All Branch', style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary)),
                       ],
                     ),
                     const SizedBox(height: 20),
@@ -3037,7 +3128,7 @@ class _UsersScreenState extends State<UsersScreen> {
                         activeColor: AppTheme.primary,
                         onChanged: (val) => setState(() => _statusVal = val!),
                       ),
-                      Text('Active', style: GoogleFonts.inter(fontSize: 13)),
+                      Text('Active', style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary)),
                       const SizedBox(width: 20),
                       Radio<String>(
                         value: 'inactive',
@@ -3045,7 +3136,7 @@ class _UsersScreenState extends State<UsersScreen> {
                         activeColor: AppTheme.primary,
                         onChanged: (val) => setState(() => _statusVal = val!),
                       ),
-                      Text('Inactive', style: GoogleFonts.inter(fontSize: 13)),
+                      Text('Inactive', style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary)),
                     ],
                   ),
                 ],
@@ -3054,7 +3145,7 @@ class _UsersScreenState extends State<UsersScreen> {
           ),
           
           const SizedBox(height: 20),
-          const Divider(height: 1, color: Color(0xFFF1F5F9)),
+          Divider(height: 1, color: AppTheme.dividerColor),
           const SizedBox(height: 20),
 
           Row(
@@ -3078,11 +3169,11 @@ class _UsersScreenState extends State<UsersScreen> {
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: _closeDrawer,
-                  icon: const Icon(Icons.close, size: 16, color: Color(0xFF475569)),
+                  icon: Icon(Icons.close, size: 16, color: AppTheme.textLightSecondary),
                   label: const Text('Close'),
                   style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: Color(0xFFE2E8F0)),
-                    foregroundColor: const Color(0xFF475569),
+                    side: BorderSide(color: AppTheme.borderLight),
+                    foregroundColor: AppTheme.textLightSecondary,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     padding: const EdgeInsets.symmetric(vertical: 14),
                   ),
@@ -3109,10 +3200,10 @@ class _UsersScreenState extends State<UsersScreen> {
                 _editingItem == null ? 'Add Customer' : 'Edit Customer',
                 style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
               ),
-              IconButton(icon: const Icon(Icons.close, size: 18), onPressed: _closeDrawer),
+              IconButton(icon: Icon(Icons.close, size: 18, color: AppTheme.textLightSecondary), onPressed: _closeDrawer),
             ],
           ),
-          const Divider(height: 24, color: Color(0xFFF1F5F9)),
+          Divider(height: 24, color: AppTheme.dividerColor),
           const SizedBox(height: 12),
 
           Expanded(
@@ -3157,9 +3248,9 @@ class _UsersScreenState extends State<UsersScreen> {
                     controller: _custBirthdayController,
                     readOnly: true,
                     onTap: _selectBirthday,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       hintText: 'yyyy-mm-dd',
-                      suffixIcon: Icon(Icons.calendar_today, size: 16, color: Color(0xFF64748B)),
+                      suffixIcon: Icon(Icons.calendar_today, size: 16, color: AppTheme.textLightSecondary),
                     ),
                     style: GoogleFonts.inter(fontSize: 13),
                   ),
@@ -3189,7 +3280,7 @@ class _UsersScreenState extends State<UsersScreen> {
           ),
           
           const SizedBox(height: 20),
-          const Divider(height: 1, color: Color(0xFFF1F5F9)),
+          Divider(height: 1, color: AppTheme.dividerColor),
           const SizedBox(height: 20),
 
           Row(
@@ -3213,11 +3304,11 @@ class _UsersScreenState extends State<UsersScreen> {
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: _closeDrawer,
-                  icon: const Icon(Icons.close, size: 16, color: Color(0xFF475569)),
+                  icon: Icon(Icons.close, size: 16, color: AppTheme.textLightSecondary),
                   label: const Text('Close'),
                   style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: Color(0xFFE2E8F0)),
-                    foregroundColor: const Color(0xFF475569),
+                    side: BorderSide(color: AppTheme.borderLight),
+                    foregroundColor: AppTheme.textLightSecondary,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     padding: const EdgeInsets.symmetric(vertical: 14),
                   ),
@@ -3230,10 +3321,10 @@ class _UsersScreenState extends State<UsersScreen> {
     );
   }
 
-  Widget _buildFieldLabel(String label) {
+  Widget _buildFieldLabel(String text) {
     return Text(
-      label,
-      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF475569)),
+      text,
+      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary),
     );
   }
 }

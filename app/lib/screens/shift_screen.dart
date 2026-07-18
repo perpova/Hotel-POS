@@ -120,7 +120,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
                     Row(
                       children: [
                         Text('Dashboard', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
-                        const Icon(Icons.chevron_right, size: 14, color: AppTheme.textLightSecondary),
+                        Icon(Icons.chevron_right, size: 14, color: AppTheme.textLightSecondary),
                         Text('Shifts & Cash', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.primary, fontWeight: FontWeight.w600)),
                       ],
                     ),
@@ -183,9 +183,9 @@ class _ShiftScreenState extends State<ShiftScreen> {
         width: 420,
         child: Card(
           elevation: 0,
-          color: Colors.white,
+          color: AppTheme.cardLight,
           shape: RoundedRectangleBorder(
-            side: const BorderSide(color: Color(0xFFE2E8F0)),
+            side: BorderSide(color: AppTheme.borderLight),
             borderRadius: BorderRadius.circular(16),
           ),
           child: Padding(
@@ -198,7 +198,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
                   width: 60,
                   height: 60,
                   decoration: BoxDecoration(
-                    color: const Color(0xFFFFF0F5),
+                    color: AppTheme.primary.withOpacity(0.12),
                     borderRadius: BorderRadius.circular(30),
                   ),
                   child: Icon(Icons.lock_open, size: 30, color: AppTheme.primary),
@@ -285,9 +285,9 @@ class _ShiftScreenState extends State<ShiftScreen> {
         // Cash Status Row Cards
         Card(
           elevation: 0,
-          color: Colors.white,
+          color: AppTheme.cardLight,
           shape: RoundedRectangleBorder(
-            side: const BorderSide(color: Color(0xFFE2E8F0)),
+            side: BorderSide(color: AppTheme.borderLight),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Padding(
@@ -301,20 +301,20 @@ class _ShiftScreenState extends State<ShiftScreen> {
                 ),
                 const SizedBox(height: 20),
                 _buildCashDetailRow('Opening Cash Balance', starting, Icons.vpn_key_outlined, const Color(0xFFE0F2FE), Colors.blue),
-                const Divider(height: 24, color: Color(0xFFF1F5F9)),
+                Divider(height: 24, color: AppTheme.dividerColor),
                 _buildCashDetailRow('Today\'s Cash Sales', cashSalesVal, Icons.point_of_sale_outlined, const Color(0xFFE6F4EA), const Color(0xFF137333)),
-                const Divider(height: 24, color: Color(0xFFF1F5F9)),
+                Divider(height: 24, color: AppTheme.dividerColor),
                 if (creditSettlementsReceived > 0) ...[
                   _buildCashDetailRow('Credit Settlements (Cash)', creditSettlementsReceived, Icons.assignment_returned_outlined, const Color(0xFFE0F2FE), const Color(0xFF0369A1)),
-                  const Divider(height: 24, color: Color(0xFFF1F5F9)),
+                  Divider(height: 24, color: AppTheme.dividerColor),
                 ],
                 if (otherCashIn > 0) ...[
                   _buildCashDetailRow('Other Cash In', otherCashIn, Icons.add_circle_outline, const Color(0xFFDCFCE7), const Color(0xFF15803D)),
-                  const Divider(height: 24, color: Color(0xFFF1F5F9)),
+                  Divider(height: 24, color: AppTheme.dividerColor),
                 ],
                 if (cashOutAdjustments > 0) ...[
                   _buildCashDetailRow('Cash Out Adjustments', cashOutAdjustments, Icons.remove_circle_outline, const Color(0xFFFEE2E2), const Color(0xFFB91C1C)),
-                  const Divider(height: 24, color: Color(0xFFF1F5F9)),
+                  Divider(height: 24, color: AppTheme.dividerColor),
                 ],
                 _buildCashDetailRow('Expected Cash in Drawer', expectedTotal, Icons.wallet_outlined, Color(0xFFFFF0F5), AppTheme.primary, isTotal: true),
               ],
@@ -326,9 +326,9 @@ class _ShiftScreenState extends State<ShiftScreen> {
         // Cash Drawer Control card
         Card(
           elevation: 0,
-          color: Colors.white,
+          color: AppTheme.cardLight,
           shape: RoundedRectangleBorder(
-            side: const BorderSide(color: Color(0xFFE2E8F0)),
+            side: BorderSide(color: AppTheme.borderLight),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Padding(
@@ -343,6 +343,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
                 const SizedBox(height: 16),
                 DropdownButtonFormField<SupplierModel?>(
                   value: _selectedSupplier,
+                  dropdownColor: AppTheme.cardLight,
                   decoration: const InputDecoration(
                     labelText: 'Supplier Payment (Optional)',
                   ),
@@ -435,9 +436,9 @@ class _ShiftScreenState extends State<ShiftScreen> {
   Widget _buildCashDrawerLogsCard(POSController controller) {
     return Card(
       elevation: 0,
-      color: Colors.white,
+      color: AppTheme.cardLight,
       shape: RoundedRectangleBorder(
-        side: const BorderSide(color: Color(0xFFE2E8F0)),
+        side: BorderSide(color: AppTheme.borderLight),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Padding(
@@ -487,7 +488,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Container(
-                    color: const Color(0xFFF8FAFC),
+                    color: AppTheme.bgLight,
                     padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
                     child: Row(
                       children: [
@@ -502,7 +503,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     itemCount: controller.drawerLogs.length,
-                    separatorBuilder: (context, index) => const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                    separatorBuilder: (context, index) => Divider(height: 1, color: AppTheme.dividerColor),
                     itemBuilder: (context, index) {
                       final log = controller.drawerLogs[index];
                       final isCashIn = log['type'] == 'cash_in';
@@ -547,11 +548,11 @@ class _ShiftScreenState extends State<ShiftScreen> {
                               ),
                             ),
                             // REASON
-                            Expanded(
+                             Expanded(
                               flex: 5,
                               child: Text(
                                 log['reason'] ?? '',
-                                style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569)),
+                                style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightSecondary),
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
@@ -560,7 +561,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
                               flex: 3,
                               child: Text(
                                 timeFormatted,
-                                style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+                                style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary),
                               ),
                             ),
                           ],
@@ -579,7 +580,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
   Widget _buildTableHeaderText(String label) {
     return Text(
       label,
-      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF475569), letterSpacing: 0.5),
+      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary, letterSpacing: 0.5),
     );
   }
 
@@ -616,9 +617,9 @@ class _ShiftScreenState extends State<ShiftScreen> {
 
     return Card(
       elevation: 0,
-      color: Colors.white,
+      color: AppTheme.cardLight,
       shape: RoundedRectangleBorder(
-        side: const BorderSide(color: Color(0xFFE2E8F0)),
+        side: BorderSide(color: AppTheme.borderLight),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Padding(
@@ -635,7 +636,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
               'Count drawer cash and compare with expected balances. Closing shift prints a final Z-Report.',
               style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary),
             ),
-            const Divider(height: 16, color: Color(0xFFF1F5F9)),
+            Divider(height: 16, color: AppTheme.dividerColor),
 
             Expanded(
               child: SingleChildScrollView(
@@ -643,7 +644,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Cash Reconciliation Details
-                    Text('CASH DRAWER RECONCILIATION', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: const Color(0xFF64748B))),
+                    Text('CASH DRAWER RECONCILIATION', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary)),
                     const SizedBox(height: 8),
                     _buildMiniReconcileRow('Starting Cash Balance', starting),
                     _buildMiniReconcileRow('Cash Sales (+)', _cashSales, color: const Color(0xFF16A34A)),
@@ -651,22 +652,22 @@ class _ShiftScreenState extends State<ShiftScreen> {
                     _buildMiniReconcileRow('Other Cash In (+)', otherCashIn, color: const Color(0xFF16A34A)),
                     _buildMiniReconcileRow('Supplier Payments (-)', -supplierPayments, color: const Color(0xFFEF4444)),
                     _buildMiniReconcileRow('Other Cash Out (-)', -otherCashOut, color: const Color(0xFFEF4444)),
-                    const Divider(height: 12, color: Color(0xFFF1F5F9)),
+                    Divider(height: 12, color: AppTheme.dividerColor),
                     _buildMiniReconcileRow('EXPECTED CASH IN DRAWER', expectedTotal, isBold: true),
-                    const Divider(height: 16, color: Color(0xFFF1F5F9)),
+                    Divider(height: 16, color: AppTheme.dividerColor),
 
                     // Other Payment Methods
-                    Text('NON-CASH SALES SUMMARY', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: const Color(0xFF64748B))),
+                    Text('NON-CASH SALES SUMMARY', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary)),
                     const SizedBox(height: 8),
                     _buildMiniReconcileRow('Card Payments', _cardSales),
                     _buildMiniReconcileRow('LankaQR Payments', _qrSales),
                     _buildMiniReconcileRow('Credit Sales (Outstanding Added)', _creditSales),
-                    const Divider(height: 12, color: Color(0xFFF1F5F9)),
+                    Divider(height: 12, color: AppTheme.dividerColor),
                     _buildMiniReconcileRow('TOTAL SHIFT SALES', totalSales, isBold: true, color: AppTheme.primary),
-                    const Divider(height: 16, color: Color(0xFFF1F5F9)),
+                    Divider(height: 16, color: AppTheme.dividerColor),
 
                     // Input Actual Cash Counted
-                    Text('ACTUAL DRAWER CASH COUNT', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: const Color(0xFF64748B))),
+                    Text('ACTUAL DRAWER CASH COUNT', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary)),
                     const SizedBox(height: 8),
                     TextField(
                       controller: _actualCashController,
@@ -884,7 +885,10 @@ class _ShiftScreenState extends State<ShiftScreen> {
         Container(
           width: 40,
           height: 40,
-          decoration: BoxDecoration(color: iconBg, borderRadius: BorderRadius.circular(8)),
+          decoration: BoxDecoration(
+            color: AppTheme.isDarkMode ? iconColor.withOpacity(0.12) : iconBg,
+            borderRadius: BorderRadius.circular(8),
+          ),
           child: Icon(icon, color: iconColor, size: 20),
         ),
         const SizedBox(width: 16),

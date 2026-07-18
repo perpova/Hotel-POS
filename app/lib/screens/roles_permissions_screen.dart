@@ -116,6 +116,7 @@ class _RolesPermissionsContentState extends State<RolesPermissionsContent> {
     await showDialog(
       context: context,
       builder: (ctx) => Dialog(
+        backgroundColor: AppTheme.cardLight,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         child: SizedBox(
           width: 420,
@@ -124,12 +125,12 @@ class _RolesPermissionsContentState extends State<RolesPermissionsContent> {
             child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                 Text('Role', style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
-                IconButton(icon: const Icon(Icons.close, size: 18), onPressed: () => Navigator.pop(ctx)),
+                IconButton(icon: Icon(Icons.close, size: 18, color: AppTheme.textLightSecondary), onPressed: () => Navigator.pop(ctx)),
               ]),
               const SizedBox(height: 16),
-              Text('NAME *', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: const Color(0xFF64748B), letterSpacing: 0.5)),
+              Text('NAME *', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary, letterSpacing: 0.5)),
               const SizedBox(height: 6),
-              TextField(controller: ctrl, autofocus: true, style: GoogleFonts.inter(fontSize: 13),
+              TextField(controller: ctrl, autofocus: true, style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary),
                   decoration: const InputDecoration(hintText: 'e.g. Manager')),
               const SizedBox(height: 24),
               Row(mainAxisAlignment: MainAxisAlignment.end, children: [
@@ -137,7 +138,7 @@ class _RolesPermissionsContentState extends State<RolesPermissionsContent> {
                   onPressed: () => Navigator.pop(ctx),
                   icon: const Icon(Icons.close, size: 14),
                   label: const Text('Close'),
-                  style: OutlinedButton.styleFrom(foregroundColor: const Color(0xFF64748B), side: const BorderSide(color: Color(0xFFCBD5E1))),
+                  style: OutlinedButton.styleFrom(foregroundColor: AppTheme.textLightSecondary, side: BorderSide(color: AppTheme.borderLight)),
                 ),
                 const SizedBox(width: 12),
                 ElevatedButton.icon(
@@ -172,11 +173,12 @@ class _RolesPermissionsContentState extends State<RolesPermissionsContent> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.cardLight,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        title: Text('Delete Role', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-        content: Text('Delete "${role['name']}"? This cannot be undone.', style: GoogleFonts.inter()),
+        title: Text('Delete Role', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
+        content: Text('Delete "${role['name']}"? This cannot be undone.', style: GoogleFonts.inter(color: AppTheme.textLightSecondary)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text('Cancel', style: TextStyle(color: AppTheme.textLightSecondary))),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(backgroundColor: AppTheme.danger, foregroundColor: Colors.white),
@@ -214,7 +216,7 @@ class _RolesPermissionsContentState extends State<RolesPermissionsContent> {
             const SizedBox(height: 2),
             Row(children: [
               Text('Dashboard', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
-              const Icon(Icons.chevron_right, size: 14, color: AppTheme.textLightSecondary),
+              Icon(Icons.chevron_right, size: 14, color: AppTheme.textLightSecondary),
               Text('Role & Permissions', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.primary, fontWeight: FontWeight.w600)),
             ]),
           ])),
@@ -227,7 +229,7 @@ class _RolesPermissionsContentState extends State<RolesPermissionsContent> {
           _addRoleBtn(),
         ]),
         const SizedBox(height: 4),
-        const Divider(color: Color(0xFFE2E8F0)),
+        Divider(color: AppTheme.dividerColor),
         const SizedBox(height: 12),
       ],
 
@@ -235,9 +237,9 @@ class _RolesPermissionsContentState extends State<RolesPermissionsContent> {
       Expanded(
         child: Container(
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: AppTheme.cardLight,
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
+            border: Border.all(color: AppTheme.borderLight),
           ),
           child: _loading
               ? const Center(child: CircularProgressIndicator())
@@ -248,7 +250,7 @@ class _RolesPermissionsContentState extends State<RolesPermissionsContent> {
                         child: ListView.separated(
                           padding: const EdgeInsets.symmetric(vertical: 8),
                           itemCount: _roles.length,
-                          separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                          separatorBuilder: (_, __) => Divider(height: 1, color: AppTheme.dividerColor),
                           itemBuilder: (ctx, i) => _buildRoleRow(_roles[i]),
                         ),
                       ),
@@ -320,7 +322,7 @@ class _RolesPermissionsContentState extends State<RolesPermissionsContent> {
       // Header row with back button
       Row(children: [
         IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, size: 15),
+          icon: Icon(Icons.arrow_back_ios_new, size: 15, color: AppTheme.textLightPrimary),
           onPressed: () => setState(() => _selectedRole = null),
           style: IconButton.styleFrom(foregroundColor: AppTheme.primary),
           tooltip: 'Back to roles',
@@ -354,9 +356,9 @@ class _RolesPermissionsContentState extends State<RolesPermissionsContent> {
       Expanded(
         child: Container(
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: AppTheme.cardLight,
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
+            border: Border.all(color: AppTheme.borderLight),
           ),
           child: _permLoading
               ? const Center(child: CircularProgressIndicator())
@@ -364,7 +366,7 @@ class _RolesPermissionsContentState extends State<RolesPermissionsContent> {
                   // Header row
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                    decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Color(0xFFF1F5F9)))),
+                    decoration: BoxDecoration(border: Border(bottom: BorderSide(color: AppTheme.dividerColor))),
                     child: Row(children: [
                       const SizedBox(width: 32),
                       Expanded(child: Text('PAGE', style: _hStyle())),
@@ -377,7 +379,7 @@ class _RolesPermissionsContentState extends State<RolesPermissionsContent> {
                   Expanded(
                     child: ListView.separated(
                       itemCount: _permissions.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFF8FAFC)),
+                      separatorBuilder: (_, __) => Divider(height: 1, color: AppTheme.dividerColor),
                       itemBuilder: (ctx, i) => _buildPermRow(i),
                     ),
                   ),
@@ -404,7 +406,7 @@ class _RolesPermissionsContentState extends State<RolesPermissionsContent> {
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      color: i % 2 == 0 ? Colors.white : const Color(0xFFFAFAFC),
+      color: i % 2 == 0 ? AppTheme.cardLight : AppTheme.bgLight,
       child: Row(children: [
         SizedBox(width: 32, child: Checkbox(value: enabled, activeColor: AppTheme.primary, onChanged: toggleView)),
         Expanded(child: Text(page, style: GoogleFonts.inter(

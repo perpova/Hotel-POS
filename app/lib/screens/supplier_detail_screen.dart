@@ -79,10 +79,10 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> with Single
     return Scaffold(
       backgroundColor: AppTheme.bgLight,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: AppTheme.cardLight,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: AppTheme.textLightPrimary),
+          icon: Icon(Icons.arrow_back, color: AppTheme.textLightPrimary),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
@@ -91,7 +91,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> with Single
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh, color: AppTheme.textLightPrimary),
+            icon: Icon(Icons.refresh, color: AppTheme.textLightPrimary),
             onPressed: _loadData,
           ),
         ],
@@ -126,9 +126,9 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> with Single
   Widget _buildHeaderSummary() {
     return Card(
       elevation: 0,
-      color: Colors.white,
+      color: AppTheme.cardLight,
       shape: RoundedRectangleBorder(
-        side: const BorderSide(color: Color(0xFFE2E8F0)),
+        side: BorderSide(color: AppTheme.borderLight),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Padding(
@@ -148,12 +148,12 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> with Single
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFE0F2FE),
+                        color: AppTheme.isDarkMode ? Colors.blue.withOpacity(0.12) : const Color(0xFFE0F2FE),
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
                         'Delivery Cycle: ${_currentSupplier.deliveryCycle}',
-                        style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.blue[800]),
+                        style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.isDarkMode ? Colors.blue[200] : Colors.blue[800]),
                       ),
                     ),
                   ],
@@ -211,9 +211,9 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> with Single
 
   Widget _buildTabBarSection() {
     return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
+      decoration: BoxDecoration(
+        color: AppTheme.cardLight,
+        border: Border(bottom: BorderSide(color: AppTheme.dividerColor)),
       ),
       child: TabBar(
         controller: _tabController,
@@ -238,9 +238,9 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> with Single
 
     return Card(
       elevation: 0,
-      color: Colors.white,
+      color: AppTheme.cardLight,
       shape: RoundedRectangleBorder(
-        side: const BorderSide(color: Color(0xFFE2E8F0)),
+        side: BorderSide(color: AppTheme.borderLight),
         borderRadius: BorderRadius.circular(12),
       ),
       child: SingleChildScrollView(
@@ -248,7 +248,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> with Single
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Container(
-              color: const Color(0xFFF8FAFC),
+              color: AppTheme.bgLight,
               padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
               child: Row(
                 children: [
@@ -265,7 +265,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> with Single
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: _ledger.length + 1,
-              separatorBuilder: (context, index) => const Divider(height: 1, color: Color(0xFFF1F5F9)),
+              separatorBuilder: (context, index) => Divider(height: 1, color: AppTheme.dividerColor),
               itemBuilder: (context, index) {
                 if (index == 0) {
                   return Padding(
@@ -274,7 +274,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> with Single
                       children: [
                         Expanded(
                           flex: 3,
-                          child: Text('-', style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569))),
+                          child: Text('-', style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightSecondary)),
                         ),
                         Expanded(
                           flex: 2,
@@ -283,7 +283,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> with Single
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(
-                                color: Colors.grey[200],
+                                color: AppTheme.isDarkMode ? Colors.grey[800] : Colors.grey[200],
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Text(
@@ -291,7 +291,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> with Single
                                 style: GoogleFonts.inter(
                                   fontSize: 9,
                                   fontWeight: FontWeight.bold,
-                                  color: Colors.grey[700],
+                                  color: AppTheme.isDarkMode ? Colors.grey[400] : Colors.grey[700],
                                 ),
                               ),
                             ),
@@ -306,11 +306,11 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> with Single
                         ),
                         Expanded(
                           flex: 3,
-                          child: Text('-', style: GoogleFonts.inter(fontSize: 13, color: Colors.grey)),
+                          child: Text('-', style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightSecondary)),
                         ),
                         Expanded(
                           flex: 3,
-                          child: Text('-', style: GoogleFonts.inter(fontSize: 13, color: Colors.grey)),
+                          child: Text('-', style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightSecondary)),
                         ),
                         Expanded(
                           flex: 3,
@@ -336,7 +336,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> with Single
                     children: [
                       Expanded(
                         flex: 3,
-                        child: Text(dateFormatted, style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569))),
+                        child: Text(dateFormatted, style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightSecondary)),
                       ),
                       Expanded(
                         flex: 2,
@@ -345,7 +345,9 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> with Single
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
-                              color: isDelivery ? const Color(0xFFFCE8E6) : const Color(0xFFE6F4EA),
+                              color: isDelivery 
+                                  ? (AppTheme.isDarkMode ? const Color(0xFFC5221F).withOpacity(0.2) : const Color(0xFFFCE8E6)) 
+                                  : (AppTheme.isDarkMode ? const Color(0xFF137333).withOpacity(0.2) : const Color(0xFFE6F4EA)),
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
@@ -353,7 +355,9 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> with Single
                               style: GoogleFonts.inter(
                                 fontSize: 9,
                                 fontWeight: FontWeight.bold,
-                                color: isDelivery ? const Color(0xFFC5221F) : const Color(0xFF137333),
+                                color: isDelivery 
+                                    ? (AppTheme.isDarkMode ? const Color(0xFFE57373) : const Color(0xFFC5221F)) 
+                                    : (AppTheme.isDarkMode ? const Color(0xFF81C784) : const Color(0xFF137333)),
                               ),
                             ),
                           ),
@@ -370,14 +374,14 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> with Single
                         flex: 3,
                         child: Text(
                           entry.debit > 0 ? 'LKR ${entry.debit.toStringAsFixed(2)}' : '-',
-                          style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFFC5221F), fontWeight: entry.debit > 0 ? FontWeight.bold : FontWeight.normal),
+                          style: GoogleFonts.inter(fontSize: 13, color: AppTheme.isDarkMode ? const Color(0xFFE57373) : const Color(0xFFC5221F), fontWeight: entry.debit > 0 ? FontWeight.bold : FontWeight.normal),
                         ),
                       ),
                       Expanded(
                         flex: 3,
                         child: Text(
                           entry.credit > 0 ? 'LKR ${entry.credit.toStringAsFixed(2)}' : '-',
-                          style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF137333), fontWeight: entry.credit > 0 ? FontWeight.bold : FontWeight.normal),
+                          style: GoogleFonts.inter(fontSize: 13, color: AppTheme.isDarkMode ? const Color(0xFF81C784) : const Color(0xFF137333), fontWeight: entry.credit > 0 ? FontWeight.bold : FontWeight.normal),
                         ),
                       ),
                       Expanded(
@@ -407,9 +411,9 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> with Single
 
     return Card(
       elevation: 0,
-      color: Colors.white,
+      color: AppTheme.cardLight,
       shape: RoundedRectangleBorder(
-        side: const BorderSide(color: Color(0xFFE2E8F0)),
+        side: BorderSide(color: AppTheme.borderLight),
         borderRadius: BorderRadius.circular(12),
       ),
       child: SingleChildScrollView(
@@ -417,7 +421,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> with Single
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Container(
-              color: const Color(0xFFF8FAFC),
+              color: AppTheme.bgLight,
               padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
               child: Row(
                 children: [
@@ -432,7 +436,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> with Single
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: _deliveries.length,
-              separatorBuilder: (context, index) => const Divider(height: 1, color: Color(0xFFF1F5F9)),
+              separatorBuilder: (context, index) => Divider(height: 1, color: AppTheme.dividerColor),
               itemBuilder: (context, index) {
                 final del = _deliveries[index];
                 final dateFormatted = DateFormat('yyyy-MM-dd').format(DateTime.tryParse(del.deliveryDate) ?? DateTime.now());
@@ -443,7 +447,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> with Single
                     children: [
                       Expanded(
                         flex: 3,
-                        child: Text(dateFormatted, style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569))),
+                        child: Text(dateFormatted, style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightSecondary)),
                       ),
                       Expanded(
                         flex: 5,
@@ -451,7 +455,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> with Single
                       ),
                       Expanded(
                         flex: 3,
-                        child: Text('${del.quantity.toStringAsFixed(1)} ${del.unit}', style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569))),
+                        child: Text('${del.quantity.toStringAsFixed(1)} ${del.unit}', style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightSecondary)),
                       ),
                       Expanded(
                         flex: 4,
@@ -480,9 +484,9 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> with Single
 
     return Card(
       elevation: 0,
-      color: Colors.white,
+      color: AppTheme.cardLight,
       shape: RoundedRectangleBorder(
-        side: const BorderSide(color: Color(0xFFE2E8F0)),
+        side: BorderSide(color: AppTheme.borderLight),
         borderRadius: BorderRadius.circular(12),
       ),
       child: SingleChildScrollView(
@@ -490,7 +494,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> with Single
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Container(
-              color: const Color(0xFFF8FAFC),
+              color: AppTheme.bgLight,
               padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
               child: Row(
                 children: [
@@ -505,7 +509,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> with Single
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: _payments.length,
-              separatorBuilder: (context, index) => const Divider(height: 1, color: Color(0xFFF1F5F9)),
+              separatorBuilder: (context, index) => Divider(height: 1, color: AppTheme.dividerColor),
               itemBuilder: (context, index) {
                 final pay = _payments[index];
                 final dateFormatted = DateFormat('yyyy-MM-dd').format(DateTime.tryParse(pay.paymentDate) ?? DateTime.now());
@@ -516,15 +520,15 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> with Single
                     children: [
                       Expanded(
                         flex: 3,
-                        child: Text(dateFormatted, style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569))),
+                        child: Text(dateFormatted, style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightSecondary)),
                       ),
                       Expanded(
                         flex: 3,
-                        child: Text(pay.paymentSource.toUpperCase(), style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF475569))),
+                        child: Text(pay.paymentSource.toUpperCase(), style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textLightSecondary)),
                       ),
                       Expanded(
                         flex: 6,
-                        child: Text(pay.remarks ?? 'N/A', style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF64748B))),
+                        child: Text(pay.remarks ?? 'N/A', style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightSecondary)),
                       ),
                       Expanded(
                         flex: 4,
@@ -547,7 +551,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> with Single
   Widget _buildTableHeaderText(String label) {
     return Text(
       label,
-      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF475569), letterSpacing: 0.5),
+      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary, letterSpacing: 0.5),
     );
   }
 
@@ -564,13 +568,15 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> with Single
         return StatefulBuilder(
           builder: (context, setState) {
             return AlertDialog(
-              title: Text('Log Item Delivery', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+              backgroundColor: AppTheme.cardLight,
+              title: Text('Log Item Delivery', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     TextField(
                       controller: itemNameController,
+                      style: TextStyle(color: AppTheme.textLightPrimary),
                       decoration: const InputDecoration(labelText: 'Item / Product Name *', hintText: 'e.g. Flour Bag, Potatoes'),
                     ),
                     const SizedBox(height: 12),
@@ -580,6 +586,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> with Single
                           flex: 2,
                           child: TextField(
                             controller: quantityController,
+                            style: TextStyle(color: AppTheme.textLightPrimary),
                             keyboardType: TextInputType.number,
                             decoration: const InputDecoration(labelText: 'Qty *'),
                           ),
@@ -589,6 +596,8 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> with Single
                           flex: 3,
                           child: DropdownButtonFormField<String>(
                             value: unit,
+                            dropdownColor: AppTheme.cardLight,
+                            style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary),
                             decoration: const InputDecoration(labelText: 'Unit'),
                             items: const [
                               DropdownMenuItem(value: 'kg', child: Text('kg')),
@@ -605,13 +614,14 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> with Single
                     TextField(
                       controller: totalAmountController,
                       keyboardType: TextInputType.number,
+                      style: TextStyle(color: AppTheme.textLightPrimary),
                       decoration: const InputDecoration(labelText: 'Total Cost Amount (LKR) *'),
                     ),
                     const SizedBox(height: 16),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('Delivery Date: ${DateFormat('yyyy-MM-dd').format(selectedDate)}', style: GoogleFonts.inter(fontSize: 13)),
+                        Text('Delivery Date: ${DateFormat('yyyy-MM-dd').format(selectedDate)}', style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary)),
                         TextButton.icon(
                           onPressed: () async {
                             final picked = await showDatePicker(
@@ -635,7 +645,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> with Single
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel'),
+                  child: Text('Cancel', style: TextStyle(color: AppTheme.textLightSecondary)),
                 ),
                 ElevatedButton(
                   onPressed: () async {
