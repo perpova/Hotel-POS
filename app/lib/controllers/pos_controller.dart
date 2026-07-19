@@ -869,6 +869,42 @@ class POSController extends ChangeNotifier {
     return tot < 0 ? 0.00 : tot;
   }
 
+  // ----------------------------------------------------
+  // LIVE MIRROR BROADCAST  (admin app real-time view)
+  // ----------------------------------------------------
+  void _broadcastLiveState({double? receivedAmount}) {
+    if (!_api.isAuthenticated) return;
+    try {
+      final items = cart.map((item) => {
+        'product_name': item.productName,
+        'quantity': item.quantity,
+        'price': item.price,
+        'notes': item.notes ?? '',
+        'status': item.status,
+      }).toList();
+
+      _api.sendWebSocketMessage({
+        'type': 'live_pos_state',
+        'data': {
+          'cashier': _api.currentUser?.name ?? 'Cashier',
+          'order_type': orderType,
+          'table': selectedTable?.tableNumber,
+          'items': items,
+          'subtotal': cartSubtotal,
+          'discount': discount,
+          'total': cartTotal,
+          'received_amount': receivedAmount,
+          'timestamp': DateTime.now().toIso8601String(),
+        },
+      });
+    } catch (_) {}
+  }
+
+  /// Call this from the payment screen whenever the cashier types a received amount
+  void broadcastPaymentTyping(double receivedAmount) {
+    _broadcastLiveState(receivedAmount: receivedAmount);
+  }
+
   void setOrderType(String type) {
     if (orderType == 'dine_in' && selectedTable != null) {
       final oldTid = selectedTable!.id;
@@ -1096,6 +1132,7 @@ class POSController extends ChangeNotifier {
     }
 
     notifyListeners();
+    _broadcastLiveState();
   }
 
   void updateCartQuantity(int index, int quantity) {
@@ -1122,6 +1159,7 @@ class POSController extends ChangeNotifier {
       );
     }
     notifyListeners();
+    _broadcastLiveState();
   }
 
   void updateCartNotes(int index, String? notes) {

@@ -3159,6 +3159,107 @@ setInterval(async () => {
     }
 }, 60000); // Check every 1 minute
 
+// ----------------------------------------------------
+// ADMIN APP ENDPOINTS — Orders & Notifications
+// ----------------------------------------------------
+
+// GET today's orders with items (for admin mobile app dashboard & live POS)
+app.get('/api/orders/today', authenticateToken, async (req, res) => {
+    try {
+        const orders = await db.query(`
+            SELECT o.*,
+                   dt.table_number,
+                   u.name as cashier_name
+            FROM orders o
+            LEFT JOIN dining_tables dt ON o.table_id = dt.id
+            LEFT JOIN users u ON o.cashier_id = u.id
+            WHERE DATE(o.created_at) = CURDATE()
+            ORDER BY o.id DESC
+        `);
+
+        for (const order of orders) {
+            const items = await db.query(`
+                SELECT oi.*, p.name as product_name, p.sinhala_name as product_sinhala_name
+                FROM order_items oi
+                LEFT JOIN products p ON oi.product_id = p.id
+                WHERE oi.order_id = ?
+            `, [order.id]);
+            order.items = items;
+        }
+
+        res.json(orders);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET orders for a date range (for admin reports)
+app.get('/api/orders/range', authenticateToken, async (req, res) => {
+    const { from, to } = req.query;
+    if (!from || !to) {
+        return res.status(400).json({ error: 'from and to dates are required (YYYY-MM-DD)' });
+    }
+    try {
+        const orders = await db.query(`
+            SELECT o.*,
+                   dt.table_number,
+                   u.name as cashier_name
+            FROM orders o
+            LEFT JOIN dining_tables dt ON o.table_id = dt.id
+            LEFT JOIN users u ON o.cashier_id = u.id
+            WHERE DATE(o.created_at) >= ? AND DATE(o.created_at) <= ?
+            ORDER BY o.id DESC
+        `, [from, to]);
+
+        for (const order of orders) {
+            const items = await db.query(`
+                SELECT oi.*, p.name as product_name
+                FROM order_items oi
+                LEFT JOIN products p ON oi.product_id = p.id
+                WHERE oi.order_id = ?
+            `, [order.id]);
+            order.items = items;
+        }
+
+        res.json(orders);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET all notifications (most recent 50)
+app.get('/api/notifications', authenticateToken, async (req, res) => {
+    try {
+        const notifications = await db.query(
+            'SELECT * FROM notifications ORDER BY created_at DESC LIMIT 50'
+        );
+        res.json(notifications);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// PUT mark single notification as read
+app.put('/api/notifications/:id/read', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    try {
+        await db.query('UPDATE notifications SET is_read = 1 WHERE id = ?', [id]);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// PUT mark all notifications as read
+app.put('/api/notifications/read-all', authenticateToken, async (req, res) => {
+    try {
+        await db.query('UPDATE notifications SET is_read = 1 WHERE is_read = 0');
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Start Server and Init Database
 server.listen(PORT, async () => {
     console.log(`Hotel POS Server is running on port ${PORT}`);
