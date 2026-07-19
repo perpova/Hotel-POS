@@ -104,6 +104,11 @@ class ApiService {
       _wsChannel = WebSocketChannel.connect(Uri.parse(_wsUrl));
       _isConnecting = false;
 
+      // Emit reconnect event so all providers do a fresh data load
+      Future.delayed(const Duration(milliseconds: 300), () {
+        _eventStreamCtrl.add({'type': 'ws_reconnected'});
+      });
+
       _wsChannel!.stream.listen(
         (message) {
           try {

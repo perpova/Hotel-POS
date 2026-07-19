@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../core/api_service.dart';
 import '../models/models.dart';
@@ -8,6 +9,8 @@ class StockProvider extends ChangeNotifier {
   List<ProductModel> _products = [];
   List<IngredientModel> _ingredients = [];
   List<Map<String, dynamic>> _stockLogs = [];
+
+  Timer? _debounce;
 
   bool get isLoading => _isLoading;
   String? get error => _error;
@@ -70,10 +73,54 @@ class StockProvider extends ChangeNotifier {
     }
   }
 
+  /// Instantly update a single product's stock qty from a WS event payload,
+  /// no network call needed.
+  void _patchProductStock(Map<String, dynamic> data) {
+    try {
+      final productId = (data['productId'] ?? data['product_id']) as int?;
+      final newQty = (data['stock_qty'] ?? data['stockQty']) as int?;
+      if (productId == null || newQty == null) {
+        _scheduleReload(productsOnly: true);
+        return;
+      }
+      final idx = _products.indexWhere((p) => p.id == productId);
+      if (idx != -1) {
+        final p = _products[idx];
+        _products[idx] = ProductModel(
+          id: p.id,
+          name: p.name,
+          categoryId: p.categoryId,
+          price: p.price,
+          cost: p.cost,
+          activePrice: p.activePrice,
+          stockQty: newQty,
+          minStockLevel: p.minStockLevel,
+          imageBase64: p.imageBase64,
+          status: p.status,
+          itemType: p.itemType,
+          isFeatured: p.isFeatured,
+          trackStock: p.trackStock,
+          description: p.description,
+        );
+        notifyListeners();
+      }
+    } catch (_) {
+      _scheduleReload(productsOnly: true);
+    }
+  }
+
+  void _scheduleReload({bool productsOnly = false}) {
+    _debounce?.cancel();
+    _debounce = Timer(
+      const Duration(milliseconds: 1000),
+      productsOnly ? loadProducts : loadAll,
+    );
+  }
+
   Future<void> adjustProductStock(
       int productId, int qty, String type, String reason) async {
     await ApiService.instance.adjustStock(productId, qty, type, reason);
-    // Update local state
+    // Optimistic local update
     final idx = _products.indexWhere((p) => p.id == productId);
     if (idx != -1) {
       final p = _products[idx];
@@ -106,10 +153,37 @@ class StockProvider extends ChangeNotifier {
 
   void onRealtimeEvent(Map<String, dynamic> event) {
     final type = event['type']?.toString() ?? '';
-    if (type == 'stock_updated' ||
-        type == 'database_synchronized' ||
-        type == 'ingredient_stock_updated') {
-      loadAll();
+
+    if (type == 'live_pos_state') return; // ignore high-frequency mirror events
+
+    switch (type) {
+      case 'stock_updated':
+        // Server sends individual product stock change — patch in-place
+        final data = event['data'];
+        if (data is Map<String, dynamic>) {
+          _patchProductStock(data);
+        } else {
+          _scheduleReload(productsOnly: true);
+        }
+        break;
+
+      case 'ingredient_stock_updated':
+        // Reload ingredients only
+        _debounce?.cancel();
+        _debounce = Timer(const Duration(milliseconds: 800), loadIngredients);
+        break;
+
+      case 'database_synchronized':
+      case 'ws_reconnected':
+        // Full stock refresh after sync or reconnect
+        _scheduleReload();
+        break;
     }
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    super.dispose();
   }
 }

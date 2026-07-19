@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../core/api_service.dart';
 import '../models/models.dart';
@@ -9,6 +10,9 @@ class DashboardProvider extends ChangeNotifier {
   List<Map<String, dynamic>> _tables = [];
   List<Map<String, dynamic>> _recentOrders = [];
   List<Map<String, dynamic>> _topProducts = [];
+
+  // Debounce timer — prevents hammering the server when many events arrive rapidly
+  Timer? _debounce;
 
   bool get isLoading => _isLoading;
   String? get error => _error;
@@ -38,8 +42,8 @@ class DashboardProvider extends ChangeNotifier {
       _stats = results[0] as Map<String, dynamic>;
       final allOrders = results[1] as List<Map<String, dynamic>>;
 
-      // Recent orders (newest first, last 20)
-      _recentOrders = allOrders.reversed.take(20).toList();
+      // Recent orders: newest first, cap at 20
+      _recentOrders = List.from(allOrders.reversed.take(20));
 
       // Tables from stats
       final tablesRaw = _stats?['tables'];
@@ -47,7 +51,7 @@ class DashboardProvider extends ChangeNotifier {
         _tables = List<Map<String, dynamic>>.from(tablesRaw);
       }
 
-      // Top products: count items sold per product
+      // Top products: aggregate by name
       final productCount = <String, Map<String, dynamic>>{};
       for (final order in allOrders) {
         if (order['items'] is List) {
@@ -55,9 +59,7 @@ class DashboardProvider extends ChangeNotifier {
             final name = item['product_name']?.toString() ?? 'Unknown';
             final qty = (item['quantity'] as num?)?.toInt() ?? 1;
             final price = (item['price'] as num?)?.toDouble() ?? 0;
-            if (!productCount.containsKey(name)) {
-              productCount[name] = {'name': name, 'qty': 0, 'revenue': 0.0};
-            }
+            productCount[name] ??= {'name': name, 'qty': 0, 'revenue': 0.0};
             productCount[name]!['qty'] =
                 (productCount[name]!['qty'] as int) + qty;
             productCount[name]!['revenue'] =
@@ -78,16 +80,34 @@ class DashboardProvider extends ChangeNotifier {
     }
   }
 
+  /// Called by RealtimeProvider for every incoming WS event.
+  /// Uses a 1.5-second debounce to batch rapid events into one reload.
   void onRealtimeEvent(Map<String, dynamic> event) {
     final type = event['type']?.toString() ?? '';
-    if ([
+
+    // Skip live_pos_state — fired many times per second while cashier types
+    if (type == 'live_pos_state') return;
+
+    const triggers = {
       'order_created',
       'payment_completed',
       'order_updated',
+      'order_status_changed',
       'shift_updated',
       'table_status_changed',
-    ].contains(type)) {
-      load(); // Refresh on relevant events
+      'database_synchronized',
+      'ws_reconnected',
+    };
+
+    if (triggers.contains(type)) {
+      _debounce?.cancel();
+      _debounce = Timer(const Duration(milliseconds: 1500), load);
     }
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    super.dispose();
   }
 }

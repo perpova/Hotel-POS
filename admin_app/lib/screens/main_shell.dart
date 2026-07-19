@@ -1,7 +1,7 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../core/theme.dart';
-import '../providers/auth_provider.dart';
 import '../providers/realtime_provider.dart';
 import '../providers/dashboard_provider.dart';
 import '../providers/stock_provider.dart';
@@ -19,8 +19,11 @@ class MainShell extends StatefulWidget {
   State<MainShell> createState() => _MainShellState();
 }
 
-class _MainShellState extends State<MainShell> {
+class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   int _currentIndex = 0;
+
+  // Periodic sync fallback when WS is disconnected (every 30s)
+  Timer? _periodicSync;
 
   final List<Widget> _pages = const [
     DashboardScreen(),
@@ -33,11 +36,14 @@ class _MainShellState extends State<MainShell> {
   @override
   void initState() {
     super.initState();
-    // Init realtime provider
+    WidgetsBinding.instance.addObserver(this);
+
+    // 1. Start WebSocket listener hub
     final realtime = context.read<RealtimeProvider>();
     realtime.init();
 
-    // Wire providers to realtime events
+    // 2. Wire each provider to the realtime hub
+    //    Each provider's onRealtimeEvent has its own event filter + debounce logic
     final dashboard = context.read<DashboardProvider>();
     final stock = context.read<StockProvider>();
     final livePos = context.read<LivePosProvider>();
@@ -46,10 +52,36 @@ class _MainShellState extends State<MainShell> {
     realtime.on('*', stock.onRealtimeEvent);
     realtime.on('*', livePos.onRealtimeEvent);
 
-    // Initial data loads
-    dashboard.load();
-    stock.loadAll();
-    livePos.load();
+    // 3. Initial data load (all in parallel)
+    _loadAll();
+
+    // 4. Periodic fallback sync every 30 seconds
+    //    Handles periods where WS is briefly disconnected
+    _periodicSync = Timer.periodic(const Duration(seconds: 30), (_) {
+      dashboard.load();
+      livePos.load();
+    });
+  }
+
+  void _loadAll() {
+    context.read<DashboardProvider>().load();
+    context.read<StockProvider>().loadAll();
+    context.read<LivePosProvider>().load();
+  }
+
+  // Reload data when app comes back to foreground
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _loadAll();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _periodicSync?.cancel();
+    super.dispose();
   }
 
   @override
@@ -68,7 +100,21 @@ class _MainShellState extends State<MainShell> {
         ),
         child: BottomNavigationBar(
           currentIndex: _currentIndex,
-          onTap: (i) => setState(() => _currentIndex = i),
+          onTap: (i) {
+            setState(() => _currentIndex = i);
+            // Reload data for the tapped tab immediately for freshness
+            switch (i) {
+              case 0:
+                context.read<DashboardProvider>().load();
+                break;
+              case 1:
+                context.read<LivePosProvider>().load();
+                break;
+              case 2:
+                context.read<StockProvider>().loadAll();
+                break;
+            }
+          },
           type: BottomNavigationBarType.fixed,
           backgroundColor: Colors.transparent,
           elevation: 0,
