@@ -6,6 +6,7 @@ import '../core/api_service.dart';
 import '../providers/auth_provider.dart';
 import '../providers/realtime_provider.dart';
 import '../screens/login_screen.dart';
+import 'users_permissions_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({Key? key}) : super(key: key);
@@ -346,6 +347,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         }).toList(),
                       ),
                     ).animate().fadeIn(duration: 400.ms, delay: 120.ms),
+
+          const SizedBox(height: 24),
+
+          // ── User Management ─────────────────────────────────────
+          _sectionLabel('ADMINISTRATION'),
+          const SizedBox(height: 10),
+          Container(
+            decoration: BoxDecoration(
+              color: AppColors.bgCard,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: ListTile(
+              leading: Container(
+                padding: const EdgeInsets.all(7),
+                decoration: BoxDecoration(
+                  color: AppColors.primaryGlow,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.manage_accounts_rounded, color: AppColors.primary, size: 18),
+              ),
+              title: const Text('Users & Role Permissions',
+                  style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w600)),
+              subtitle: const Text('Add/edit users and grant feature permissions',
+                  style: TextStyle(color: AppColors.textMuted, fontSize: 11)),
+              trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const UsersPermissionsScreen()),
+                );
+              },
+            ),
+          ).animate().fadeIn(duration: 400.ms, delay: 140.ms),
 
           const SizedBox(height: 24),
 

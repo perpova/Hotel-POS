@@ -2872,6 +2872,192 @@ app.get('/api/reports/logs', authenticateToken, async (req, res) => {
 });
 
 // ----------------------------------------------------
+// USER MANAGEMENT ENDPOINTS
+// ----------------------------------------------------
+
+// List all users
+app.get('/api/users', authenticateToken, async (req, res) => {
+    try {
+        const { role } = req.query;
+        let sql = 'SELECT id, name, username, role, status, email, phone, branch, category_id, image_base64, created_at FROM users';
+        const params = [];
+        if (role) {
+            if (role === 'admin_owner') {
+                sql += ' WHERE LOWER(role) IN ("admin", "owner")';
+            } else if (role === 'kitchen' || role === 'chef') {
+                sql += ' WHERE LOWER(role) IN ("kitchen", "chef")';
+            } else {
+                sql += ' WHERE LOWER(role) = LOWER(?)';
+                params.push(role);
+            }
+        }
+        sql += ' ORDER BY name ASC';
+        const users = await db.query(sql, params);
+        res.json(users);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Admin Users Route Alias
+app.get('/api/admin/users', authenticateToken, async (req, res) => {
+    try {
+        const users = await db.query('SELECT id, name, username, role, status, email, phone, branch, category_id, image_base64, created_at FROM users ORDER BY id DESC');
+        res.json(users);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Create a new user
+app.post('/api/users', authenticateToken, async (req, res) => {
+    let { name, username, password, role, status, email, phone, branch, category_id, image_base64 } = req.body;
+    if (!name || !username || !password) {
+        return res.status(400).json({ error: 'Name, username, and password are required' });
+    }
+    try {
+        // Normalize chef/kitchen role to 'kitchen'
+        if (role && (role.toLowerCase() === 'chef' || role.toLowerCase() === 'kitchen')) {
+            role = 'kitchen';
+        }
+
+        // Check username uniqueness
+        const existing = await db.query('SELECT id FROM users WHERE username = ?', [username.trim()]);
+        if (existing.length > 0) {
+            return res.status(400).json({ error: 'Username already exists' });
+        }
+
+        const password_hash = await bcrypt.hash(password, 10);
+        const result = await db.query(`
+            INSERT INTO users (name, username, password_hash, role, status, email, phone, branch, category_id, image_base64)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+            name.trim(),
+            username.trim(),
+            password_hash,
+            role || 'cashier',
+            status || 'active',
+            email || null,
+            phone || null,
+            branch || 'current',
+            category_id !== undefined ? category_id : null,
+            image_base64 || null
+        ]);
+
+        const newUserId = result.insertId;
+        const [newUser] = await db.query(
+            'SELECT id, name, username, role, status, email, phone, branch, category_id, image_base64, created_at FROM users WHERE id = ?',
+            [newUserId]
+        );
+
+        await logAudit('login', 'users', newUserId, `User ${username} created by Admin.`, req.user.id);
+        broadcast({ type: 'database_synchronized' });
+
+        res.json(newUser);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Update user details
+app.put('/api/users/:id', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    let { name, username, role, status, email, phone, branch, category_id, image_base64 } = req.body;
+    try {
+        const users = await db.query('SELECT * FROM users WHERE id = ?', [id]);
+        if (users.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        // Normalize chef/kitchen role to 'kitchen'
+        if (role && (role.toLowerCase() === 'chef' || role.toLowerCase() === 'kitchen')) {
+            role = 'kitchen';
+        }
+
+        if (username) {
+            const existing = await db.query('SELECT id FROM users WHERE username = ? AND id != ?', [username.trim(), id]);
+            if (existing.length > 0) {
+                return res.status(400).json({ error: 'Username is taken by another user' });
+            }
+        }
+
+        await db.query(`
+            UPDATE users SET
+                name = COALESCE(?, name),
+                username = COALESCE(?, username),
+                role = COALESCE(?, role),
+                status = COALESCE(?, status),
+                email = ?,
+                phone = ?,
+                branch = COALESCE(?, branch),
+                category_id = ?,
+                image_base64 = COALESCE(?, image_base64)
+            WHERE id = ?
+        `, [
+            name ? name.trim() : null,
+            username ? username.trim() : null,
+            role || null,
+            status || null,
+            email !== undefined ? email : users[0].email,
+            phone !== undefined ? phone : users[0].phone,
+            branch || null,
+            category_id !== undefined ? category_id : users[0].category_id,
+            image_base64 !== undefined ? image_base64 : users[0].image_base64,
+            id
+        ]);
+
+        const [updatedUser] = await db.query(
+            'SELECT id, name, username, role, status, email, phone, branch, category_id, image_base64, created_at FROM users WHERE id = ?',
+            [id]
+        );
+
+        await logAudit('login', 'users', id, `User ${updatedUser.username} updated by Admin.`, req.user.id);
+        broadcast({ type: 'database_synchronized' });
+
+        res.json(updatedUser);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Reset user password
+app.put('/api/users/:id/password', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    const { password } = req.body;
+    if (!password) {
+        return res.status(400).json({ error: 'Password is required' });
+    }
+    try {
+        const password_hash = await bcrypt.hash(password, 10);
+        await db.query('UPDATE users SET password_hash = ? WHERE id = ?', [password_hash, id]);
+
+        await logAudit('login', 'users', id, `Password reset for user ID ${id} by Admin.`, req.user.id);
+        res.json({ success: true, message: 'Password updated successfully' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Deactivate / Delete user
+app.delete('/api/users/:id', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    try {
+        const users = await db.query('SELECT name, username FROM users WHERE id = ?', [id]);
+        if (users.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        await db.query('UPDATE users SET status = "inactive" WHERE id = ?', [id]);
+
+        await logAudit('login', 'users', id, `User ${users[0].username} deactivated by Admin.`, req.user.id);
+        broadcast({ type: 'database_synchronized' });
+
+        res.json({ success: true, message: 'User deactivated successfully' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ----------------------------------------------------
 // ROLES & PERMISSIONS ENDPOINTS
 // ----------------------------------------------------
 
@@ -2882,7 +3068,15 @@ app.get('/api/roles', authenticateToken, async (req, res) => {
             SELECT r.id, r.name, r.created_at,
                    COUNT(u.id) AS member_count
             FROM roles r
-            LEFT JOIN users u ON LOWER(u.role) = LOWER(r.name)
+            LEFT JOIN users u ON (
+                LOWER(u.role) = LOWER(r.name)
+                OR (LOWER(r.name) IN ('chef', 'kitchen') AND LOWER(u.role) IN ('chef', 'kitchen'))
+                OR (LOWER(r.name) IN ('delivery', 'delivery boy') AND LOWER(u.role) IN ('delivery', 'delivery boy'))
+                OR (LOWER(r.name) IN ('admin', 'administrator') AND LOWER(u.role) IN ('admin', 'administrator'))
+                OR (LOWER(r.name) IN ('waiter', 'waiters', 'steward') AND LOWER(u.role) IN ('waiter', 'waiters', 'steward'))
+                OR (LOWER(r.name) IN ('cashier', 'employee') AND LOWER(u.role) IN ('cashier', 'employee'))
+                OR (LOWER(r.name) IN ('owner', 'hotel owner') AND LOWER(u.role) IN ('owner', 'hotel owner'))
+            )
             GROUP BY r.id, r.name, r.created_at
             ORDER BY r.name
         `);
@@ -2898,6 +3092,7 @@ app.post('/api/roles', authenticateToken, async (req, res) => {
         const { name } = req.body;
         if (!name) return res.status(400).json({ error: 'Role name is required' });
         const result = await db.query('INSERT INTO roles (name) VALUES (?)', [name]);
+        broadcast({ type: 'database_synchronized' });
         res.json({ id: result.insertId, name });
     } catch (err) {
         if (err.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'Role already exists' });
@@ -2910,6 +3105,7 @@ app.put('/api/roles/:id', authenticateToken, async (req, res) => {
     try {
         const { name } = req.body;
         await db.query('UPDATE roles SET name = ? WHERE id = ?', [name, req.params.id]);
+        broadcast({ type: 'database_synchronized' });
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -2920,6 +3116,7 @@ app.put('/api/roles/:id', authenticateToken, async (req, res) => {
 app.delete('/api/roles/:id', authenticateToken, async (req, res) => {
     try {
         await db.query('DELETE FROM roles WHERE id = ?', [req.params.id]);
+        broadcast({ type: 'database_synchronized' });
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -2958,6 +3155,7 @@ app.put('/api/roles/:id/permissions', authenticateToken, async (req, res) => {
                     can_delete = VALUES(can_delete)
             `, [roleId, p.page, p.can_view ? 1 : 0, p.can_create ? 1 : 0, p.can_update ? 1 : 0, p.can_delete ? 1 : 0]);
         }
+        broadcast({ type: 'database_synchronized' });
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });

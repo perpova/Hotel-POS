@@ -208,11 +208,6 @@ class ApiService {
     return data is List ? List<Map<String, dynamic>>.from(data) : [];
   }
 
-  Future<List<Map<String, dynamic>>> getUsers() async {
-    final data = await _getJson('$_baseUrl/api/admin/users');
-    return data is List ? List<Map<String, dynamic>>.from(data) : [];
-  }
-
   Future<Map<String, dynamic>> getTransactions(String from, String to) async {
     final data = await _getJson('$_baseUrl/api/admin/transactions?from=$from&to=$to');
     if (data is Map<String, dynamic>) return data;
@@ -304,6 +299,130 @@ class ApiService {
   Future<List<Map<String, dynamic>>> getTables() async {
     final data = await _getJson('$_baseUrl/api/tables');
     return data is List ? List<Map<String, dynamic>>.from(data) : [];
+  }
+
+  // ─── USER MANAGEMENT ─────────────────────────────────────────
+  Future<List<UserModel>> getUsers({String? role}) async {
+    String url = '$_baseUrl/api/users';
+    if (role != null) url += '?role=$role';
+    final res = await http.get(Uri.parse(url), headers: _headers).timeout(const Duration(seconds: 10));
+    if (res.statusCode == 200) {
+      final List data = jsonDecode(res.body);
+      return data.map((u) => UserModel.fromJson(u)).toList();
+    }
+    throw Exception('Failed to load users');
+  }
+
+  Future<UserModel> createUser(Map<String, dynamic> userData) async {
+    final res = await http.post(
+      Uri.parse('$_baseUrl/api/users'),
+      headers: _headers,
+      body: jsonEncode(userData),
+    ).timeout(const Duration(seconds: 10));
+    if (res.statusCode == 200) {
+      return UserModel.fromJson(jsonDecode(res.body));
+    }
+    final err = jsonDecode(res.body);
+    throw Exception(err['error'] ?? 'Failed to create user');
+  }
+
+  Future<UserModel> updateUser(int id, Map<String, dynamic> userData) async {
+    final res = await http.put(
+      Uri.parse('$_baseUrl/api/users/$id'),
+      headers: _headers,
+      body: jsonEncode(userData),
+    ).timeout(const Duration(seconds: 10));
+    if (res.statusCode == 200) {
+      return UserModel.fromJson(jsonDecode(res.body));
+    }
+    final err = jsonDecode(res.body);
+    throw Exception(err['error'] ?? 'Failed to update user');
+  }
+
+  Future<void> resetUserPassword(int id, String password) async {
+    final res = await http.put(
+      Uri.parse('$_baseUrl/api/users/$id/password'),
+      headers: _headers,
+      body: jsonEncode({'password': password}),
+    ).timeout(const Duration(seconds: 10));
+    if (res.statusCode != 200) {
+      final err = jsonDecode(res.body);
+      throw Exception(err['error'] ?? 'Failed to reset password');
+    }
+  }
+
+  Future<void> deleteUser(int id) async {
+    final res = await http.delete(
+      Uri.parse('$_baseUrl/api/users/$id'),
+      headers: _headers,
+    ).timeout(const Duration(seconds: 10));
+    if (res.statusCode != 200) {
+      final err = jsonDecode(res.body);
+      throw Exception(err['error'] ?? 'Failed to deactivate user');
+    }
+  }
+
+  // ─── ROLES & PERMISSIONS ──────────────────────────────────────
+  Future<List<Map<String, dynamic>>> getRoles() async {
+    final res = await http.get(Uri.parse('$_baseUrl/api/roles'), headers: _headers).timeout(const Duration(seconds: 10));
+    if (res.statusCode == 200) {
+      return List<Map<String, dynamic>>.from(jsonDecode(res.body));
+    }
+    throw Exception('Failed to load roles');
+  }
+
+  Future<Map<String, dynamic>> createRole(String name) async {
+    final res = await http.post(
+      Uri.parse('$_baseUrl/api/roles'),
+      headers: _headers,
+      body: jsonEncode({'name': name}),
+    ).timeout(const Duration(seconds: 10));
+    if (res.statusCode == 200) return jsonDecode(res.body);
+    final err = jsonDecode(res.body);
+    throw Exception(err['error'] ?? 'Failed to create role');
+  }
+
+  Future<void> updateRole(int id, String name) async {
+    final res = await http.put(
+      Uri.parse('$_baseUrl/api/roles/$id'),
+      headers: _headers,
+      body: jsonEncode({'name': name}),
+    ).timeout(const Duration(seconds: 10));
+    if (res.statusCode != 200) {
+      final err = jsonDecode(res.body);
+      throw Exception(err['error'] ?? 'Failed to update role');
+    }
+  }
+
+  Future<void> deleteRole(int id) async {
+    final res = await http.delete(
+      Uri.parse('$_baseUrl/api/roles/$id'),
+      headers: _headers,
+    ).timeout(const Duration(seconds: 10));
+    if (res.statusCode != 200) {
+      final err = jsonDecode(res.body);
+      throw Exception(err['error'] ?? 'Failed to delete role');
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getRolePermissions(int roleId) async {
+    final res = await http.get(Uri.parse('$_baseUrl/api/roles/$roleId/permissions'), headers: _headers).timeout(const Duration(seconds: 10));
+    if (res.statusCode == 200) {
+      return List<Map<String, dynamic>>.from(jsonDecode(res.body));
+    }
+    throw Exception('Failed to load permissions');
+  }
+
+  Future<void> saveRolePermissions(int roleId, List<Map<String, dynamic>> permissions) async {
+    final res = await http.put(
+      Uri.parse('$_baseUrl/api/roles/$roleId/permissions'),
+      headers: _headers,
+      body: jsonEncode({'permissions': permissions}),
+    ).timeout(const Duration(seconds: 10));
+    if (res.statusCode != 200) {
+      final err = jsonDecode(res.body);
+      throw Exception(err['error'] ?? 'Failed to save role permissions');
+    }
   }
 
   // ─── HELPER ──────────────────────────────────────────────────────────

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -87,11 +88,18 @@ class _UsersScreenState extends State<UsersScreen> {
   final _custBalanceController = TextEditingController();
 
   bool _isSaving = false;
+  StreamSubscription? _wsSub;
 
   @override
   void initState() {
     super.initState();
     _loadData();
+    _wsSub = APIService.instance.eventStream.listen((event) {
+      final type = event['type']?.toString();
+      if (type == 'database_synchronized' || type == 'ws_reconnected' || type == 'user_updated') {
+        _loadData();
+      }
+    });
   }
 
   @override
@@ -106,6 +114,7 @@ class _UsersScreenState extends State<UsersScreen> {
 
   @override
   void dispose() {
+    _wsSub?.cancel();
     _nameController.dispose();
     _usernameController.dispose();
     _emailController.dispose();
@@ -377,12 +386,30 @@ class _UsersScreenState extends State<UsersScreen> {
       
       setState(() => _isSaving = true);
 
+      String dbRole = _roleVal;
+      final lowerRole = _roleVal.trim().toLowerCase();
+      if (lowerRole == 'chef' || lowerRole == 'kitchen') {
+        dbRole = 'kitchen';
+      } else if (lowerRole == 'delivery boy' || lowerRole == 'delivery') {
+        dbRole = 'delivery';
+      } else if (lowerRole == 'waiter' || lowerRole == 'steward / waiter') {
+        dbRole = 'waiter';
+      } else if (lowerRole == 'admin' || lowerRole == 'administrator') {
+        dbRole = 'admin';
+      } else if (lowerRole == 'owner' || lowerRole == 'hotel owner') {
+        dbRole = 'owner';
+      } else if (lowerRole == 'cashier' || lowerRole == 'employee') {
+        dbRole = 'cashier';
+      } else if (lowerRole == 'short eats cabin') {
+        dbRole = 'short eats cabin';
+      }
+
       final payload = {
         'name': _nameController.text.trim(),
         'username': _usernameController.text.trim(),
         'email': _emailController.text.trim().isEmpty ? null : _emailController.text.trim(),
         'phone': _phoneController.text.trim().isEmpty ? null : _phoneController.text.trim(),
-        'role': _roleVal,
+        'role': dbRole,
         'status': _statusVal,
         'branch': _branchVal,
         'category_id': _selectedCategoryId,
@@ -3060,7 +3087,7 @@ class _UsersScreenState extends State<UsersScreen> {
                   _buildDynamicRoleDropdown(),
                   const SizedBox(height: 20),
 
-                  if (_roleVal == 'kitchen') ...[
+                  if (_roleVal.toLowerCase() == 'kitchen' || _roleVal.toLowerCase() == 'chef') ...[
                     _buildFieldLabel('ASSIGNED CATEGORY'),
                     const SizedBox(height: 6),
                     DropdownButtonFormField<int?>(
