@@ -3298,6 +3298,124 @@ app.get('/api/admin/users', authenticateToken, async (req, res) => {
     }
 });
 
+// ----------------------------------------------------
+// STAFF SHIFT & ATTENDANCE ENDPOINTS (Clock In / Clock Out)
+// ----------------------------------------------------
+
+// Ensure staff_shifts table exists
+db.query(`
+    CREATE TABLE IF NOT EXISTS staff_shifts (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        clock_in TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        clock_out TIMESTAMP NULL DEFAULT NULL,
+        duration_minutes INT DEFAULT 0,
+        status ENUM('active', 'completed') DEFAULT 'active',
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+`).catch(err => console.error("Error creating staff_shifts table:", err));
+
+// GET current staff shift status & history
+app.get('/api/staff/shift-status', authenticateToken, async (req, res) => {
+    const userId = req.user.id;
+    try {
+        const activeShifts = await db.query(
+            "SELECT * FROM staff_shifts WHERE user_id = ? AND status = 'active' ORDER BY id DESC LIMIT 1",
+            [userId]
+        );
+        const history = await db.query(
+            "SELECT * FROM staff_shifts WHERE user_id = ? ORDER BY clock_in DESC LIMIT 20",
+            [userId]
+        );
+
+        res.json({
+            active_shift: activeShifts.length > 0 ? activeShifts[0] : null,
+            is_clocked_in: activeShifts.length > 0,
+            history: history
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST Clock In
+app.post('/api/staff/clock-in', authenticateToken, async (req, res) => {
+    const userId = req.user.id;
+    try {
+        const active = await db.query(
+            "SELECT * FROM staff_shifts WHERE user_id = ? AND status = 'active'",
+            [userId]
+        );
+        if (active.length > 0) {
+            return res.status(400).json({
+                error: 'Already clocked in',
+                active_shift: active[0]
+            });
+        }
+
+        const result = await db.query(
+            "INSERT INTO staff_shifts (user_id, clock_in, status) VALUES (?, NOW(), 'active')",
+            [userId]
+        );
+        const [newShift] = await db.query(
+            "SELECT * FROM staff_shifts WHERE id = ?",
+            [result.insertId]
+        );
+
+        broadcast({
+            type: 'staff_clock_in',
+            data: { user_id: userId, user_name: req.user.name, shift: newShift }
+        });
+
+        res.json({ success: true, message: 'Clocked in successfully', shift: newShift });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST Clock Out
+app.post('/api/staff/clock-out', authenticateToken, async (req, res) => {
+    const userId = req.user.id;
+    try {
+        const active = await db.query(
+            "SELECT * FROM staff_shifts WHERE user_id = ? AND status = 'active' ORDER BY id DESC LIMIT 1",
+            [userId]
+        );
+        if (active.length === 0) {
+            return res.status(400).json({ error: 'No active shift found to clock out' });
+        }
+
+        const shift = active[0];
+        const clockInTime = new Date(shift.clock_in);
+        const now = new Date();
+        const durationMinutes = Math.max(1, Math.round((now.getTime() - clockInTime.getTime()) / 60000));
+
+        await db.query(
+            "UPDATE staff_shifts SET clock_out = NOW(), duration_minutes = ?, status = 'completed' WHERE id = ?",
+            [durationMinutes, shift.id]
+        );
+
+        const [completedShift] = await db.query(
+            "SELECT * FROM staff_shifts WHERE id = ?",
+            [shift.id]
+        );
+
+        broadcast({
+            type: 'staff_clock_out',
+            data: { user_id: userId, user_name: req.user.name, shift: completedShift }
+        });
+
+        res.json({
+            success: true,
+            message: 'Clocked out successfully',
+            shift: completedShift,
+            duration_minutes: durationMinutes
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // GET today's orders with items (for admin mobile app dashboard & live POS)
 app.get('/api/orders/today', authenticateToken, async (req, res) => {
     try {
