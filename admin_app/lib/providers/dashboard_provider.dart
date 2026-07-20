@@ -57,8 +57,8 @@ class DashboardProvider extends ChangeNotifier {
         if (order['items'] is List) {
           for (final item in order['items'] as List) {
             final name = item['product_name']?.toString() ?? 'Unknown';
-            final qty = (item['quantity'] as num?)?.toInt() ?? 1;
-            final price = (item['price'] as num?)?.toDouble() ?? 0;
+            final qty  = (item['quantity'] as num?)?.toInt() ?? 1;
+            final price = (item['price'] as num?)?.toDouble() ?? 0.0;
             productCount[name] ??= {'name': name, 'qty': 0, 'revenue': 0.0};
             productCount[name]!['qty'] =
                 (productCount[name]!['qty'] as int) + qty;

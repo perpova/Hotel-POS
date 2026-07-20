@@ -25,12 +25,12 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   // Periodic sync fallback when WS is disconnected (every 30s)
   Timer? _periodicSync;
 
-  final List<Widget> _pages = const [
-    DashboardScreen(),
-    LivePosScreen(),
-    StockScreen(),
+  final List<Widget> _pages = [
+    const DashboardScreen(),
+    const LivePosScreen(),
+    const StockScreen(),
     ReportsScreen(),
-    SettingsScreen(),
+    const SettingsScreen(),
   ];
 
   @override

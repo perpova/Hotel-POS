@@ -258,16 +258,19 @@ class _LiveMirrorBanner extends StatelessWidget {
                       .then()
                       .scaleXY(begin: 1.8, end: 1, duration: 600.ms),
                   const SizedBox(width: 6),
-                  Text(
-                    isPaying ? 'PAYMENT IN PROGRESS' : 'CASHIER SCREEN LIVE',
-                    style: TextStyle(
-                      color: isPaying ? AppColors.success : AppColors.primary,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1.2,
+                  Flexible(
+                    child: Text(
+                      isPaying ? 'PAYMENT IN PROGRESS' : 'CASHIER LIVE',
+                      style: TextStyle(
+                        color: isPaying ? AppColors.success : AppColors.primary,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  const Spacer(),
+                  const SizedBox(width: 6),
                   // Order type badge
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -283,11 +286,16 @@ class _LiveMirrorBanner extends StatelessWidget {
                           color: AppColors.textSecondary, fontSize: 10),
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 6),
                   Icon(Icons.person_outline_rounded, size: 12, color: AppColors.textMuted),
-                  const SizedBox(width: 3),
-                  Text(cashier,
-                      style: const TextStyle(color: AppColors.textMuted, fontSize: 10)),
+                  const SizedBox(width: 2),
+                  Flexible(
+                    child: Text(
+                      cashier,
+                      style: const TextStyle(color: AppColors.textMuted, fontSize: 10),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -534,8 +542,9 @@ class _OrderCardState extends State<_OrderCard> {
             children: [
               // Header row
               Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(14),
                 child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Container(
                       padding: const EdgeInsets.all(9),
@@ -545,19 +554,24 @@ class _OrderCardState extends State<_OrderCard> {
                       ),
                       child: Icon(typeIcon, color: typeColor, size: 18),
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Row(
                             children: [
-                              Text('#${o.orderNumber}',
+                              Flexible(
+                                child: Text(
+                                  '#${o.orderNumber}',
                                   style: const TextStyle(
                                       color: AppColors.textPrimary,
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w700)),
-                              const SizedBox(width: 8),
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
                               Container(
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 6, vertical: 2),
@@ -568,12 +582,12 @@ class _OrderCardState extends State<_OrderCard> {
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Icon(statusIcon, color: statusColor, size: 10),
+                                    Icon(statusIcon, color: statusColor, size: 9),
                                     const SizedBox(width: 3),
                                     Text(statusLabel,
                                         style: TextStyle(
                                             color: statusColor,
-                                            fontSize: 9,
+                                            fontSize: 8,
                                             fontWeight: FontWeight.w700,
                                             letterSpacing: 0.5)),
                                   ],
@@ -585,11 +599,13 @@ class _OrderCardState extends State<_OrderCard> {
                           Text(
                             '${o.displayType}${o.tableNumber != null ? ' · Table ${o.tableNumber}' : ''}',
                             style: const TextStyle(
-                                color: AppColors.textSecondary, fontSize: 12),
+                                color: AppColors.textSecondary, fontSize: 11),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ],
                       ),
                     ),
+                    const SizedBox(width: 8),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
@@ -599,19 +615,27 @@ class _OrderCardState extends State<_OrderCard> {
                               color: o.isPaid
                                   ? AppColors.success
                                   : AppColors.textPrimary,
-                              fontSize: 15,
+                              fontSize: 14,
                               fontWeight: FontWeight.w700),
                         ),
-                        if (o.paymentMethod != null && o.isPaid)
-                          Text(o.paymentMethod!.toUpperCase(),
-                              style: const TextStyle(
-                                  color: AppColors.textMuted, fontSize: 10)),
-                        Icon(
-                          _expanded
-                              ? Icons.keyboard_arrow_up_rounded
-                              : Icons.keyboard_arrow_down_rounded,
-                          color: AppColors.textMuted,
-                          size: 18,
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (o.paymentMethod != null && o.isPaid)
+                              Text(
+                                o.paymentMethod!.toUpperCase(),
+                                style: const TextStyle(
+                                    color: AppColors.textMuted, fontSize: 10),
+                              ),
+                            const SizedBox(width: 2),
+                            Icon(
+                              _expanded
+                                  ? Icons.keyboard_arrow_up_rounded
+                                  : Icons.keyboard_arrow_down_rounded,
+                              color: AppColors.textMuted,
+                              size: 16,
+                            ),
+                          ],
                         ),
                       ],
                     ),

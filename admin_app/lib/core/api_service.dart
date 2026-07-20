@@ -203,6 +203,22 @@ class ApiService {
     return data is List ? List<Map<String, dynamic>>.from(data) : [];
   }
 
+  Future<List<Map<String, dynamic>>> getUsersReport(String from, String to) async {
+    final data = await _getJson('$_baseUrl/api/admin/users-report?from=$from&to=$to');
+    return data is List ? List<Map<String, dynamic>>.from(data) : [];
+  }
+
+  Future<List<Map<String, dynamic>>> getUsers() async {
+    final data = await _getJson('$_baseUrl/api/admin/users');
+    return data is List ? List<Map<String, dynamic>>.from(data) : [];
+  }
+
+  Future<Map<String, dynamic>> getTransactions(String from, String to) async {
+    final data = await _getJson('$_baseUrl/api/admin/transactions?from=$from&to=$to');
+    if (data is Map<String, dynamic>) return data;
+    return {'total_revenue': 0, 'by_cash': 0, 'by_card': 0, 'by_credit': 0, 'count': 0, 'transactions': []};
+  }
+
   // ─── PRODUCTS ─────────────────────────────────────────────────────────
   Future<List<ProductModel>> getAllProducts() async {
     final res = await http.get(

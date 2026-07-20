@@ -362,7 +362,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               children: [
                 _infoTile(Icons.info_outline_rounded, 'Version', 'Hotel POS Admin v1.0'),
                 const Divider(height: 1),
-                _infoTile(Icons.business_rounded, 'Developer', 'Perpova Solutions'),
+                _infoTile(Icons.business_rounded, 'Developer', 'Perpova Developers'),
                 const Divider(height: 1),
                 ListTile(
                   leading: Container(

@@ -3160,8 +3160,143 @@ setInterval(async () => {
 }, 60000); // Check every 1 minute
 
 // ----------------------------------------------------
-// ADMIN APP ENDPOINTS — Orders & Notifications
+// ADMIN APP ENDPOINTS — Orders, Notifications & Reports
 // ----------------------------------------------------
+
+// GET per-user activity report — role-aware:
+//   cashier/admin/owner/waiter → orders processed/served (matched by cashier_id OR steward_name)
+//   kitchen                     → items prepared (filtered by user.category_id for sales & stock additions)
+app.get('/api/admin/users-report', authenticateToken, async (req, res) => {
+    const { from, to } = req.query;
+    const fromDate = from || null;
+    const toDate   = to   || null;
+    try {
+        const users = await db.query("SELECT id, name, username, role, category_id FROM users ORDER BY role, name");
+
+        const result = [];
+        for (const user of users) {
+            const userData = {
+                id: user.id,
+                name: user.name,
+                username: user.username,
+                role: user.role,
+                category_id: user.category_id,
+                total_orders: 0,
+                paid_orders: 0,
+                total_revenue: 0,
+                items_prepared: [],   // [{name, qty}] for kitchen users
+                orders_list: []       // brief order list for cashiers/waiters
+            };
+
+            if (user.role === 'kitchen') {
+                // Kitchen: filter items prepared for THIS chef's assigned category_id
+                if (!user.category_id) {
+                    userData.items_prepared = [];
+                    userData.total_orders = 0;
+                } else {
+                    const paramsSales = [user.category_id];
+                    let dateWhereSales = '';
+                    if (fromDate) { dateWhereSales += ' AND DATE(o.created_at) >= ?'; paramsSales.push(fromDate); }
+                    if (toDate)   { dateWhereSales += ' AND DATE(o.created_at) <= ?'; paramsSales.push(toDate); }
+
+                    const salesItems = await db.query(`
+                        SELECT p.name AS item_name,
+                               SUM(oi.quantity) AS total_qty
+                        FROM order_items oi
+                        JOIN orders o ON o.id = oi.order_id
+                        JOIN products p ON p.id = oi.product_id
+                        WHERE p.category_id = ? AND o.status != 'cancelled' AND p.track_stock = 0
+                        ${dateWhereSales}
+                        GROUP BY p.id, p.name
+                    `, paramsSales);
+
+                    const paramsStock = [user.category_id];
+                    let dateWhereStock = '';
+                    if (fromDate) { dateWhereStock += ' AND DATE(sl.timestamp) >= ?'; paramsStock.push(fromDate); }
+                    if (toDate)   { dateWhereStock += ' AND DATE(sl.timestamp) <= ?'; paramsStock.push(toDate); }
+
+                    const stockItems = await db.query(`
+                        SELECT p.name AS item_name,
+                               SUM(sl.change_qty) AS total_qty
+                        FROM stock_logs sl
+                        JOIN products p ON p.id = sl.product_id
+                        WHERE p.category_id = ? AND sl.change_qty > 0 AND sl.type IN ('adjustment', 'purchase') AND p.track_stock = 1
+                        ${dateWhereStock}
+                        GROUP BY p.id, p.name
+                    `, paramsStock);
+
+                    const itemMap = {};
+                    for (const item of [...salesItems, ...stockItems]) {
+                        const name = item.item_name;
+                        const qty = parseInt(item.total_qty) || 0;
+                        itemMap[name] = (itemMap[name] || 0) + qty;
+                    }
+
+                    const itemsPrepared = Object.keys(itemMap).map(name => ({
+                        name: name,
+                        qty: itemMap[name]
+                    })).sort((a, b) => b.qty - a.qty);
+
+                    userData.items_prepared = itemsPrepared;
+                    userData.total_orders = itemsPrepared.reduce((sum, i) => sum + i.qty, 0);
+                }
+            } else {
+                // Cashier / Admin / Owner / Waiter / Delivery: orders matched by cashier_id OR steward_name
+                const params = [user.id, user.name];
+                let dateWhere = '';
+                if (fromDate) { dateWhere += ' AND DATE(o.created_at) >= ?'; params.push(fromDate); }
+                if (toDate)   { dateWhere += ' AND DATE(o.created_at) <= ?'; params.push(toDate); }
+
+                const orders = await db.query(`
+                    SELECT o.id, o.order_number, o.total, o.payment_status,
+                           o.payment_method, o.order_type, o.status, o.created_at,
+                           COUNT(oi.id) AS item_types,
+                           COALESCE(SUM(oi.quantity), 0) AS items_qty
+                    FROM orders o
+                    LEFT JOIN order_items oi ON oi.order_id = o.id
+                    WHERE (o.cashier_id = ? OR LOWER(o.steward_name) = LOWER(?))
+                    ${dateWhere}
+                    GROUP BY o.id
+                    ORDER BY o.created_at DESC
+                `, params);
+
+                userData.total_orders  = orders.length;
+                userData.paid_orders   = orders.filter(o => o.payment_status === 'paid').length;
+                userData.total_revenue = orders
+                    .filter(o => o.payment_status === 'paid')
+                    .reduce((s, o) => s + parseFloat(o.total || 0), 0);
+                userData.orders_list = orders.map(o => ({
+                    order_number: o.order_number,
+                    total: parseFloat(o.total || 0),
+                    payment_status: o.payment_status,
+                    payment_method: o.payment_method,
+                    order_type: o.order_type,
+                    status: o.status,
+                    created_at: o.created_at,
+                    items_qty: parseInt(o.items_qty) || 0
+                }));
+            }
+
+            result.push(userData);
+        }
+
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET all users (for admin app)
+app.get('/api/admin/users', authenticateToken, async (req, res) => {
+    try {
+        const users = await db.query(
+            "SELECT id, name, username, role, email, phone, status FROM users ORDER BY name ASC"
+        );
+        res.json(users);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
 
 // GET today's orders with items (for admin mobile app dashboard & live POS)
 app.get('/api/orders/today', authenticateToken, async (req, res) => {
@@ -3222,6 +3357,48 @@ app.get('/api/orders/range', authenticateToken, async (req, res) => {
         }
 
         res.json(orders);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET transaction summary for dashboard detail view (date range)
+app.get('/api/admin/transactions', authenticateToken, async (req, res) => {
+    const { from, to } = req.query;
+    const today = new Date().toISOString().slice(0, 10);
+    const fromDate = from || today;
+    const toDate   = to   || today;
+    try {
+        // All paid orders in range
+        const orders = await db.query(`
+            SELECT o.id, o.order_number, o.total, o.payment_method, o.payment_status,
+                   o.order_type, o.created_at, o.cashier_id,
+                   u.name as cashier_name,
+                   dt.table_number
+            FROM orders o
+            LEFT JOIN users u ON o.cashier_id = u.id
+            LEFT JOIN dining_tables dt ON o.table_id = dt.id
+            WHERE DATE(o.created_at) >= ? AND DATE(o.created_at) <= ?
+              AND o.payment_status = 'paid'
+            ORDER BY o.created_at DESC
+        `, [fromDate, toDate]);
+
+        // Summary stats
+        const cashIn   = orders.reduce((s, o) => s + parseFloat(o.total || 0), 0);
+        const byCash   = orders.filter(o => o.payment_method === 'cash'  ).reduce((s, o) => s + parseFloat(o.total || 0), 0);
+        const byCard   = orders.filter(o => o.payment_method === 'card'  ).reduce((s, o) => s + parseFloat(o.total || 0), 0);
+        const byCredit = orders.filter(o => o.payment_method === 'credit').reduce((s, o) => s + parseFloat(o.total || 0), 0);
+
+        res.json({
+            from: fromDate,
+            to: toDate,
+            total_revenue: cashIn,
+            by_cash:   byCash,
+            by_card:   byCard,
+            by_credit: byCredit,
+            count: orders.length,
+            transactions: orders
+        });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
