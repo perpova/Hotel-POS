@@ -204,7 +204,9 @@ class APIService {
 
     final map = {
       'POS System': 'POS',
+      'K.D.S (Kitchen)': 'KDS',
       'Kitchen Display (KDS)': 'KDS',
+      'Queue Screen': 'Order Queue',
       'Order Queue Screen': 'Order Queue',
       'Shifts & Drawer': 'Shifts & Cash',
       'Settings & Stock': 'Settings',
@@ -223,7 +225,37 @@ class APIService {
       return matchingPage['can_view'] == 1 || matchingPage['can_view'] == true;
     }
 
+    if (currentUserPermissions.isNotEmpty) {
+      return false;
+    }
+
     return true; 
+  }
+
+  bool isPosDineInOnly() {
+    if (currentUser == null) return false;
+    final roleName = currentUser!.role.trim().toLowerCase();
+
+    for (final p in currentUserPermissions) {
+      if (p['page']?.toString().toLowerCase() == 'pos: dine-in only') {
+        return p['can_view'] == 1 || p['can_view'] == true;
+      }
+    }
+    if (roleName == 'short eats cabin') return true;
+    return false;
+  }
+
+  bool isPosCartViewHidden() {
+    if (currentUser == null) return false;
+    final roleName = currentUser!.role.trim().toLowerCase();
+
+    for (final p in currentUserPermissions) {
+      if (p['page']?.toString().toLowerCase() == 'pos: hide cart view') {
+        return p['can_view'] == 1 || p['can_view'] == true;
+      }
+    }
+    if (roleName == 'short eats cabin') return true;
+    return false;
   }
 
   Map<String, String> _getHeaders() {

@@ -9,16 +9,16 @@ import '../api_service.dart';
 // Pages that can be assigned permissions
 // ─────────────────────────────────────────────────────────────────────────────
 const List<String> kAppPages = [
-  'Dashboard', 'POS', 'Dining Tables', 'KDS', 'Order Queue',
+  'Dashboard', 'POS', 'POS: Dine-In Only', 'POS: Hide Cart View', 'Dining Tables', 'KDS', 'Order Queue',
   'Items', 'POS Orders', 'Pre Orders', 'Offers', 'Shifts & Cash', 'Reports & Logs',
-  'Administrators', 'Delivery Boys', 'Customers', 'Employees', 'Waiters', 'Chefs',
+  'Administrators', 'Delivery Boys', 'Customers', 'Employees', 'Waiters', 'Chefs', 'Short Eats Cabin',
   'Sales Report', 'Items Report', 'Credit Balance Report',
   'Raw Materials', 'POS Stock', 'Roles & Permissions', 'Settings',
 ];
 
 const Set<String> kPagesWithActions = {
   'Items', 'Offers', 'Administrators', 'Delivery Boys',
-  'Customers', 'Employees', 'Waiters', 'Chefs',
+  'Customers', 'Employees', 'Waiters', 'Chefs', 'Short Eats Cabin',
   'Raw Materials', 'POS Stock', 'Roles & Permissions',
   'Pre Orders',
 };
@@ -80,14 +80,21 @@ class _RolesPermissionsContentState extends State<RolesPermissionsContent> {
     try {
       final raw = await APIService.instance.getRolePermissions(role['id']);
       final Map<String, Map<String, dynamic>> saved = { for (final p in raw) p['page'] as String: p };
+      final isShortEatsCabin = role['name']?.toString().trim().toLowerCase() == 'short eats cabin';
       final perms = kAppPages.map((page) {
         final s = saved[page];
+        bool canView = s?['can_view'] == 1 || s?['can_view'] == true;
+        if (s == null && isShortEatsCabin) {
+          if (page == 'POS' || page == 'POS: Dine-In Only' || page == 'POS: Hide Cart View' || page == 'Dining Tables') {
+            canView = true;
+          }
+        }
         return {
           'page': page,
-          'can_view':   s?['can_view']   == 1,
-          'can_create': s?['can_create'] == 1,
-          'can_update': s?['can_update'] == 1,
-          'can_delete': s?['can_delete'] == 1,
+          'can_view':   canView,
+          'can_create': s?['can_create'] == 1 || s?['can_create'] == true,
+          'can_update': s?['can_update'] == 1 || s?['can_update'] == true,
+          'can_delete': s?['can_delete'] == 1 || s?['can_delete'] == true,
         };
       }).toList();
       setState(() { _permissions = perms; _permLoading = false; });
@@ -281,7 +288,7 @@ class _RolesPermissionsContentState extends State<RolesPermissionsContent> {
 
   Widget _buildRoleRow(Map<String, dynamic> role) {
     final memberCount = role['member_count'] ?? 0;
-    final isSystem = ['Admin', 'Cashier', 'Waiter', 'Chef', 'Delivery Boy'].contains(role['name']);
+    final isSystem = ['Admin', 'Cashier', 'Waiter', 'Chef', 'Delivery Boy', 'Short Eats Cabin'].contains(role['name']);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(children: [

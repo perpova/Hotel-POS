@@ -89,6 +89,20 @@ class _POSScreenState extends State<POSScreen> {
     final size = MediaQuery.of(context).size;
     final isDesktop = size.width > 950;
 
+    if (APIService.instance.isPosDineInOnly()) {
+      if (controller.activeCategoryId == null && controller.categories.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (controller.activeCategoryId == null && controller.categories.isNotEmpty) {
+            final shortEatsCat = controller.categories.firstWhere(
+              (c) => c.name.toLowerCase().contains('short eat'),
+              orElse: () => controller.categories.first,
+            );
+            controller.filterCategory(shortEatsCat.id);
+          }
+        });
+      }
+    }
+
     return Scaffold(
       backgroundColor: AppTheme.bgLight,
       body: isDesktop
@@ -844,231 +858,449 @@ class _POSScreenState extends State<POSScreen> {
           ],
           const SizedBox(height: 8),
 
-          // Cart Column Headers
-          Container(
-            color: AppTheme.primary.withOpacity(0.08),
-            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-            child: Row(
-              children: [
-                Expanded(
-                  flex: 4,
-                  child: Text('Item', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary)),
-                ),
-                Expanded(
-                  flex: 3,
-                  child: Center(
-                    child: Text('Qty', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary)),
-                  ),
-                ),
-                Expanded(
-                  flex: 2,
-                  child: Align(
-                    alignment: Alignment.centerRight,
-                    child: Text('Price', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary)),
-                  ),
-                ),
-              ],
-            ),
-          ),
+          // Prominent Selected Table Display Card
+          _buildSelectedTableInfoCard(controller),
 
-          // Bill Items Cart List
-          Expanded(
-            child: controller.cart.isEmpty
-                ? Center(
-                    child: Text(
-                      'Cart is empty. Select products on the left.',
-                      style: GoogleFonts.inter(color: AppTheme.textLightSecondary, fontSize: 13),
+          if (APIService.instance.isPosCartViewHidden()) ...[
+            _buildQuickOrderBar(controller),
+          ] else ...[
+            const SizedBox(height: 8),
+            // Cart Column Headers
+            Container(
+              color: AppTheme.primary.withOpacity(0.08),
+              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: 4,
+                    child: Text('Item', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary)),
+                  ),
+                  Expanded(
+                    flex: 3,
+                    child: Center(
+                      child: Text('Qty', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary)),
                     ),
-                  )
-                : ListView.builder(
-                    itemCount: controller.cart.length,
-                    itemBuilder: (context, index) {
-                      final item = controller.cart[index];
-                      return _buildCartRow(item, index, controller);
-                    },
                   ),
-          ),
-          Divider(height: 1, color: AppTheme.dividerColor),
-          const SizedBox(height: 8),
+                  Expanded(
+                    flex: 2,
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: Text('Price', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
 
-          // Discount selector row (no Apply button needed)
-          Row(
-            children: [
-              InkWell(
-                onTap: () {
-                  setState(() {
-                    _discountType = _discountType == 'percent' ? 'fixed' : 'percent';
-                    final parsed = double.tryParse(_discountController.text) ?? 0.0;
-                    controller.updateDiscount(parsed, _discountType);
-                  });
-                },
-                borderRadius: BorderRadius.circular(10),
-                child: Container(
-                  height: 44,
-                  padding: const EdgeInsets.symmetric(horizontal: 14),
-                  decoration: BoxDecoration(
-                    color: AppTheme.primary.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: AppTheme.primary.withOpacity(0.3)),
-                  ),
-                  child: Center(
-                    child: Text(
-                      _discountType == 'percent' ? '%' : 'LKR',
-                      style: GoogleFonts.inter(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.primary,
+            // Bill Items Cart List
+            Expanded(
+              child: controller.cart.isEmpty
+                  ? Center(
+                      child: Text(
+                        'Cart is empty. Select products on the left.',
+                        style: GoogleFonts.inter(color: AppTheme.textLightSecondary, fontSize: 13),
+                      ),
+                    )
+                  : ListView.builder(
+                      itemCount: controller.cart.length,
+                      itemBuilder: (context, index) {
+                        final item = controller.cart[index];
+                        return _buildCartRow(item, index, controller);
+                      },
+                    ),
+            ),
+            Divider(height: 1, color: AppTheme.dividerColor),
+            const SizedBox(height: 8),
+
+            // Discount selector row (no Apply button needed)
+            Row(
+              children: [
+                InkWell(
+                  onTap: () {
+                    setState(() {
+                      _discountType = _discountType == 'percent' ? 'fixed' : 'percent';
+                      final parsed = double.tryParse(_discountController.text) ?? 0.0;
+                      controller.updateDiscount(parsed, _discountType);
+                    });
+                  },
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    height: 44,
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primary.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppTheme.primary.withOpacity(0.3)),
+                    ),
+                    child: Center(
+                      child: Text(
+                        _discountType == 'percent' ? '%' : 'LKR',
+                        style: GoogleFonts.inter(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.primary,
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Container(
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: AppTheme.cardLight,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: AppTheme.borderLight),
-                  ),
-                  child: TextField(
-                    controller: _discountController,
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
-                    decoration: InputDecoration(
-                      hintText: 'Add Discount',
-                      hintStyle: GoogleFonts.inter(color: AppTheme.textLightSecondary, fontSize: 13),
-                      border: InputBorder.none,
-                      enabledBorder: InputBorder.none,
-                      focusedBorder: InputBorder.none,
-                      filled: false,
-                      contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Container(
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: AppTheme.cardLight,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppTheme.borderLight),
                     ),
-                    keyboardType: TextInputType.number,
-                    onChanged: (val) {
-                      final parsed = double.tryParse(val) ?? 0.0;
-                      controller.updateDiscount(parsed, _discountType);
-                    },
+                    child: TextField(
+                      controller: _discountController,
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+                      decoration: InputDecoration(
+                        hintText: 'Add Discount',
+                        hintStyle: GoogleFonts.inter(color: AppTheme.textLightSecondary, fontSize: 13),
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        filled: false,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                      ),
+                      keyboardType: TextInputType.number,
+                      onChanged: (val) {
+                        final parsed = double.tryParse(val) ?? 0.0;
+                        controller.updateDiscount(parsed, _discountType);
+                      },
+                    ),
                   ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
+              ],
+            ),
+            const SizedBox(height: 8),
 
-          // Totals Section
-          Column(
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('Sub Total:', style: GoogleFonts.inter(fontSize: 11.5, color: AppTheme.textLightSecondary)),
-                  Text('LKR ${controller.cartSubtotal.toStringAsFixed(2)}', style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('Discount:', style: GoogleFonts.inter(fontSize: 11.5, color: AppTheme.textLightSecondary)),
-                  Text('LKR ${controller.discount.toStringAsFixed(2)}', style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('Total:', style: GoogleFonts.outfit(fontSize: 14.5, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
-                  Text(
-                    'LKR ${controller.cartTotal.toStringAsFixed(2)}',
-                    style: GoogleFonts.outfit(fontSize: 16.5, fontWeight: FontWeight.bold, color: AppTheme.primary),
-                  ),
-                ],
-              ),
-              if (controller.activePreOrderAdvance > 0) ...[
+            // Totals Section
+            Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Sub Total:', style: GoogleFonts.inter(fontSize: 11.5, color: AppTheme.textLightSecondary)),
+                    Text('LKR ${controller.cartSubtotal.toStringAsFixed(2)}', style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
+                  ],
+                ),
                 const SizedBox(height: 4),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Advance Paid:', style: GoogleFonts.inter(fontSize: 11.5, color: Colors.green)),
-                    Text('-LKR ${controller.activePreOrderAdvance.toStringAsFixed(2)}', style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.bold, color: Colors.green)),
+                    Text('Discount:', style: GoogleFonts.inter(fontSize: 11.5, color: AppTheme.textLightSecondary)),
+                    Text('LKR ${controller.discount.toStringAsFixed(2)}', style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
                   ],
                 ),
                 const SizedBox(height: 6),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Balance Due:', style: GoogleFonts.outfit(fontSize: 14.5, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
+                    Text('Total:', style: GoogleFonts.outfit(fontSize: 14.5, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
                     Text(
-                      'LKR ${(controller.cartTotal - controller.activePreOrderAdvance < 0 ? 0.00 : controller.cartTotal - controller.activePreOrderAdvance).toStringAsFixed(2)}',
+                      'LKR ${controller.cartTotal.toStringAsFixed(2)}',
                       style: GoogleFonts.outfit(fontSize: 16.5, fontWeight: FontWeight.bold, color: AppTheme.primary),
                     ),
                   ],
                 ),
-              ],
-            ],
-          ),
-          const SizedBox(height: 10),
-
-          // Checkout Action Buttons Flow
-          Column(
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    flex: 2,
-                    child: ElevatedButton(
-                      onPressed: controller.cart.isEmpty ? null : () {
-                        controller.clearCart();
-                        _tokenNoController.clear();
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFEF4444), // Red
-                        foregroundColor: Colors.white,
-                        minimumSize: const Size(double.infinity, 48),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      child: Text('Cancel', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold)),
-                    ),
+                if (controller.activePreOrderAdvance > 0) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Advance Paid:', style: GoogleFonts.inter(fontSize: 11.5, color: Colors.green)),
+                      Text('-LKR ${controller.activePreOrderAdvance.toStringAsFixed(2)}', style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.bold, color: Colors.green)),
+                    ],
                   ),
-                  if (controller.orderType == 'dine_in' && controller.selectedTable != null) ...[
-                    const SizedBox(width: 8),
+                  const SizedBox(height: 6),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Balance Due:', style: GoogleFonts.outfit(fontSize: 14.5, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
+                      Text(
+                        'LKR ${(controller.cartTotal - controller.activePreOrderAdvance < 0 ? 0.00 : controller.cartTotal - controller.activePreOrderAdvance).toStringAsFixed(2)}',
+                        style: GoogleFonts.outfit(fontSize: 16.5, fontWeight: FontWeight.bold, color: AppTheme.primary),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 10),
+
+            // Checkout Action Buttons Flow
+            Column(
+              children: [
+                Row(
+                  children: [
                     Expanded(
-                      flex: 3,
+                      flex: 2,
                       child: ElevatedButton(
-                        onPressed: !controller.cart.any((item) => item.status == 'pending')
-                            ? null
-                            : () => _handleDineInPrintKOT(controller),
+                        onPressed: controller.cart.isEmpty ? null : () {
+                          controller.clearCart();
+                          _tokenNoController.clear();
+                        },
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue,
+                          backgroundColor: const Color(0xFFEF4444), // Red
                           foregroundColor: Colors.white,
                           minimumSize: const Size(double.infinity, 48),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
-                        child: Text('Print KOT', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold)),
+                        child: Text('Cancel', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                    if (controller.orderType == 'dine_in' && controller.selectedTable != null) ...[
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: 3,
+                        child: ElevatedButton(
+                          onPressed: !controller.cart.any((item) => item.status == 'pending')
+                              ? null
+                              : () => _handleDineInPrintKOT(controller),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blue,
+                            foregroundColor: Colors.white,
+                            minimumSize: const Size(double.infinity, 48),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          child: Text('Print KOT', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 3,
+                      child: ElevatedButton(
+                        onPressed: controller.cart.isEmpty ? null : () => _showOrderPaymentDialog(controller),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF10B981), // Green
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size(double.infinity, 48),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        child: Text(
+                          controller.orderType == 'dine_in' && controller.selectedTable != null ? 'Pay Bill' : 'Order',
+                          style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold),
+                        ),
                       ),
                     ),
                   ],
-                  const SizedBox(width: 8),
-                  Expanded(
-                    flex: 3,
-                    child: ElevatedButton(
-                      onPressed: controller.cart.isEmpty ? null : () => _showOrderPaymentDialog(controller),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF10B981), // Green
-                        foregroundColor: Colors.white,
-                        minimumSize: const Size(double.infinity, 48),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      child: Text(
-                        controller.orderType == 'dine_in' && controller.selectedTable != null ? 'Pay Bill' : 'Order',
-                        style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold),
-                      ),
+                )
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSelectedTableInfoCard(POSController controller) {
+    final table = controller.selectedTable;
+    final steward = controller.stewardName;
+    final customer = controller.selectedCustomer;
+
+    if (table == null) {
+      return const SizedBox.shrink();
+    }
+
+    final tableStatus = controller.tableStatuses[table.id] ?? table.status;
+    Color statusColor = Colors.green;
+    if (tableStatus == 'seated') statusColor = Colors.orange;
+    if (tableStatus == 'billing') statusColor = Colors.red;
+
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.cardLight,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.primary, width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.primary.withOpacity(0.06),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          )
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primary.withOpacity(0.12),
+                      shape: BoxShape.circle,
                     ),
+                    child: Icon(Icons.table_restaurant, color: AppTheme.primary, size: 18),
+                  ),
+                  const SizedBox(width: 8),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Selected: ${table.tableNumber}',
+                        style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+                      ),
+                      Text(
+                        '${table.capacity} Seats',
+                        style: GoogleFonts.inter(fontSize: 10, color: AppTheme.textLightSecondary),
+                      ),
+                    ],
                   ),
                 ],
-              )
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: statusColor.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: statusColor.withOpacity(0.4)),
+                ),
+                child: Text(
+                  tableStatus.toUpperCase(),
+                  style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold, color: statusColor),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Divider(height: 1, color: AppTheme.dividerColor),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Expanded(
+                child: Row(
+                  children: [
+                    Icon(Icons.person_outline, size: 13, color: AppTheme.textLightSecondary),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        'Cust: ${customer?.name ?? 'Walk-In'}',
+                        style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textLightPrimary),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: Row(
+                  children: [
+                    Icon(Icons.badge_outlined, size: 13, color: AppTheme.textLightSecondary),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        'Waiter: ${steward ?? 'None'}',
+                        style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textLightPrimary),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickOrderBar(POSController controller) {
+    if (controller.cart.isEmpty) return const SizedBox.shrink();
+
+    final totalItems = controller.cart.fold<int>(0, (sum, i) => sum + i.quantity);
+    final hasPending = controller.cart.any((item) => item.status == 'pending');
+
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.cardLight,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.primary),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.primary.withOpacity(0.08),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          )
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '$totalItems Item(s) Selected',
+                style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+              ),
+              Text(
+                'LKR ${controller.cartTotal.toStringAsFixed(2)}',
+                style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold, color: AppTheme.primary),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: ElevatedButton(
+                  onPressed: () => controller.clearCart(),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFEF4444),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  child: Text('Cancel', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold)),
+                ),
+              ),
+              if (controller.orderType == 'dine_in' && controller.selectedTable != null && hasPending) ...[
+                const SizedBox(width: 6),
+                Expanded(
+                  flex: 3,
+                  child: ElevatedButton(
+                    onPressed: () => _handleDineInPrintKOT(controller),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    child: Text('Print KOT', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
+              const SizedBox(width: 6),
+              Expanded(
+                flex: 3,
+                child: ElevatedButton(
+                  onPressed: () => _showOrderPaymentDialog(controller),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF10B981),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  child: Text(
+                    controller.orderType == 'dine_in' && controller.selectedTable != null ? 'Pay Bill' : 'Order',
+                    style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
             ],
           ),
         ],
@@ -1077,6 +1309,53 @@ class _POSScreenState extends State<POSScreen> {
   }
 
   Widget _buildOrderTypeSelectorCard(POSController controller) {
+    final isDineInOnly = APIService.instance.isPosDineInOnly();
+    if (isDineInOnly && controller.orderType != 'dine_in') {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        controller.setOrderType('dine_in');
+      });
+    }
+
+    if (isDineInOnly) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Order Type',
+            style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary),
+          ),
+          const SizedBox(height: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+            decoration: BoxDecoration(
+              color: AppTheme.primary.withOpacity(0.1),
+              border: Border.all(color: AppTheme.primary, width: 1.5),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.restaurant, color: AppTheme.primary, size: 16),
+                const SizedBox(width: 8),
+                Text(
+                  'Dine-In Only',
+                  style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primary),
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primary,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text('Active', style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white)),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

@@ -157,6 +157,7 @@ class _MainLayoutState extends State<MainLayout> {
     'Change Password',
     'Roles & Permissions',
     'Pre Orders',
+    'Short Eats Cabin',
   ];
 
   Widget _getScreen(int index) {
@@ -213,6 +214,8 @@ class _MainLayoutState extends State<MainLayout> {
         return const RolesPermissionsScreen();
       case 25:
         return const PreOrdersScreen();
+      case 26:
+        return const UsersScreen(userType: 'Short Eats Cabin');
       default:
         return const DashboardScreen();
     }
@@ -608,6 +611,7 @@ class _MainLayoutState extends State<MainLayout> {
           _SidebarItem(Icons.badge_outlined, 'Employees', 14),
           _SidebarItem(Icons.room_service_outlined, 'Waiters', 15),
           _SidebarItem(Icons.soup_kitchen_outlined, 'Chefs', 16),
+          _SidebarItem(Icons.storefront_outlined, 'Short Eats Cabin', 26),
         ],
       ),
       _SidebarCategory(

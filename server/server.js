@@ -1382,9 +1382,17 @@ app.get('/api/users', authenticateToken, async (req, res) => {
         let params = [];
         if (role) {
             if (role === 'admin_owner') {
-                sql += ' WHERE role IN ("admin", "owner")';
+                sql += ' WHERE LOWER(role) IN ("admin", "owner", "administrator", "hotel owner")';
+            } else if (role === 'delivery') {
+                sql += ' WHERE LOWER(role) IN ("delivery", "delivery boy", "delivery rider")';
+            } else if (role === 'cashier') {
+                sql += ' WHERE LOWER(role) IN ("cashier", "employee")';
+            } else if (role === 'waiter') {
+                sql += ' WHERE LOWER(role) IN ("waiter", "steward", "steward / waiter")';
+            } else if (role === 'kitchen') {
+                sql += ' WHERE LOWER(role) IN ("kitchen", "chef", "chef / kitchen")';
             } else {
-                sql += ' WHERE role = ?';
+                sql += ' WHERE LOWER(role) = LOWER(?)';
                 params.push(role);
             }
         }

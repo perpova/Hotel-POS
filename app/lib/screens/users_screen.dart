@@ -24,6 +24,7 @@ class UsersScreen extends StatefulWidget {
 class _UsersScreenState extends State<UsersScreen> {
   List<dynamic> _items = []; // Can be List<UserModel> or List<CustomerModel>
   List<CategoryModel> _categories = [];
+  List<Map<String, dynamic>> _availableRoles = [];
   Map<int, String> _ingredientNames = {};
   bool _isLoading = false;
   String _errorMessage = '';
@@ -138,6 +139,9 @@ class _UsersScreenState extends State<UsersScreen> {
         final ings = await APIService.instance.getIngredients();
         _ingredientNames = {for (var i in ings) i.id: i.name};
       } catch (_) {}
+      try {
+        _availableRoles = await APIService.instance.getRoles();
+      } catch (_) {}
 
       if (_isCustomerType) {
         final custs = await APIService.instance.getCustomers();
@@ -160,6 +164,8 @@ class _UsersScreenState extends State<UsersScreen> {
           roleFilter = 'waiter';
         } else if (widget.userType == 'Chefs') {
           roleFilter = 'kitchen';
+        } else if (widget.userType == 'Short Eats Cabin') {
+          roleFilter = 'short eats cabin';
         }
 
         final users = await APIService.instance.getUsers(role: roleFilter);
@@ -316,6 +322,8 @@ class _UsersScreenState extends State<UsersScreen> {
             _roleVal = 'waiter';
           } else if (widget.userType == 'Chefs') {
             _roleVal = 'kitchen';
+          } else if (widget.userType == 'Short Eats Cabin') {
+            _roleVal = 'Short Eats Cabin';
           }
         }
       }
@@ -1387,6 +1395,7 @@ class _UsersScreenState extends State<UsersScreen> {
     if (title == 'Employees') return 'Employee';
     if (title == 'Waiters') return 'Waiter';
     if (title == 'Chefs') return 'Chef';
+    if (title == 'Short Eats Cabin') return 'Short Eats Cabin User';
     return 'Customer';
   }
 
@@ -3048,25 +3057,7 @@ class _UsersScreenState extends State<UsersScreen> {
 
                   _buildFieldLabel('ROLE'),
                   const SizedBox(height: 6),
-                  DropdownButtonFormField<String>(
-                    value: _roleVal,
-                    dropdownColor: AppTheme.cardLight,
-                    style: TextStyle(color: AppTheme.textLightPrimary, fontSize: 13),
-                    items: const [
-                      DropdownMenuItem(value: 'admin', child: Text('Administrator')),
-                      DropdownMenuItem(value: 'owner', child: Text('Hotel Owner')),
-                      DropdownMenuItem(value: 'cashier', child: Text('Cashier')),
-                      DropdownMenuItem(value: 'kitchen', child: Text('Chef / Kitchen')),
-                      DropdownMenuItem(value: 'delivery', child: Text('Delivery Rider')),
-                      DropdownMenuItem(value: 'waiter', child: Text('Steward / Waiter')),
-                    ],
-                    onChanged: (val) => setState(() {
-                      _roleVal = val!;
-                      if (_roleVal != 'kitchen') {
-                        _selectedCategoryId = null;
-                      }
-                    }),
-                  ),
+                  _buildDynamicRoleDropdown(),
                   const SizedBox(height: 20),
 
                   if (_roleVal == 'kitchen') ...[
@@ -3183,6 +3174,73 @@ class _UsersScreenState extends State<UsersScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildDynamicRoleDropdown() {
+    final Map<String, String> roleMap = {};
+
+    String normalizeRole(String r) {
+      final lower = r.trim().toLowerCase();
+      if (lower == 'kitchen' || lower == 'chef / kitchen') return 'Chef';
+      if (lower == 'delivery' || lower == 'delivery rider') return 'Delivery Boy';
+      if (lower == 'steward / waiter' || lower == 'waiter') return 'Waiter';
+      if (lower == 'administrator' || lower == 'admin') return 'Admin';
+      if (lower == 'hotel owner' || lower == 'owner') return 'Owner';
+      if (lower == 'cashier') return 'Cashier';
+      if (lower == 'short eats cabin') return 'Short Eats Cabin';
+      return r.trim();
+    }
+
+    for (final r in _availableRoles) {
+      final name = r['name']?.toString().trim();
+      if (name != null && name.isNotEmpty) {
+        final norm = normalizeRole(name);
+        roleMap[norm.toLowerCase()] = norm;
+      }
+    }
+
+    final defaultList = ['Admin', 'Owner', 'Cashier', 'Chef', 'Delivery Boy', 'Waiter', 'Short Eats Cabin'];
+    for (final def in defaultList) {
+      final norm = normalizeRole(def);
+      final key = norm.toLowerCase();
+      if (!roleMap.containsKey(key)) {
+        roleMap[key] = norm;
+      }
+    }
+
+    final normCurrent = normalizeRole(_roleVal);
+    final currentKey = normCurrent.toLowerCase();
+    if (!roleMap.containsKey(currentKey) && normCurrent.isNotEmpty) {
+      roleMap[currentKey] = normCurrent;
+    }
+
+    String selectedValue = normCurrent;
+    for (final entry in roleMap.entries) {
+      if (entry.key == currentKey) {
+        selectedValue = entry.value;
+        break;
+      }
+    }
+
+    return DropdownButtonFormField<String>(
+      value: selectedValue,
+      dropdownColor: AppTheme.cardLight,
+      style: TextStyle(color: AppTheme.textLightPrimary, fontSize: 13),
+      items: roleMap.values.map((roleName) {
+        return DropdownMenuItem<String>(
+          value: roleName,
+          child: Text(roleName),
+        );
+      }).toList(),
+      onChanged: (val) => setState(() {
+        if (val != null) {
+          _roleVal = val;
+          if (_roleVal.toLowerCase() != 'kitchen' && _roleVal.toLowerCase() != 'chef') {
+            _selectedCategoryId = null;
+          }
+        }
+      }),
     );
   }
 

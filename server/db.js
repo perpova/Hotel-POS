@@ -216,8 +216,8 @@ async function initializeDatabase() {
                 console.log("Migration: Added phone to users table.");
             } catch (_) {}
             try {
-                await dbPool.query("ALTER TABLE users MODIFY COLUMN role ENUM('admin', 'cashier', 'owner', 'kitchen', 'delivery', 'waiter') NOT NULL");
-                console.log("Migration: Expanded role ENUM in users table to include waiter.");
+                await dbPool.query("ALTER TABLE users MODIFY COLUMN role VARCHAR(100) NOT NULL DEFAULT 'cashier'");
+                console.log("Migration: Modified users.role column to VARCHAR(100).");
             } catch (_) {}
             try {
                 await dbPool.query("ALTER TABLE audit_logs MODIFY COLUMN action_type ENUM('login', 'logout', 'delete_bill', 'change_price', 'edit_stock', 'reprint_bill', 'modify_bill', 'place_order', 'pay_order', 'cash_in', 'cash_out') NOT NULL");
@@ -355,7 +355,7 @@ async function initializeDatabase() {
                         UNIQUE KEY uq_role_page (role_id, page)
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
                 `);
-                const defaultRoles = ['Admin', 'Cashier', 'Waiter', 'Chef', 'Delivery Boy'];
+                const defaultRoles = ['Admin', 'Cashier', 'Waiter', 'Chef', 'Delivery Boy', 'Short Eats Cabin'];
                 for (const r of defaultRoles) {
                     await dbPool.query('INSERT IGNORE INTO roles (name) VALUES (?)', [r]);
                 }

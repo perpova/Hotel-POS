@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS users (
     name VARCHAR(100) NOT NULL,
     username VARCHAR(50) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
-    role ENUM('admin', 'cashier', 'owner', 'kitchen', 'delivery') NOT NULL,
+    role VARCHAR(100) NOT NULL,
     status ENUM('active', 'inactive') DEFAULT 'active',
     image_base64 LONGTEXT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
