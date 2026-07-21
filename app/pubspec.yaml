@@ -16,7 +16,7 @@ dependencies:
 
   # HTTP & Sockets
   http: ^1.2.1
-  web_socket_channel: ^2.4.5
+  web_socket_channel: ^3.0.0
 
   # Storage & Caching
   shared_preferences: ^2.3.2
@@ -33,7 +33,7 @@ dependencies:
   barcode_widget: ^2.0.4
   qr_flutter: ^4.1.0
   flutter_tts: ^4.0.2
-  file_picker: ^6.1.1
+  file_picker: ^8.1.2
   pdf: ^3.10.8
   printing: ^5.11.0
   video_player: ^2.8.6

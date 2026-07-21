@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:http/http.dart' as http;
 import '../api_service.dart';
 import '../theme.dart';
 import '../controllers/app_settings_controller.dart';
@@ -55,6 +56,145 @@ class _LoginScreenState extends State<LoginScreen> {
         });
       }
     }
+  }
+
+  void _showServerConfigDialog() {
+    final urlController = TextEditingController(text: APIService.instance.baseUrl);
+    bool testing = false;
+    String? testResult;
+    bool isSuccess = false;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: Row(
+                children: [
+                  Icon(Icons.wifi_tethering, color: AppTheme.primary),
+                  const SizedBox(width: 10),
+                  Text('Server / LAN Connection', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 18)),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Connect this app/terminal to your Main POS Computer IP or Cloud/VPS Server.',
+                      style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary),
+                    ),
+                    const SizedBox(height: 16),
+                    Text('Backend Server API URL', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: urlController,
+                      decoration: InputDecoration(
+                        hintText: 'e.g. http://192.168.1.100:3000',
+                        prefixIcon: const Icon(Icons.dns_outlined, size: 20),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text('Quick Presets:', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary)),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: [
+                        ActionChip(
+                          label: const Text('http://localhost:3000', style: TextStyle(fontSize: 11)),
+                          onPressed: () => setDialogState(() => urlController.text = 'http://localhost:3000'),
+                        ),
+                        ActionChip(
+                          label: const Text('http://192.168.1.100:3000', style: TextStyle(fontSize: 11)),
+                          onPressed: () => setDialogState(() => urlController.text = 'http://192.168.1.100:3000'),
+                        ),
+                      ],
+                    ),
+                    if (testResult != null) ...[
+                      const SizedBox(height: 14),
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: isSuccess ? Colors.green.shade50 : Colors.red.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: isSuccess ? Colors.green : Colors.red),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(isSuccess ? Icons.check_circle : Icons.error_outline,
+                                color: isSuccess ? Colors.green : Colors.red, size: 18),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                testResult!,
+                                style: TextStyle(color: isSuccess ? Colors.green.shade900 : Colors.red.shade900, fontSize: 12),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: testing ? null : () async {
+                    final targetUrl = urlController.text.trim();
+                    if (targetUrl.isEmpty) return;
+                    setDialogState(() {
+                      testing = true;
+                      testResult = null;
+                    });
+                    try {
+                      final res = await http.get(Uri.parse('$targetUrl/api/categories')).timeout(const Duration(seconds: 4));
+                      if (res.statusCode == 200 || res.statusCode == 401) {
+                        setDialogState(() {
+                          testResult = 'Success! Connected to server.';
+                          isSuccess = true;
+                        });
+                      } else {
+                        setDialogState(() {
+                          testResult = 'Server responded with code ${res.statusCode}';
+                          isSuccess = false;
+                        });
+                      }
+                    } catch (e) {
+                      setDialogState(() {
+                        testResult = 'Cannot reach server at $targetUrl. Ensure phone is on same Wi-Fi.';
+                        isSuccess = false;
+                      });
+                    } finally {
+                      setDialogState(() => testing = false);
+                    }
+                  },
+                  child: testing
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Text('Test Connection'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primary),
+                  onPressed: () async {
+                    final newUrl = urlController.text.trim();
+                    if (newUrl.isNotEmpty) {
+                      await APIService.instance.setBaseUrl(newUrl);
+                      if (mounted) setState(() {});
+                    }
+                    Navigator.pop(context);
+                  },
+                  child: const Text('Save Server URL', style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   @override
@@ -118,41 +258,53 @@ class _LoginScreenState extends State<LoginScreen> {
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          // App Logo
-                          Center(
-                            child: Container(
-                              width: 80,
-                              height: 80,
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                shape: BoxShape.circle,
-                                border: Border.all(color: const Color(0xFFE2E8F0)),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.04),
-                                    blurRadius: 10,
-                                    offset: const Offset(0, 4),
-                                  ),
-                                ],
+                          // App Logo & Settings Button
+                          Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              Container(
+                                width: 80,
+                                height: 80,
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.04),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ],
+                                ),
+                                clipBehavior: Clip.antiAlias,
+                                child: hasLogo
+                                    ? Base64ImageWidget(base64Str: appSettings.logoBase64, fit: BoxFit.cover)
+                                    : hasFavicon
+                                        ? Base64ImageWidget(base64Str: appSettings.faviconBase64, fit: BoxFit.cover)
+                                        : Container(
+                                            padding: const EdgeInsets.all(16),
+                                            decoration: BoxDecoration(
+                                              color: AppTheme.primary.withOpacity(0.1),
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: Icon(
+                                              Icons.restaurant_menu,
+                                              size: 40,
+                                              color: AppTheme.primary,
+                                            ),
+                                          ),
                               ),
-                              clipBehavior: Clip.antiAlias,
-                              child: hasLogo
-                                  ? Base64ImageWidget(base64Str: appSettings.logoBase64, fit: BoxFit.cover)
-                                  : hasFavicon
-                                      ? Base64ImageWidget(base64Str: appSettings.faviconBase64, fit: BoxFit.cover)
-                                      : Container(
-                                          padding: const EdgeInsets.all(16),
-                                          decoration: BoxDecoration(
-                                            color: AppTheme.primary.withOpacity(0.1),
-                                            shape: BoxShape.circle,
-                                          ),
-                                          child: Icon(
-                                            Icons.restaurant_menu,
-                                            size: 40,
-                                            color: AppTheme.primary,
-                                          ),
-                                        ),
-                            ),
+                              Positioned(
+                                right: 0,
+                                top: 0,
+                                child: IconButton(
+                                  icon: Icon(Icons.settings_ethernet, color: AppTheme.primary),
+                                  tooltip: 'Server Connection IP Settings',
+                                  onPressed: _showServerConfigDialog,
+                                ),
+                              ),
+                            ],
                           ),
                           const SizedBox(height: 16),
                           Center(
@@ -274,13 +426,38 @@ class _LoginScreenState extends State<LoginScreen> {
                                     ),
                                   ),
                           ),
-                          const SizedBox(height: 16),
-                          Center(
-                            child: Text(
-                              'Testing DB: Host: localhost | User: root',
-                              style: GoogleFonts.inter(
-                                fontSize: 11,
-                                color: AppTheme.textLightSecondary.withOpacity(0.8),
+                          const SizedBox(height: 20),
+                          InkWell(
+                            onTap: _showServerConfigDialog,
+                            borderRadius: BorderRadius.circular(8),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.wifi_tethering, size: 14, color: AppTheme.primary),
+                                  const SizedBox(width: 6),
+                                  Flexible(
+                                    child: Text(
+                                      'Server: ${APIService.instance.baseUrl}',
+                                      overflow: TextOverflow.ellipsis,
+                                      style: GoogleFonts.inter(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppTheme.primary,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    '(Change IP)',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11,
+                                      color: AppTheme.textLightSecondary,
+                                      decoration: TextDecoration.underline,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),

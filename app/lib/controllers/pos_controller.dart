@@ -150,6 +150,23 @@ class POSController extends ChangeNotifier {
   POSController() {
     _initTts();
     loadKotSoundSettings();
+    _startBackgroundAutoSyncTimer();
+  }
+
+  void _startBackgroundAutoSyncTimer() {
+    Timer.periodic(const Duration(seconds: 5), (_) async {
+      final wasOnline = isOnline;
+      isOnline = await _api.checkOnline();
+      if (isOnline) {
+        final syncRes = await _api.syncOfflineData();
+        if (syncRes != null || !wasOnline) {
+          _fetchActiveOrders();
+          notifyListeners();
+        }
+      } else if (wasOnline) {
+        notifyListeners();
+      }
+    });
   }
 
   void _initTts() async {
@@ -772,20 +789,20 @@ class POSController extends ChangeNotifier {
           }
         }
         
-        // 2. Restore/Update active tables
+        // 2. Restore/Update active tables in real-time
         for (var o in activeDineInOrders) {
           final tid = o.tableId!;
-          final hasLocalPending = tableCarts[tid]?.any((item) => item.status == 'pending') ?? false;
-          
-          if ((selectedTable?.id == tid && cart.isNotEmpty) || hasLocalPending) {
-            tableActiveOrderIds[tid] = o.id!;
-            tableStewards[tid] = o.stewardName;
-            tableStatuses[tid] = o.ackPrinted ? 'billing' : 'seated';
-          } else {
-            tableCarts[tid] = o.items;
-            tableActiveOrderIds[tid] = o.id!;
-            tableStewards[tid] = o.stewardName;
-            tableStatuses[tid] = o.ackPrinted ? 'billing' : 'seated';
+          tableCarts[tid] = o.items;
+          tableActiveOrderIds[tid] = o.id!;
+          tableStewards[tid] = o.stewardName;
+          tableStatuses[tid] = o.ackPrinted ? 'billing' : 'seated';
+
+          // Real-time UI sync: if this table is currently open on the screen, update cart items live!
+          if (selectedTable?.id == tid) {
+            cart = List.from(o.items);
+            if (o.stewardName != null && o.stewardName!.isNotEmpty) {
+              stewardName = o.stewardName;
+            }
           }
         }
         notifyListeners();
@@ -1133,6 +1150,76 @@ class POSController extends ChangeNotifier {
 
     notifyListeners();
     _broadcastLiveState();
+    _triggerTableAutoSync();
+  }
+
+  Timer? _tableAutoSyncTimer;
+
+  void _triggerTableAutoSync() {
+    if (orderType != 'dine_in' || selectedTable == null) return;
+
+    final currentTable = selectedTable!;
+    final tid = currentTable.id;
+
+    if (cart.isNotEmpty) {
+      tableCarts[tid] = List.from(cart);
+      tableStewards[tid] = stewardName;
+      if (tableStatuses[tid] != 'billing') {
+        tableStatuses[tid] = 'seated';
+      }
+    } else {
+      tableCarts.remove(tid);
+      tableStewards.remove(tid);
+      tableStatuses[tid] = 'empty';
+    }
+
+    _tableAutoSyncTimer?.cancel();
+    _tableAutoSyncTimer = Timer(const Duration(milliseconds: 500), () async {
+      try {
+        if (cart.isEmpty) {
+          if (isOnline) {
+            await _api.updateTableStatus(tid, 'empty');
+          }
+          return;
+        }
+
+        final dateStr = DateTime.now().toIso8601String().substring(0, 10).replaceAll('-', '');
+        final timestamp = DateTime.now().millisecondsSinceEpoch.toString().substring(8);
+        final offlineOrderNum = 'ORD-$dateStr-$timestamp';
+
+        final order = OrderModel(
+          orderNumber: offlineOrderNum,
+          tableId: tid,
+          orderType: 'dine_in',
+          customerId: selectedCustomer?.id ?? 1,
+          stewardName: stewardName,
+          status: 'pending',
+          paymentStatus: 'unpaid',
+          subtotal: cartSubtotal,
+          discount: discount,
+          total: cartTotal,
+          cashierId: _api.currentUser?.id ?? 1,
+          shiftId: activeShift?.id ?? 1,
+          kotPrinted: false,
+          ackPrinted: false,
+          barcode: offlineOrderNum,
+          createdAt: DateTime.now().toIso8601String(),
+          items: cart,
+        );
+
+        if (isOnline) {
+          final res = await _api.placeOrderOnline(order);
+          final int generatedId = res['orderId'] ?? 0;
+          if (generatedId > 0) {
+            tableActiveOrderIds[tid] = generatedId;
+          }
+        } else {
+          await LocalDB.instance.saveOrderOffline(order);
+        }
+      } catch (e) {
+        print('Table auto-sync error: $e');
+      }
+    });
   }
 
   void updateCartQuantity(int index, int quantity) {
@@ -1160,6 +1247,7 @@ class POSController extends ChangeNotifier {
     }
     notifyListeners();
     _broadcastLiveState();
+    _triggerTableAutoSync();
   }
 
   void updateCartNotes(int index, String? notes) {
@@ -1178,6 +1266,7 @@ class POSController extends ChangeNotifier {
       extras: old.extras,
     );
     notifyListeners();
+    _triggerTableAutoSync();
   }
 
   void clearCart() {

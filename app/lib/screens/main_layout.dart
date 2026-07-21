@@ -1060,7 +1060,7 @@ class _MainLayoutState extends State<MainLayout> {
                               ),
                               const SizedBox(width: 6),
                               Text(
-                                posController.isOnline ? 'Online' : 'Offline',
+                                posController.isOnline ? 'LAN Online' : 'Offline',
                                 style: GoogleFonts.inter(
                                   fontSize: 10,
                                   fontWeight: FontWeight.bold,
