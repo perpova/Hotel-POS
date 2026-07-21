@@ -38,6 +38,12 @@ class AppSettingsController extends ChangeNotifier {
   bool _isListeningToEvents = false;
   bool _isApplyingWsUpdate = false;
 
+  // ── Dual Barcode Scanners ───────────────────────────────────────────────────
+  bool _enableDualBarcodeScanners = true;
+  String _mainScannerPrefix = 'ORD-,INV-';
+  String _kitchenScannerPrefix = 'KOT-';
+  bool _autoRouteKitchenBarcodes = true;
+
   // ── Branches ───────────────────────────────────────────────────────────────
   List<BranchItem> _branches = [];
 
@@ -68,6 +74,11 @@ class AppSettingsController extends ChangeNotifier {
   String? get queueBgVideoPath => _queueBgVideoPath;
   double get queueBgOpacity => _queueBgOpacity;
 
+  bool get enableDualBarcodeScanners => _enableDualBarcodeScanners;
+  String get mainScannerPrefix => _mainScannerPrefix;
+  String get kitchenScannerPrefix => _kitchenScannerPrefix;
+  bool get autoRouteKitchenBarcodes => _autoRouteKitchenBarcodes;
+
   List<BranchItem> get branches => List.unmodifiable(_branches);
 
   // ── Init / Persistence ─────────────────────────────────────────────────────
@@ -82,6 +93,11 @@ class AppSettingsController extends ChangeNotifier {
     _companyCountryCode = prefs.getString('company_country') ?? '';
     _companyZipCode  = prefs.getString('company_zip')      ?? '';
     _companyAddress  = prefs.getString('company_address')  ?? '';
+
+    _enableDualBarcodeScanners = prefs.getBool('enable_dual_barcode_scanners') ?? true;
+    _mainScannerPrefix = prefs.getString('main_scanner_prefix') ?? 'ORD-,INV-';
+    _kitchenScannerPrefix = prefs.getString('kitchen_scanner_prefix') ?? 'KOT-';
+    _autoRouteKitchenBarcodes = prefs.getBool('auto_route_kitchen_barcodes') ?? true;
 
     final colorHex = prefs.getString('primary_color');
     if (colorHex != null) {
@@ -233,6 +249,26 @@ class AppSettingsController extends ChangeNotifier {
       await prefs.setString('queue_bg_video_path', _queueBgVideoPath!);
     }
     await prefs.setDouble('queue_bg_opacity', _queueBgOpacity);
+    notifyListeners();
+  }
+
+  // ── Dual Barcode Scanners Settings Update ──────────────────────────────────
+  Future<void> saveBarcodeSettings({
+    required bool enableDual,
+    required String mainPrefix,
+    required String kitchenPrefix,
+    required bool autoRouteKitchen,
+  }) async {
+    _enableDualBarcodeScanners = enableDual;
+    _mainScannerPrefix = mainPrefix.trim().isEmpty ? 'ORD-,INV-' : mainPrefix.trim();
+    _kitchenScannerPrefix = kitchenPrefix.trim().isEmpty ? 'KOT-' : kitchenPrefix.trim();
+    _autoRouteKitchenBarcodes = autoRouteKitchen;
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('enable_dual_barcode_scanners', _enableDualBarcodeScanners);
+    await prefs.setString('main_scanner_prefix', _mainScannerPrefix);
+    await prefs.setString('kitchen_scanner_prefix', _kitchenScannerPrefix);
+    await prefs.setBool('auto_route_kitchen_barcodes', _autoRouteKitchenBarcodes);
     notifyListeners();
   }
 

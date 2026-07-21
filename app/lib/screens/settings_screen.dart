@@ -19,7 +19,7 @@ class SettingsScreen extends StatefulWidget {
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
-enum _SettingsTab { company, theme, branches, editProfile, changePassword, rolesPermissions, connection, externalDisplay, kotSound }
+enum _SettingsTab { company, theme, branches, editProfile, changePassword, rolesPermissions, connection, externalDisplay, kotSound, barcodeScanners }
 
 class _SettingsScreenState extends State<SettingsScreen> {
   _SettingsTab _activeTab = _SettingsTab.company;
@@ -39,6 +39,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
+    if (_activeTab == _SettingsTab.rolesPermissions && !APIService.instance.canViewPage('Roles & Permissions')) {
+      _activeTab = _SettingsTab.company;
+    }
     _apiUrlController.text = APIService.instance.baseUrl;
     _loadUserData();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -121,13 +124,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       _item(Icons.person_outline,        'Edit Profile',     _SettingsTab.editProfile),
                       _item(Icons.lock_outline,          'Change Password',  _SettingsTab.changePassword),
                       Divider(height: 1, color: AppTheme.isDarkMode ? const Color(0xFF334155) : const Color(0xFFF1F5F9)),
-                      _section('USERS'),
-                      _item(Icons.shield_outlined,       'Roles & Permissions', _SettingsTab.rolesPermissions),
-                      Divider(height: 1, color: AppTheme.isDarkMode ? const Color(0xFF334155) : const Color(0xFFF1F5F9)),
+                      if (APIService.instance.canViewPage('Roles & Permissions')) ...[
+                        _section('USERS'),
+                        _item(Icons.shield_outlined,       'Roles & Permissions', _SettingsTab.rolesPermissions),
+                        Divider(height: 1, color: AppTheme.isDarkMode ? const Color(0xFF334155) : const Color(0xFFF1F5F9)),
+                      ],
                       _section('SYSTEM'),
                       _item(Icons.settings_ethernet,     'API Connection',   _SettingsTab.connection),
                       _item(Icons.monitor,               'External Display', _SettingsTab.externalDisplay),
                       _item(Icons.volume_up_outlined,    'KOT Sound',        _SettingsTab.kotSound),
+                      _item(Icons.barcode_reader,        'Barcode Scanners', _SettingsTab.barcodeScanners),
                     ],
                   ),
                 ),
@@ -199,6 +205,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _SettingsTab.connection       => 'API Connection',
     _SettingsTab.externalDisplay  => 'External Display',
     _SettingsTab.kotSound         => 'KOT Sound Settings',
+    _SettingsTab.barcodeScanners  => 'Barcode Scanners',
   };
 
   Widget _buildContent() => switch (_activeTab) {
@@ -207,10 +214,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _SettingsTab.branches         => const _BranchesTab(),
     _SettingsTab.editProfile      => _buildEditProfile(),
     _SettingsTab.changePassword   => _buildChangePassword(),
-    _SettingsTab.rolesPermissions => const RolesPermissionsContent(showHeader: false),
+    _SettingsTab.rolesPermissions => APIService.instance.canViewPage('Roles & Permissions')
+        ? const RolesPermissionsContent(showHeader: false)
+        : Center(
+            child: Text(
+              'Access Denied: You do not have permission to view Roles & Permissions.',
+              style: GoogleFonts.inter(color: AppTheme.danger, fontWeight: FontWeight.bold),
+            ),
+          ),
     _SettingsTab.connection       => _buildConnection(),
     _SettingsTab.externalDisplay  => _buildExternalDisplay(),
     _SettingsTab.kotSound         => const _KotSoundTab(),
+    _SettingsTab.barcodeScanners  => const _BarcodeScannersTab(),
   };
 
   // ── Edit Profile ─────────────────────────────────────────────────────────
@@ -2262,6 +2277,406 @@ class _RecordSoundDialogState extends State<_RecordSoundDialog> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ── BARCODE SCANNERS ASSIGNMENT TAB ──────────────────────────────────────────
+class _BarcodeScannersTab extends StatefulWidget {
+  const _BarcodeScannersTab({Key? key}) : super(key: key);
+
+  @override
+  State<_BarcodeScannersTab> createState() => _BarcodeScannersTabState();
+}
+
+class _BarcodeScannersTabState extends State<_BarcodeScannersTab> {
+  bool _enableDual = true;
+  final _mainPrefixController = TextEditingController();
+  final _kitchenPrefixController = TextEditingController();
+  bool _autoRouteKitchen = true;
+  bool _saving = false;
+
+  final _mainTestController = TextEditingController();
+  final _kitchenTestController = TextEditingController();
+  String _mainLastScan = 'No scan test yet';
+  String _kitchenLastScan = 'No scan test yet';
+
+  @override
+  void initState() {
+    super.initState();
+    final appSettings = Provider.of<AppSettingsController>(context, listen: false);
+    _enableDual = appSettings.enableDualBarcodeScanners;
+    _mainPrefixController.text = appSettings.mainScannerPrefix;
+    _kitchenPrefixController.text = appSettings.kitchenScannerPrefix;
+    _autoRouteKitchen = appSettings.autoRouteKitchenBarcodes;
+  }
+
+  @override
+  void dispose() {
+    _mainPrefixController.dispose();
+    _kitchenPrefixController.dispose();
+    _mainTestController.dispose();
+    _kitchenTestController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    setState(() => _saving = true);
+    try {
+      final appSettings = Provider.of<AppSettingsController>(context, listen: false);
+      await appSettings.saveBarcodeSettings(
+        enableDual: _enableDual,
+        mainPrefix: _mainPrefixController.text,
+        kitchenPrefix: _kitchenPrefixController.text,
+        autoRouteKitchen: _autoRouteKitchen,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Barcode Reader assignment settings saved successfully!'),
+          backgroundColor: Color(0xFF10B981),
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Error saving barcode settings: $e'),
+          backgroundColor: AppTheme.danger,
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Barcode Scanners Assignment',
+            style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Assign and calibrate Main POS Barcode Reader & Kitchen KDS Barcode Reader plugged into your POS device.',
+            style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightSecondary),
+          ),
+          const SizedBox(height: 24),
+
+          // Master Switch
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppTheme.primary.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppTheme.primary.withOpacity(0.2)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.barcode_reader, color: AppTheme.primary, size: 24),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Enable Dual USB Barcode Readers',
+                        style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+                      ),
+                      Text(
+                        'Allows assigning separate barcode readers for Main POS Cashier Desk & Kitchen KDS Station.',
+                        style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary),
+                      ),
+                    ],
+                  ),
+                ),
+                Switch(
+                  value: _enableDual,
+                  activeColor: AppTheme.primary,
+                  onChanged: (val) => setState(() => _enableDual = val),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Scanner Cards Row
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 1. MAIN POS BARCODE READER
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: AppTheme.cardLight,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppTheme.borderLight),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Icon(Icons.point_of_sale, color: Colors.blue, size: 20),
+                              ),
+                              const SizedBox(width: 10),
+                              Text(
+                                'Main POS Scanner',
+                                style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+                              ),
+                            ],
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF10B981).withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.check_circle, size: 12, color: Color(0xFF10B981)),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Ready',
+                                  style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF10B981)),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Assigned Purpose:',
+                        style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textLightSecondary),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Product Item Barcodes & Cashier Order Bills',
+                        style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: _mainPrefixController,
+                        style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary),
+                        decoration: InputDecoration(
+                          labelText: 'Accepted Barcode Prefixes (comma separated)',
+                          hintText: 'e.g. ORD-,INV-,MAIN',
+                          labelStyle: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Test Scanner 1 (Scan Barcode below):',
+                        style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textLightSecondary),
+                      ),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: _mainTestController,
+                        onSubmitted: (val) {
+                          setState(() {
+                            _mainLastScan = 'Scanned: "$val" (${DateTime.now().hour}:${DateTime.now().minute}:${DateTime.now().second})';
+                          });
+                        },
+                        style: GoogleFonts.inter(fontSize: 12, color: Colors.blue, fontWeight: FontWeight.bold),
+                        decoration: InputDecoration(
+                          hintText: 'Click here & Scan with Main POS Scanner...',
+                          hintStyle: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary),
+                          prefixIcon: const Icon(Icons.barcode_reader, size: 18, color: Colors.blue),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        _mainLastScan,
+                        style: GoogleFonts.inter(fontSize: 11, fontStyle: FontStyle.italic, color: Colors.blue),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(width: 16),
+
+              // 2. KITCHEN BARCODE READER
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: AppTheme.cardLight,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppTheme.borderLight),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFF9800).withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Icon(Icons.soup_kitchen, color: Color(0xFFFF9800), size: 20),
+                              ),
+                              const SizedBox(width: 10),
+                              Text(
+                                'Kitchen Scanner',
+                                style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+                              ),
+                            ],
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF10B981).withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.check_circle, size: 12, color: Color(0xFF10B981)),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Ready',
+                                  style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF10B981)),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Assigned Purpose:',
+                        style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textLightSecondary),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Kitchen KDS & KOT Ticket Auto-Completion',
+                        style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: _kitchenPrefixController,
+                        style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary),
+                        decoration: InputDecoration(
+                          labelText: 'Accepted Barcode Prefixes (comma separated)',
+                          hintText: 'e.g. KOT-,TK-,DI-',
+                          labelStyle: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Test Scanner 2 (Scan KOT Ticket below):',
+                        style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textLightSecondary),
+                      ),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: _kitchenTestController,
+                        onSubmitted: (val) {
+                          setState(() {
+                            _kitchenLastScan = 'Scanned: "$val" (${DateTime.now().hour}:${DateTime.now().minute}:${DateTime.now().second})';
+                          });
+                        },
+                        style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFFFF9800), fontWeight: FontWeight.bold),
+                        decoration: InputDecoration(
+                          hintText: 'Click here & Scan with Kitchen Scanner...',
+                          hintStyle: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary),
+                          prefixIcon: const Icon(Icons.barcode_reader, size: 18, color: Color(0xFFFF9800)),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        _kitchenLastScan,
+                        style: GoogleFonts.inter(fontSize: 11, fontStyle: FontStyle.italic, color: const Color(0xFFFF9800)),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+
+          // Auto Route Toggle
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppTheme.cardLight,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppTheme.borderLight),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.alt_route_rounded, color: Colors.indigo, size: 22),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Auto-Route Kitchen Barcodes to KDS',
+                        style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+                      ),
+                      Text(
+                        'Automatically completes or updates kitchen order tickets when scanned by Kitchen Barcode Reader.',
+                        style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary),
+                      ),
+                    ],
+                  ),
+                ),
+                Switch(
+                  value: _autoRouteKitchen,
+                  activeColor: AppTheme.primary,
+                  onChanged: (val) => setState(() => _autoRouteKitchen = val),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // Save Button
+          Align(
+            alignment: Alignment.centerRight,
+            child: ElevatedButton.icon(
+              onPressed: _saving ? null : _save,
+              icon: _saving
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Icon(Icons.save_outlined, size: 18),
+              label: Text('Save Barcode Settings', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
