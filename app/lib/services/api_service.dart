@@ -247,14 +247,12 @@ class APIService {
 
   bool isPosCartViewHidden() {
     if (currentUser == null) return false;
-    final roleName = currentUser!.role.trim().toLowerCase();
 
     for (final p in currentUserPermissions) {
       if (p['page']?.toString().toLowerCase() == 'pos: hide cart view') {
         return p['can_view'] == 1 || p['can_view'] == true;
       }
     }
-    if (roleName == 'short eats cabin') return true;
     return false;
   }
 

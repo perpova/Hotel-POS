@@ -888,6 +888,9 @@ app.put('/api/tables/:id/status', authenticateToken, async (req, res) => {
     const { id } = req.params;
     const { status, steward_name, current_order_id } = req.body; // status: 'empty', 'seated', 'billing'
     try {
+        if (status === 'empty') {
+            await db.query('UPDATE orders SET status = "cancelled" WHERE table_id = ? AND payment_status = "unpaid"', [id]);
+        }
         await db.query(
             'UPDATE dining_tables SET status = ?, steward_name = ?, current_order_id = ? WHERE id = ?',
             [status, steward_name || null, current_order_id || null, id]
@@ -895,8 +898,9 @@ app.put('/api/tables/:id/status', authenticateToken, async (req, res) => {
         
         const [updatedTable] = await db.query('SELECT * FROM dining_tables WHERE id = ?', [id]);
         
-        // Broadcast table status update to all terminals
+        // Broadcast table status update and order cancellation to all terminals
         broadcast({ type: 'table_status_changed', data: updatedTable });
+        broadcast({ type: 'order_updated', data: { table_id: id, status: 'cancelled' } });
         
         res.json(updatedTable);
     } catch (err) {

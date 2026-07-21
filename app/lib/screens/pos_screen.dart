@@ -1426,6 +1426,88 @@ class _POSScreenState extends State<POSScreen> {
     );
   }
 
+  void _showTypeQuantityDialog(BuildContext context, OrderItemModel item, int index, POSController controller) {
+    final TextEditingController qtyController = TextEditingController(text: item.quantity.toString());
+    
+    void submitQty() {
+      final newQty = int.tryParse(qtyController.text.trim()) ?? item.quantity;
+      controller.updateCartQuantity(index, newQty);
+      Navigator.pop(context);
+    }
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) {
+        return AlertDialog(
+          backgroundColor: AppTheme.cardLight,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text(
+            'Edit Quantity: ${item.productName}',
+            style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16, color: AppTheme.textLightPrimary),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: qtyController,
+                autofocus: true,
+                keyboardType: TextInputType.number,
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) => submitQty(),
+                textAlign: TextAlign.center,
+                style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.bold, color: AppTheme.primary),
+                decoration: InputDecoration(
+                  labelText: 'Enter Quantity',
+                  labelStyle: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                alignment: WrapAlignment.center,
+                children: [1, 5, 10, 20, 50].map((quickAdd) {
+                  return InkWell(
+                    onTap: () {
+                      final current = int.tryParse(qtyController.text) ?? 0;
+                      qtyController.text = (current + quickAdd).toString();
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primary.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: AppTheme.primary.withOpacity(0.3)),
+                      ),
+                      child: Text('+$quickAdd', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primary)),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogCtx),
+              child: Text('Cancel', style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary)),
+            ),
+            ElevatedButton(
+              onPressed: submitQty,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              child: Text('Update', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Widget _buildCartRow(OrderItemModel item, int index, POSController controller) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
@@ -1483,12 +1565,24 @@ class _POSScreenState extends State<POSScreen> {
                     child: const Icon(Icons.remove, size: 14, color: Color(0xFFEF4444)),
                   ),
                 ),
-                const SizedBox(width: 8),
-                Text(
-                  '${item.quantity}',
-                  style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+                const SizedBox(width: 6),
+                InkWell(
+                  onTap: () => _showTypeQuantityDialog(context, item, index, controller),
+                  borderRadius: BorderRadius.circular(6),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primary.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: AppTheme.primary.withOpacity(0.3)),
+                    ),
+                    child: Text(
+                      '${item.quantity}',
+                      style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primary),
+                    ),
+                  ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 6),
                 InkWell(
                   onTap: () => controller.updateCartQuantity(index, item.quantity + 1),
                   borderRadius: BorderRadius.circular(6),

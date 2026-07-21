@@ -749,84 +749,91 @@ class _MainLayoutState extends State<MainLayout> {
               }
 
               return Expanded(
-                child: ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  itemCount: visibleCategories.length,
-                  itemBuilder: (context, catIdx) {
-                    final cat = visibleCategories[catIdx];
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (cat.title != null) ...[
-                        Padding(
-                          padding: const EdgeInsets.only(left: 12, top: 8, bottom: 4),
-                          child: Text(
-                            cat.title!.tr(context),
-                            style: GoogleFonts.inter(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: const Color(0xFF94A3B8), // Slate header text
-                              letterSpacing: 1.1,
-                            ),
-                          ),
-                        ),
-                      ],
-                      ...cat.items.map((item) {
-                        final isSelected = _selectedIndex == item.screenIndex;
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 2),
-                          child: ListTile(
-                            selected: isSelected,
-                            selectedTileColor: const Color(0xFFFFF0F5), // Light pink tile bg
-                            hoverColor: Colors.pink.withOpacity(0.02),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                            leading: Icon(
-                              item.icon,
-                              color: isSelected ? AppTheme.primary : Color(0xFF7A869A),
-                              size: 18,
-                            ),
-                            title: Text(
-                              item.title.tr(context),
-                              style: GoogleFonts.inter(
-                                fontSize: 13,
-                                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                                color: isSelected ? AppTheme.primary : Color(0xFF7A869A),
-                              ),
-                            ),
-                            onTap: () {
-                              if (posController.activeShift == null && item.screenIndex != 5) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Please start your daily shift first by setting the opening cash drawer balance.'),
-                                    backgroundColor: Colors.red,
+                child: Column(
+                  children: [
+                    Expanded(
+                      child: ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        itemCount: visibleCategories.length,
+                        itemBuilder: (context, catIdx) {
+                          final cat = visibleCategories[catIdx];
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (cat.title != null) ...[
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 12, top: 8, bottom: 4),
+                                  child: Text(
+                                    cat.title!.tr(context),
+                                    style: GoogleFonts.inter(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: const Color(0xFF94A3B8), // Slate header text
+                                      letterSpacing: 1.1,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                              ...cat.items.map((item) {
+                                final isSelected = _selectedIndex == item.screenIndex;
+                                return Container(
+                                  margin: const EdgeInsets.only(bottom: 2),
+                                  child: ListTile(
+                                    selected: isSelected,
+                                    selectedTileColor: const Color(0xFFFFF0F5), // Light pink tile bg
+                                    hoverColor: Colors.pink.withOpacity(0.02),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    leading: Icon(
+                                      item.icon,
+                                      color: isSelected ? AppTheme.primary : Color(0xFF7A869A),
+                                      size: 18,
+                                    ),
+                                    title: Text(
+                                      item.title.tr(context),
+                                      style: GoogleFonts.inter(
+                                        fontSize: 13,
+                                        fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                        color: isSelected ? AppTheme.primary : Color(0xFF7A869A),
+                                      ),
+                                    ),
+                                    onTap: () {
+                                      if (posController.activeShift == null && item.screenIndex != 5) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(
+                                            content: Text('Please start your daily shift first by setting the opening cash drawer balance.'),
+                                            backgroundColor: Colors.red,
+                                          ),
+                                        );
+                                        return;
+                                      }
+                                      setState(() {
+                                        _selectedIndex = item.screenIndex;
+                                        if (item.screenIndex == 1) {
+                                          _isSidebarCollapsed = true;
+                                        } else {
+                                          _isSidebarCollapsed = false;
+                                        }
+                                      });
+                                      if (!isDesktop) {
+                                        Navigator.pop(context);
+                                      }
+                                    },
+                                    dense: true,
                                   ),
                                 );
-                                return;
-                              }
-                              setState(() {
-                                _selectedIndex = item.screenIndex;
-                                if (item.screenIndex == 1) {
-                                  _isSidebarCollapsed = true;
-                                } else {
-                                  _isSidebarCollapsed = false;
-                                }
-                              });
-                              if (!isDesktop) {
-                                Navigator.pop(context);
-                              }
-                            },
-                            dense: true,
-                          ),
-                        );
-                      }).toList(),
-                      if (cat.title == 'SYSTEM') ...[
-                        _buildSidebarUpdateWidget(),
-                      ],
-                    ],
-                  );
-                },
-              ),
-            );
+                              }).toList(),
+                            ],
+                          );
+                        },
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      child: _buildSidebarUpdateWidget(),
+                    ),
+                  ],
+                ),
+              );
           })(),
 
             // User Profile Section & Logout
