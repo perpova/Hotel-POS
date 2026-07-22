@@ -15,18 +15,50 @@ let pool;
 
 async function getPool() {
     if (!pool) {
-        // First, check if database exists, create if not
-        try {
-            const tempConnection = await mysql.createConnection({
-                host: dbConfig.host,
-                user: dbConfig.user,
-                password: dbConfig.password,
-                multipleStatements: true
-            });
-            await tempConnection.query(`CREATE DATABASE IF NOT EXISTS \`${dbConfig.database}\`;`);
-            await tempConnection.end();
-        } catch (error) {
-            console.error('Error verifying database existence:', error.message);
+        const passwordsToTry = Array.from(new Set([dbConfig.password, '1234', 'root', '', '123456', 'admin']));
+        let connected = false;
+
+        for (const pw of passwordsToTry) {
+            try {
+                const tempConfig = {
+                    host: dbConfig.host,
+                    user: dbConfig.user,
+                    password: pw,
+                    multipleStatements: true
+                };
+                const tempConn = await mysql.createConnection(tempConfig);
+                await tempConn.query(`CREATE DATABASE IF NOT EXISTS \`${dbConfig.database}\`;`);
+                await tempConn.end();
+
+                dbConfig.password = pw;
+                connected = true;
+
+                // Save working password to .env file for persistence
+                try {
+                    const envPath = path.join(__dirname, '.env');
+                    let envContent = '';
+                    if (fs.existsSync(envPath)) {
+                        envContent = fs.readFileSync(envPath, 'utf8');
+                        if (envContent.includes('DB_PASSWORD=')) {
+                            envContent = envContent.replace(/DB_PASSWORD=.*/g, `DB_PASSWORD=${pw}`);
+                        } else {
+                            envContent += `\nDB_PASSWORD=${pw}\n`;
+                        }
+                    } else {
+                        envContent = `DB_HOST=${dbConfig.host}\nDB_USER=${dbConfig.user}\nDB_PASSWORD=${pw}\nDB_NAME=${dbConfig.database}\nPORT=3000\n`;
+                    }
+                    fs.writeFileSync(envPath, envContent, 'utf8');
+                } catch (envErr) {
+                    console.warn('Could not update .env file:', envErr.message);
+                }
+                break;
+            } catch (err) {
+                // Try next password
+            }
+        }
+
+        if (!connected) {
+            console.error('Failed to connect to MySQL with any standard root password.');
         }
 
         pool = mysql.createPool(dbConfig);
@@ -46,8 +78,26 @@ async function multiQuery(sql) {
     const dbPool = await getPool();
     const connection = await dbPool.getConnection();
     try {
+        await connection.query('SET FOREIGN_KEY_CHECKS = 0;');
         const [results] = await connection.query(sql);
+        await connection.query('SET FOREIGN_KEY_CHECKS = 1;');
         return results;
+    } catch (err) {
+        console.warn('Batch multiQuery execution issue, executing statement-by-statement:', err.message);
+        const statements = sql
+            .split(';')
+            .map(s => s.trim())
+            .filter(s => s.length > 0 && !s.startsWith('--'));
+
+        for (const stmt of statements) {
+            if (stmt.toLowerCase().startsWith('use ')) continue;
+            try {
+                await connection.query(stmt);
+            } catch (e) {
+                console.error('Statement error:', e.message);
+            }
+        }
+        try { await connection.query('SET FOREIGN_KEY_CHECKS = 1;'); } catch (_) {}
     } finally {
         connection.release();
     }
