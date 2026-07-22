@@ -7,6 +7,9 @@ import '../providers/auth_provider.dart';
 import '../providers/realtime_provider.dart';
 import '../screens/login_screen.dart';
 import 'users_permissions_screen.dart';
+import '../core/update_service.dart';
+import '../widgets/update_dialog.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({Key? key}) : super(key: key);
@@ -18,8 +21,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _urlCtrl = TextEditingController();
   bool _isConnected = false;
   bool _testingConn = false;
+  bool _checkingUpdate = false;
   List<Map<String, dynamic>> _notifications = [];
   bool _loadingNotifs = false;
+
+  Future<void> _checkUpdate() async {
+    setState(() => _checkingUpdate = true);
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      final info = await UpdateService.instance.checkForUpdate(manual: true);
+      if (mounted) {
+        setState(() => _checkingUpdate = false);
+        if (info.hasUpdate) {
+          UpdateDialog.show(context, info);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Your app is up to date! (v${packageInfo.version})'),
+            backgroundColor: AppColors.success,
+            behavior: SnackBarBehavior.floating,
+          ));
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _checkingUpdate = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Failed to check for updates: $e'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
+    }
+  }
 
   @override
   void initState() {
@@ -394,7 +427,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             child: Column(
               children: [
-                _infoTile(Icons.info_outline_rounded, 'Version', 'Hotel POS Admin v1.0'),
+                ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(7),
+                    decoration: BoxDecoration(
+                      color: AppColors.infoGlow,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: _checkingUpdate
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.info))
+                        : const Icon(Icons.system_update_rounded, color: AppColors.info, size: 18),
+                  ),
+                  title: const Text('Check for Updates', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w600)),
+                  subtitle: const Text('Check for new version', style: TextStyle(color: AppColors.textMuted, fontSize: 11)),
+                  trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
+                  onTap: _checkingUpdate ? null : _checkUpdate,
+                ),
                 const Divider(height: 1),
                 _infoTile(Icons.business_rounded, 'Developer', 'Perpova Developers'),
                 const Divider(height: 1),

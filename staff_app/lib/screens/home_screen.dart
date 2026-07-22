@@ -10,6 +10,9 @@ import '../providers/shift_provider.dart';
 import 'history_screen.dart';
 import 'my_attendance_screen.dart';
 import 'my_salary_screen.dart';
+import '../services/update_service.dart';
+import '../widgets/update_dialog.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -29,7 +32,41 @@ class _HomeScreenState extends State<HomeScreen> {
       context.read<ShiftProvider>().load();
       _loadActivity();
       _checkWidgetLaunch();
+      _checkAutoUpdate();
     });
+  }
+
+  Future<void> _checkAutoUpdate() async {
+    try {
+      final info = await UpdateService.instance.checkForUpdate(manual: false);
+      if (info.hasUpdate && mounted) {
+        UpdateDialog.show(context, info);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _checkManualUpdate() async {
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      final info = await UpdateService.instance.checkForUpdate(manual: true);
+      if (mounted) {
+        if (info.hasUpdate) {
+          UpdateDialog.show(context, info);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Staff App is up to date! (v${packageInfo.version})'),
+            backgroundColor: AppColors.success,
+          ));
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Failed to check updates: $e'),
+          backgroundColor: AppColors.error,
+        ));
+      }
+    }
   }
 
   Future<void> _checkWidgetLaunch() async {
@@ -143,6 +180,11 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.system_update_rounded, color: AppColors.info),
+            tooltip: 'Check for Updates',
+            onPressed: _checkManualUpdate,
+          ),
           IconButton(
             icon: const Icon(Icons.history_rounded, color: AppColors.textSecondary),
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const HistoryScreen())),

@@ -1,5 +1,6 @@
 import 'dart:io';
 import '../services/update_service.dart';
+import '../widgets/update_dialog.dart';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -65,7 +66,7 @@ class _MainLayoutState extends State<MainLayout> {
 
   // ── Update helpers (delegating to UpdateService) ─────────────────────────
 
-  Future<void> _checkForUpdates() async {
+  Future<void> _checkForUpdates({bool manual = false}) async {
     if (_isCheckingUpdate) return;
     if (mounted) setState(() {
       _isCheckingUpdate = true;
@@ -82,13 +83,26 @@ class _MainLayoutState extends State<MainLayout> {
               'https://github.com/Perpova/hotel-pos/releases/latest';
           _isDirectDownload = info.isDirectDownload;
         });
+        UpdateDialog.show(context, info);
       } else if (info.latestVersion.isEmpty) {
         setState(() => _updateStatus = 'error');
+        if (manual) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Failed to check for updates'),
+            backgroundColor: Colors.red,
+          ));
+        }
       } else {
         setState(() {
           _latestVersion = POSController.appVersion;
           _updateStatus  = 'up_to_date';
         });
+        if (manual) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Your POS System is up to date! (v${POSController.appVersion})'),
+            backgroundColor: const Color(0xFF10B981),
+          ));
+        }
       }
     } catch (_) {
       if (mounted) setState(() => _updateStatus = 'error');

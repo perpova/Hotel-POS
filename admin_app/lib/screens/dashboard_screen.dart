@@ -8,6 +8,8 @@ import '../providers/dashboard_provider.dart';
 import '../providers/realtime_provider.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/order_details_dialog.dart';
+import '../core/update_service.dart';
+import '../widgets/update_dialog.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({Key? key}) : super(key: key);
@@ -18,6 +20,23 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   final _curr = NumberFormat('#,##0.00', 'en_US');
   final _num  = NumberFormat('#,##0',    'en_US');
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkAutoUpdate();
+    });
+  }
+
+  Future<void> _checkAutoUpdate() async {
+    try {
+      final info = await UpdateService.instance.checkForUpdate(manual: false);
+      if (info.hasUpdate && mounted) {
+        UpdateDialog.show(context, info);
+      }
+    } catch (_) {}
+  }
 
   @override
   Widget build(BuildContext context) {

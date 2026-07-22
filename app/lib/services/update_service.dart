@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 class UpdateInfo {
   final bool hasUpdate;
   final String latestVersion;
+  final String? releaseDate;
   final String? downloadUrl;
   final String? changelog;
   final bool isDirectDownload; // true if downloadUrl points to a .zip asset
@@ -16,6 +17,7 @@ class UpdateInfo {
   const UpdateInfo({
     required this.hasUpdate,
     required this.latestVersion,
+    this.releaseDate,
     this.downloadUrl,
     this.changelog,
     this.isDirectDownload = false,
@@ -99,7 +101,7 @@ class UpdateService {
   Future<UpdateInfo> checkForUpdate() async {
     try {
       final response = await http.get(
-        Uri.parse(_apiUrl),
+        Uri.parse('https://api.github.com/repos/$githubRepo/releases'),
         headers: {
           'Accept':     'application/vnd.github.v3+json',
           'User-Agent': 'HotelPOS-Updater',
@@ -110,54 +112,69 @@ class UpdateService {
         return const UpdateInfo(hasUpdate: false, latestVersion: '');
       }
 
-      final Map<String, dynamic> release =
-          jsonDecode(response.body) as Map<String, dynamic>;
-
-      final String remoteTag = (release['tag_name'] as String?) ?? '';
-      final String changelog  = (release['body']     as String?) ??
-          'No changelog provided.';
-      final List<dynamic> assets =
-          (release['assets'] as List<dynamic>?) ?? [];
-
-      // Prefer .zip asset for Windows self-update; fall back to release page
-      String? downloadUrl;
-      bool    isDirectDownload = false;
-
-      for (final asset in assets) {
-        if (asset is Map) {
-          final name = (asset['name'] as String?) ?? '';
-          if (name.toLowerCase().endsWith('.zip')) {
-            downloadUrl      = asset['browser_download_url'] as String?;
-            isDirectDownload = true;
-            break;
-          }
-        }
-      }
-
-      // If no zip asset, use the HTML release page
-      downloadUrl ??=
-          (release['html_url'] as String?) ?? _releasesUrl;
-
-      if (remoteTag.isEmpty) {
+      final List<dynamic> releases = jsonDecode(response.body) as List<dynamic>;
+      if (releases.isEmpty) {
         return const UpdateInfo(hasUpdate: false, latestVersion: '');
       }
 
-      final packageInfo   = await PackageInfo.fromPlatform();
-      final currentVersion = packageInfo.version;
-      final currentBuild   = packageInfo.buildNumber;
+      for (final release in releases) {
+        if (release is! Map) continue;
+        if (release['draft'] == true) continue;
 
-      final hasUpdate =
-          _isNewerVersion(currentVersion, currentBuild, remoteTag);
+        final List<dynamic> assets = (release['assets'] as List<dynamic>?) ?? [];
+        String? downloadUrl;
+        bool isDirectDownload = false;
 
-      return UpdateInfo(
-        hasUpdate:        hasUpdate,
-        latestVersion:    remoteTag,
-        downloadUrl:      downloadUrl,
-        changelog:        changelog,
-        isDirectDownload: isDirectDownload,
-      );
+        for (final asset in assets) {
+          if (asset is Map) {
+            final name = (asset['name'] as String?) ?? '';
+            final lowerName = name.toLowerCase();
+            if (lowerName.endsWith('.zip') ||
+                (lowerName.endsWith('.apk') && (lowerName.contains('main') || lowerName.contains('pos')) && !lowerName.contains('admin') && !lowerName.contains('staff'))) {
+              downloadUrl = asset['browser_download_url'] as String?;
+              if (lowerName.endsWith('.zip')) {
+                isDirectDownload = true;
+              }
+              break;
+            }
+          }
+        }
+
+        if (downloadUrl != null) {
+          final String remoteTag = (release['tag_name'] as String?) ?? '';
+          if (remoteTag.isEmpty) continue;
+
+          final String changelog = (release['body'] as String?) ?? 'No changelog provided.';
+          final String rawCreatedAt = (release['created_at'] as String?) ?? '';
+          String formattedDate = '';
+          if (rawCreatedAt.isNotEmpty) {
+            try {
+              final dt = DateTime.parse(rawCreatedAt).toLocal();
+              formattedDate = '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}:${dt.second.toString().padLeft(2, '0')}';
+            } catch (_) {
+              formattedDate = rawCreatedAt.length >= 10 ? rawCreatedAt.substring(0, 10) : rawCreatedAt;
+            }
+          }
+
+          final packageInfo = await PackageInfo.fromPlatform();
+          final currentVersion = packageInfo.version;
+          final currentBuild = packageInfo.buildNumber;
+
+          final hasUpdate = _isNewerVersion(currentVersion, currentBuild, remoteTag);
+
+          return UpdateInfo(
+            hasUpdate: hasUpdate,
+            latestVersion: remoteTag,
+            releaseDate: formattedDate,
+            downloadUrl: downloadUrl,
+            changelog: changelog,
+            isDirectDownload: isDirectDownload,
+          );
+        }
+      }
+
+      return const UpdateInfo(hasUpdate: false, latestVersion: '');
     } catch (_) {
-      // On any error (network, parse, etc.) gracefully report no update
       return const UpdateInfo(hasUpdate: false, latestVersion: '');
     }
   }
