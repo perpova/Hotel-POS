@@ -10,6 +10,8 @@ import 'package:pdf/widgets.dart' as pw;
 import '../core/api_service.dart';
 import '../core/theme.dart';
 import '../models/models.dart';
+import '../widgets/order_details_dialog.dart';
+import 'staff_payroll_screen.dart';
 
 // ─────────────────────────────────────────────────────────────
 //  REPORTS SCREEN  — 6 tabs with PDF save
@@ -325,6 +327,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
       appBar: AppBar(
         title: const Text('Reports & Logs'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.badge_outlined, color: AppColors.primary),
+            tooltip: 'Staff Attendance & Payroll',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const StaffPayrollScreen()),
+            ),
+          ),
           if (_pdfBusy)
             const Padding(padding: EdgeInsets.only(right: 12),
               child: Center(child: SizedBox(width: 18, height: 18,
@@ -593,19 +603,25 @@ class _CashierTab extends StatelessWidget {
               final o = e.value;
               return Column(children: [
                 if (e.key > 0) const Divider(height: 1),
-                Padding(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  child: Row(children: [
-                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(o['order_number']?.toString() ?? '',
-                          style: const TextStyle(color: AppColors.textPrimary, fontSize: 12, fontWeight: FontWeight.w600)),
-                      Text('${ty(o['order_type'])} · ${ft(o['created_at']?.toString() ?? '')}',
-                          style: const TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                InkWell(
+                  onTap: () {
+                    final orderId = o['id'] ?? o['order_id'] ?? o['order_number'];
+                    if (orderId != null) OrderDetailsDialog.show(context, orderId);
+                  },
+                  child: Padding(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    child: Row(children: [
+                      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(o['order_number']?.toString() ?? '',
+                            style: const TextStyle(color: AppColors.textPrimary, fontSize: 12, fontWeight: FontWeight.w600)),
+                        Text('${ty(o['order_type'])} · ${ft(o['created_at']?.toString() ?? '')}',
+                            style: const TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                      ])),
+                      _PayBadge(o['payment_method']?.toString()),
+                      const SizedBox(width: 8),
+                      Text('LKR ${curr.format(toD(o['total']))}',
+                          style: const TextStyle(color: AppColors.primary, fontSize: 13, fontWeight: FontWeight.w700)),
                     ])),
-                    _PayBadge(o['payment_method']?.toString()),
-                    const SizedBox(width: 8),
-                    Text('LKR ${curr.format(toD(o['total']))}',
-                        style: const TextStyle(color: AppColors.primary, fontSize: 13, fontWeight: FontWeight.w700)),
-                  ])),
+                ),
               ]);
             }).toList()),
           ),
@@ -1116,32 +1132,39 @@ class _AllOrdersTabState extends State<_AllOrdersTab> {
                 final paid      = o['payment_status'] == 'paid';
                 final cancelled = o['status'] == 'cancelled';
                 final sc = cancelled ? AppColors.error : paid ? AppColors.success : AppColors.warning;
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(color: AppColors.bgCard, borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppColors.border)),
-                  child: Row(children: [
-                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Row(children: [
-                        Text(o['order_number']?.toString() ?? '',
-                            style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700, fontSize: 12)),
-                        const SizedBox(width: 6),
-                        Container(padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                          decoration: BoxDecoration(color: sc.withOpacity(0.12), borderRadius: BorderRadius.circular(4)),
-                          child: Text(cancelled ? 'CANCELLED' : paid ? 'PAID' : 'UNPAID',
-                              style: TextStyle(color: sc, fontSize: 8, fontWeight: FontWeight.w700))),
+                return InkWell(
+                  onTap: () {
+                    final orderId = o['id'] ?? o['order_id'] ?? o['order_number'];
+                    if (orderId != null) OrderDetailsDialog.show(context, orderId);
+                  },
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(color: AppColors.bgCard, borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.border)),
+                    child: Row(children: [
+                      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Row(children: [
+                          Text(o['order_number']?.toString() ?? '',
+                              style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700, fontSize: 12)),
+                          const SizedBox(width: 6),
+                          Container(padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                            decoration: BoxDecoration(color: sc.withOpacity(0.12), borderRadius: BorderRadius.circular(4)),
+                            child: Text(cancelled ? 'CANCELLED' : paid ? 'PAID' : 'UNPAID',
+                                style: TextStyle(color: sc, fontSize: 8, fontWeight: FontWeight.w700))),
+                        ]),
+                        const SizedBox(height: 2),
+                        Text('${widget.ty(o['order_type'])} · ${o['cashier_name'] ?? ''} · ${widget.fd(o['created_at']?.toString() ?? '')}',
+                            style: const TextStyle(color: AppColors.textSecondary, fontSize: 10)),
+                      ])),
+                      Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                        Text('LKR ${widget.curr.format(widget.toD(o['total']))}',
+                            style: const TextStyle(color: AppColors.primary, fontSize: 13, fontWeight: FontWeight.w700)),
+                        _PayBadge(o['payment_method']?.toString()),
                       ]),
-                      const SizedBox(height: 2),
-                      Text('${widget.ty(o['order_type'])} · ${o['cashier_name'] ?? ''} · ${widget.fd(o['created_at']?.toString() ?? '')}',
-                          style: const TextStyle(color: AppColors.textSecondary, fontSize: 10)),
-                    ])),
-                    Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                      Text('LKR ${widget.curr.format(widget.toD(o['total']))}',
-                          style: const TextStyle(color: AppColors.primary, fontSize: 13, fontWeight: FontWeight.w700)),
-                      _PayBadge(o['payment_method']?.toString()),
                     ]),
-                  ]),
+                  ),
                 ).animate(key: ValueKey(o['id'])).fadeIn(duration: 180.ms);
               }),
       ),

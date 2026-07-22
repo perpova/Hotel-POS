@@ -63,7 +63,10 @@ flutter:
 
 # ── App Launcher Icons ─────────────────────────────────────────────────────
 flutter_launcher_icons:
-  # Windows .ico icon (shown in taskbar, title bar, exe file)
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/images/mhb_logo.png"
+  min_sdk_android: 21
   windows:
     generate: true
     image_path: "assets/images/mhb_logo.png"

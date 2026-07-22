@@ -2475,6 +2475,127 @@ app.get('/api/lankaqr/generate', async (req, res) => {
 });
 
 // ----------------------------------------------------
+// POS CASHIER SHIFTS & DRAWER RECONCILIATION
+// ----------------------------------------------------
+
+app.get('/api/shifts/current', authenticateToken, async (req, res) => {
+    try {
+        const shifts = await db.query(
+            "SELECT * FROM shifts WHERE status = 'open' ORDER BY id DESC LIMIT 1"
+        );
+        if (shifts.length === 0) return res.status(200).send(null);
+        res.json(shifts[0]);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/shifts/open', authenticateToken, async (req, res) => {
+    try {
+        const { opening_balance } = req.body;
+        const userId = req.user.id;
+
+        // Check if shift is already open
+        const existing = await db.query(
+            "SELECT * FROM shifts WHERE status = 'open' ORDER BY id DESC LIMIT 1"
+        );
+
+        let activeShift = null;
+        if (existing.length > 0) {
+            activeShift = existing[0];
+        } else {
+            const result = await db.query(
+                "INSERT INTO shifts (user_id, start_time, opening_balance, status) VALUES (?, NOW(), ?, 'open')",
+                [userId, opening_balance || 0.00]
+            );
+            const [newShift] = await db.query("SELECT * FROM shifts WHERE id = ?", [result.insertId]);
+            activeShift = newShift;
+        }
+
+        // Auto clock-in user to staff_shifts if not already clocked in
+        const activeStaffShift = await db.query(
+            "SELECT * FROM staff_shifts WHERE user_id = ? AND status = 'active'",
+            [userId]
+        );
+        if (activeStaffShift.length === 0) {
+            await db.query(
+                "INSERT INTO staff_shifts (user_id, clock_in, status) VALUES (?, NOW(), 'active')",
+                [userId]
+            );
+        }
+
+        broadcast({ type: 'shift_updated', data: activeShift });
+        broadcast({ type: 'staff_attendance_updated' });
+
+        res.json(activeShift);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/shifts/close', authenticateToken, async (req, res) => {
+    try {
+        const { shift_id, closing_balance, actual_closing_balance } = req.body;
+        const userId = req.user.id;
+
+        await db.query(
+            "UPDATE shifts SET end_time = NOW(), closing_balance = ?, actual_closing_balance = ?, status = 'closed' WHERE id = ?",
+            [closing_balance || 0.00, actual_closing_balance || 0.00, shift_id]
+        );
+
+        // Auto clock-out user in staff_shifts if clocked in
+        const activeStaffShift = await db.query(
+            "SELECT * FROM staff_shifts WHERE user_id = ? AND status = 'active' ORDER BY id DESC LIMIT 1",
+            [userId]
+        );
+        if (activeStaffShift.length > 0) {
+            const shift = activeStaffShift[0];
+            const clockInTime = new Date(shift.clock_in);
+            const now = new Date();
+            const durationMinutes = Math.max(1, Math.round((now.getTime() - clockInTime.getTime()) / 60000));
+
+            await db.query(
+                "UPDATE staff_shifts SET clock_out = NOW(), duration_minutes = ?, status = 'completed' WHERE id = ?",
+                [durationMinutes, shift.id]
+            );
+        }
+
+        const [closedShift] = await db.query("SELECT * FROM shifts WHERE id = ?", [shift_id]);
+
+        broadcast({ type: 'shift_updated', data: closedShift });
+        broadcast({ type: 'staff_attendance_updated' });
+
+        res.json(closedShift);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/shifts/drawer-log', authenticateToken, async (req, res) => {
+    try {
+        const { shift_id, type, amount, reason } = req.body;
+        const result = await db.query(
+            "INSERT INTO cash_drawer_logs (shift_id, type, amount, reason) VALUES (?, ?, ?, ?)",
+            [shift_id, type, amount, reason || '']
+        );
+        broadcast({ type: 'shift_updated' });
+        res.json({ success: true, id: result.insertId });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.get('/api/shifts/:shiftId/drawer-logs', authenticateToken, async (req, res) => {
+    try {
+        const { shiftId } = req.params;
+        const logs = await db.query("SELECT * FROM cash_drawer_logs WHERE shift_id = ? ORDER BY timestamp DESC", [shiftId]);
+        res.json(logs);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ----------------------------------------------------
 // SYNCHRONIZATION ENDPOINT (LAN-first offline sync)
 // ----------------------------------------------------
 // Frontend calls this to upload offline orders and download latest server catalog
@@ -3690,6 +3811,79 @@ app.get('/api/orders/range', authenticateToken, async (req, res) => {
     }
 });
 
+// GET single order details by ID or order_number / pre_order_number
+app.get('/api/orders/:id', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    try {
+        // First check in orders table
+        let orders = await db.query(`
+            SELECT o.*,
+                   dt.table_number,
+                   u.name as cashier_name,
+                   c.name as customer_name,
+                   c.phone as customer_phone
+            FROM orders o
+            LEFT JOIN dining_tables dt ON o.table_id = dt.id
+            LEFT JOIN users u ON o.cashier_id = u.id
+            LEFT JOIN customers c ON o.customer_id = c.id
+            WHERE o.id = ? OR o.order_number = ?
+            LIMIT 1
+        `, [id, id]);
+
+        if (orders.length > 0) {
+            const order = orders[0];
+            const items = await db.query(`
+                SELECT oi.*, oi.price as unit_price, (oi.quantity * oi.price) as subtotal,
+                       p.name as product_name, p.sinhala_name as product_sinhala_name, p.is_short_eat
+                FROM order_items oi
+                LEFT JOIN products p ON oi.product_id = p.id
+                WHERE oi.order_id = ?
+            `, [order.id]);
+            order.items = items;
+            return res.json(order);
+        }
+
+        // If not found in orders, check pre_orders table
+        let preorders = await db.query(`
+            SELECT po.*,
+                   po.pre_order_number as order_number,
+                   'takeaway' as order_type,
+                   'completed' as status,
+                   IF(po.balance_amount <= 0, 'paid', 'unpaid') as payment_status,
+                   'cash' as payment_method,
+                   c.name as customer_name_from_db,
+                   c.phone as customer_phone_from_db
+            FROM pre_orders po
+            LEFT JOIN customers c ON po.customer_id = c.id
+            WHERE po.id = ? OR po.pre_order_number = ?
+            LIMIT 1
+        `, [id, id]);
+
+        if (preorders.length > 0) {
+            const po = preorders[0];
+            if (!po.customer_name && po.customer_name_from_db) {
+                po.customer_name = po.customer_name_from_db;
+            }
+            if (!po.customer_phone && po.customer_phone_from_db) {
+                po.customer_phone = po.customer_phone_from_db;
+            }
+            const items = await db.query(`
+                SELECT poi.*, poi.price as unit_price, (poi.quantity * poi.price) as subtotal,
+                       p.name as product_name, p.sinhala_name as product_sinhala_name
+                FROM pre_order_items poi
+                LEFT JOIN products p ON poi.product_id = p.id
+                WHERE poi.pre_order_id = ?
+            `, [po.id]);
+            po.items = items;
+            return res.json(po);
+        }
+
+        return res.status(404).json({ error: 'Order not found' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // GET transaction summary for dashboard detail view (date range)
 app.get('/api/admin/transactions', authenticateToken, async (req, res) => {
     const { from, to } = req.query;
@@ -3764,6 +3958,788 @@ app.put('/api/notifications/read-all', authenticateToken, async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
+
+// ----------------------------------------------------
+// STAFF ATTENDANCE & PAYROLL / SALARY ENDPOINTS
+// ----------------------------------------------------
+
+async function ensurePayrollTablesExist() {
+    try {
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS staff_shifts (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                clock_in DATETIME NOT NULL,
+                clock_out DATETIME DEFAULT NULL,
+                duration_minutes INT DEFAULT 0,
+                status ENUM('active', 'completed') DEFAULT 'active',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        `);
+
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS global_settings (
+                setting_key VARCHAR(100) PRIMARY KEY,
+                setting_value TEXT NULL,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        `);
+        await db.query("INSERT IGNORE INTO global_settings (setting_key, setting_value) VALUES ('global_ot_rate', '250.00')");
+        await db.query("INSERT IGNORE INTO global_settings (setting_key, setting_value) VALUES ('salary_notification_days', '2')");
+
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS staff_payroll_settings (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL UNIQUE,
+                basic_salary DECIMAL(10,2) DEFAULT 0.00,
+                salary_type ENUM('daily', 'weekly', 'monthly') DEFAULT 'monthly',
+                ot_rate_per_hour DECIMAL(10,2) NULL,
+                allowances DECIMAL(10,2) DEFAULT 0.00,
+                salary_due_day INT DEFAULT 28,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        `);
+
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS staff_advances (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                amount DECIMAL(10,2) NOT NULL,
+                reason VARCHAR(255) DEFAULT NULL,
+                advance_date DATE NOT NULL,
+                status ENUM('pending', 'deducted', 'settled') DEFAULT 'pending',
+                recorded_by INT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY (recorded_by) REFERENCES users(id) ON DELETE SET NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        `);
+
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS staff_payrolls (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                period_start DATE NOT NULL,
+                period_end DATE NOT NULL,
+                basic_salary DECIMAL(10,2) DEFAULT 0.00,
+                working_hours DECIMAL(10,2) DEFAULT 0.00,
+                ot_hours DECIMAL(10,2) DEFAULT 0.00,
+                ot_rate DECIMAL(10,2) DEFAULT 0.00,
+                ot_amount DECIMAL(10,2) DEFAULT 0.00,
+                tip_amount DECIMAL(10,2) DEFAULT 0.00,
+                bonuses_others DECIMAL(10,2) DEFAULT 0.00,
+                allowances DECIMAL(10,2) DEFAULT 0.00,
+                advance_deduction DECIMAL(10,2) DEFAULT 0.00,
+                net_salary DECIMAL(10,2) NOT NULL,
+                payment_method ENUM('cash', 'bank', 'drawer') DEFAULT 'cash',
+                payment_status ENUM('draft', 'paid') DEFAULT 'paid',
+                paid_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                created_by INT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        `);
+
+        // Self-healing missing column migrations for pre-existing tables
+        try { await db.query("ALTER TABLE staff_payroll_settings ADD COLUMN user_id INT NULL"); } catch (_) {}
+        try { await db.query("ALTER TABLE staff_payroll_settings ADD COLUMN basic_salary DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
+        try { await db.query("ALTER TABLE staff_payroll_settings ADD COLUMN salary_type ENUM('daily', 'weekly', 'monthly') DEFAULT 'monthly'"); } catch (_) {}
+        try { await db.query("ALTER TABLE staff_payroll_settings ADD COLUMN daily_rate DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
+        try { await db.query("ALTER TABLE staff_payroll_settings ADD COLUMN ot_rate_per_hour DECIMAL(10,2) NULL"); } catch (_) {}
+        try { await db.query("ALTER TABLE staff_payroll_settings ADD COLUMN allowances DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
+        try { await db.query("ALTER TABLE staff_payroll_settings ADD COLUMN salary_due_day INT DEFAULT 28"); } catch (_) {}
+        try { await db.query("ALTER TABLE staff_payroll_settings ADD COLUMN allow_ot TINYINT(1) DEFAULT 1"); } catch (_) {}
+
+        // Remove duplicate setting entries per user_id if any exist
+        try {
+            await db.query(`
+                DELETE t1 FROM staff_payroll_settings t1
+                INNER JOIN staff_payroll_settings t2 
+                WHERE t1.id < t2.id AND t1.user_id = t2.user_id
+            `);
+        } catch (_) {}
+
+        try { await db.query("ALTER TABLE staff_advances ADD COLUMN user_id INT NULL"); } catch (_) {}
+        try { await db.query("ALTER TABLE staff_advances ADD COLUMN amount DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
+        try { await db.query("ALTER TABLE staff_advances ADD COLUMN amount_deducted DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
+        try { await db.query("ALTER TABLE staff_advances ADD COLUMN remaining_balance DECIMAL(10,2) NULL"); } catch (_) {}
+        try { await db.query("ALTER TABLE staff_advances ADD COLUMN reason VARCHAR(255) DEFAULT NULL"); } catch (_) {}
+        try { await db.query("ALTER TABLE staff_advances ADD COLUMN advance_date DATE NULL DEFAULT NULL"); } catch (_) {}
+        try { await db.query("ALTER TABLE staff_advances MODIFY COLUMN advance_date DATE NULL DEFAULT NULL"); } catch (_) {}
+        try { await db.query("ALTER TABLE staff_advances ADD COLUMN date_given DATE NULL DEFAULT NULL"); } catch (_) {}
+        try { await db.query("ALTER TABLE staff_advances MODIFY COLUMN date_given DATE NULL DEFAULT NULL"); } catch (_) {}
+        try { await db.query("ALTER TABLE staff_advances ADD COLUMN status ENUM('pending', 'partially_deducted', 'deducted', 'settled') DEFAULT 'pending'"); } catch (_) {}
+        try { await db.query("ALTER TABLE staff_advances MODIFY COLUMN status ENUM('pending', 'partially_deducted', 'deducted', 'settled') DEFAULT 'pending'"); } catch (_) {}
+        try { await db.query("ALTER TABLE staff_advances ADD COLUMN recorded_by INT NULL"); } catch (_) {}
+
+        try { await db.query("ALTER TABLE staff_payrolls ADD COLUMN user_id INT NULL"); } catch (_) {}
+        try { await db.query("ALTER TABLE staff_payrolls ADD COLUMN period_start DATE NULL"); } catch (_) {}
+        try { await db.query("ALTER TABLE staff_payrolls ADD COLUMN period_end DATE NULL"); } catch (_) {}
+        try { await db.query("ALTER TABLE staff_payrolls ADD COLUMN basic_salary DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
+        try { await db.query("ALTER TABLE staff_payrolls ADD COLUMN working_hours DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
+        try { await db.query("ALTER TABLE staff_payrolls ADD COLUMN ot_hours DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
+        try { await db.query("ALTER TABLE staff_payrolls ADD COLUMN ot_rate DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
+        try { await db.query("ALTER TABLE staff_payrolls ADD COLUMN ot_amount DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
+        try { await db.query("ALTER TABLE staff_payrolls ADD COLUMN tip_amount DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
+        try { await db.query("ALTER TABLE staff_payrolls ADD COLUMN allowances DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
+        try { await db.query("ALTER TABLE staff_payrolls ADD COLUMN advance_deduction DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
+        try { await db.query("ALTER TABLE staff_payrolls ADD COLUMN remaining_advance_balance DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
+        try { await db.query("ALTER TABLE staff_payrolls ADD COLUMN net_salary DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
+        try { await db.query("ALTER TABLE staff_payrolls ADD COLUMN payment_method ENUM('cash', 'bank', 'drawer') DEFAULT 'cash'"); } catch (_) {}
+        try { await db.query("ALTER TABLE staff_payrolls ADD COLUMN created_by INT NULL"); } catch (_) {}
+
+        try { await db.query("ALTER TABLE staff_shifts ADD COLUMN user_id INT NULL"); } catch (_) {}
+        try { await db.query("ALTER TABLE staff_shifts ADD COLUMN clock_in DATETIME NULL"); } catch (_) {}
+        try { await db.query("ALTER TABLE staff_shifts ADD COLUMN clock_out DATETIME DEFAULT NULL"); } catch (_) {}
+        try { await db.query("ALTER TABLE staff_shifts ADD COLUMN duration_minutes INT DEFAULT 0"); } catch (_) {}
+        try { await db.query("ALTER TABLE staff_shifts ADD COLUMN status ENUM('active', 'completed') DEFAULT 'active'"); } catch (_) {}
+
+        try { await db.query("INSERT IGNORE INTO global_settings (setting_key, setting_value) VALUES ('global_ot_start_time', '17:00')"); } catch (_) {}
+    } catch (e) {
+        console.error('ensurePayrollTablesExist error:', e.message);
+    }
+}
+
+// GET Staff Attendance Summary & Work Hours Analytics
+// Helper to calculate Overtime (OT) minutes based on normal daily working hours exceeding threshold (default 8 hours / 480 mins per day)
+function calculateOvertimeMinutesForUserShifts(shiftsList, standardDailyHours = 8.0, activeLiveMins = 0) {
+    const thresholdMins = Math.round((parseFloat(standardDailyHours) || 8.0) * 60);
+    let totalOtMins = 0;
+
+    const dayMap = {};
+    for (const sh of shiftsList) {
+        if (!sh.clock_in) continue;
+        const cin = new Date(sh.clock_in);
+        const cout = sh.clock_out ? new Date(sh.clock_out) : new Date();
+        const dateStr = cin.toISOString().slice(0, 10);
+
+        if (!dayMap[dateStr]) {
+            dayMap[dateStr] = 0;
+        }
+
+        const durMins = Math.max(0, Math.round((cout.getTime() - cin.getTime()) / 60000));
+        dayMap[dateStr] += durMins;
+    }
+
+    const todayStr = new Date().toISOString().slice(0, 10);
+    if (activeLiveMins > 0) {
+        dayMap[todayStr] = (dayMap[todayStr] || 0) + activeLiveMins;
+    }
+
+    for (const dayMins of Object.values(dayMap)) {
+        if (dayMins > thresholdMins) {
+            totalOtMins += (dayMins - thresholdMins);
+        }
+    }
+
+    return totalOtMins;
+}
+
+// GET Staff Attendance Summary & Work Hours Analytics
+app.get('/api/staff/attendance/summary', authenticateToken, async (req, res) => {
+    try {
+        await ensurePayrollTablesExist();
+        const { user_id, from, to } = req.query;
+        let userFilter = '';
+        let params = [];
+        if (user_id) {
+            userFilter = ' WHERE u.id = ?';
+            params.push(user_id);
+        }
+
+        const otSettingRows = await db.query("SELECT setting_value FROM global_settings WHERE setting_key = 'global_ot_start_time'");
+        const otThresholdHours = parseFloat(otSettingRows[0]?.setting_value) || 8.0;
+
+        const users = await db.query(`
+            SELECT u.id, u.name, u.username, u.role, u.status, u.image_base64
+            FROM users u
+            ${userFilter}
+            ORDER BY u.name ASC
+        `, params);
+
+        const summaryList = [];
+
+        for (const user of users) {
+            // Check active shift from staff_shifts OR active open shift in POS shifts table
+            const activeStaffShifts = await db.query(
+                "SELECT * FROM staff_shifts WHERE user_id = ? AND status = 'active' ORDER BY id DESC LIMIT 1",
+                [user.id]
+            );
+
+            const activePosShifts = await db.query(
+                "SELECT * FROM shifts WHERE user_id = ? AND status = 'open' ORDER BY id DESC LIMIT 1",
+                [user.id]
+            );
+
+            const isClockedIn = activeStaffShifts.length > 0 || activePosShifts.length > 0;
+            const activeShiftObj = activeStaffShifts.length > 0
+                ? activeStaffShifts[0]
+                : (activePosShifts.length > 0 ? { clock_in: activePosShifts[0].start_time, status: 'active' } : null);
+
+            let rangeCond = '';
+            let rangeParams = [user.id];
+            if (from) { rangeCond += ' AND DATE(clock_in) >= ?'; rangeParams.push(from); }
+            if (to)   { rangeCond += ' AND DATE(clock_in) <= ?'; rangeParams.push(to); }
+
+            const shifts = await db.query(
+                `SELECT * FROM staff_shifts WHERE user_id = ? ${rangeCond} ORDER BY clock_in DESC`,
+                rangeParams
+            );
+
+            const todayShifts = await db.query(
+                `SELECT SUM(duration_minutes) as total_mins FROM staff_shifts WHERE user_id = ? AND DATE(clock_in) = CURDATE()`,
+                [user.id]
+            );
+            const dailyMins = parseFloat(todayShifts[0]?.total_mins || 0);
+
+            const weekShifts = await db.query(
+                `SELECT SUM(duration_minutes) as total_mins FROM staff_shifts WHERE user_id = ? AND YEARWEEK(clock_in, 1) = YEARWEEK(CURDATE(), 1)`,
+                [user.id]
+            );
+            const weeklyMins = parseFloat(weekShifts[0]?.total_mins || 0);
+
+            const monthShifts = await db.query(
+                `SELECT SUM(duration_minutes) as total_mins FROM staff_shifts WHERE user_id = ? AND YEAR(clock_in) = YEAR(CURDATE()) AND MONTH(clock_in) = MONTH(CURDATE())`,
+                [user.id]
+            );
+            const monthlyMins = parseFloat(monthShifts[0]?.total_mins || 0);
+
+            const yearShifts = await db.query(
+                `SELECT SUM(duration_minutes) as total_mins FROM staff_shifts WHERE user_id = ? AND YEAR(clock_in) = YEAR(CURDATE())`,
+                [user.id]
+            );
+            const yearlyMins = parseFloat(yearShifts[0]?.total_mins || 0);
+
+            const totalRangeMins = shifts.reduce((s, sh) => s + (sh.duration_minutes || 0), 0);
+
+            let activeLiveMins = 0;
+            if (activeShiftObj && activeShiftObj.clock_in) {
+                const diff = (new Date().getTime() - new Date(activeShiftObj.clock_in).getTime()) / 60000;
+                activeLiveMins = Math.max(0, Math.floor(diff));
+            }
+
+            const distinctDays = await db.query(
+                `SELECT COUNT(DISTINCT DATE(clock_in)) as day_count FROM staff_shifts WHERE user_id = ?`,
+                [user.id]
+            );
+            const totalDaysWorked = Math.max(1, parseInt(distinctDays[0]?.day_count || 1));
+            const avgDailyHours = (yearlyMins / 60) / Math.max(1, Math.min(365, totalDaysWorked));
+
+            // Check if OT is allowed for user
+            const pSettings = await db.query("SELECT allow_ot FROM staff_payroll_settings WHERE user_id = ?", [user.id]);
+            const allowOt = pSettings[0] ? (parseInt(pSettings[0].allow_ot) !== 0) : true;
+
+            const totalOtMins = allowOt ? calculateOvertimeMinutesForUserShifts(shifts, otThresholdHours, activeLiveMins) : 0;
+
+            summaryList.push({
+                user_id: user.id,
+                name: user.name,
+                username: user.username,
+                role: user.role,
+                image_base64: user.image_base64,
+                is_clocked_in: isClockedIn,
+                active_shift: activeShiftObj,
+                daily_hours: (dailyMins + activeLiveMins) / 60,
+                weekly_hours: weeklyMins / 60,
+                monthly_hours: monthlyMins / 60,
+                yearly_hours: yearlyMins / 60,
+                average_daily_hours: avgDailyHours,
+                range_total_hours: totalRangeMins / 60,
+                ot_hours: totalOtMins / 60,
+                shifts: shifts
+            });
+        }
+
+        res.json(summaryList);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST Manual Clock In / Clock Out adjustment
+app.post('/api/staff/attendance/manual', authenticateToken, async (req, res) => {
+    try {
+        const { user_id, clock_in, clock_out } = req.body;
+        if (!user_id || !clock_in) {
+            return res.status(400).json({ error: 'user_id and clock_in are required' });
+        }
+
+        let duration_minutes = 0;
+        let status = 'active';
+
+        if (clock_out) {
+            const cin = new Date(clock_in);
+            const cout = new Date(clock_out);
+            duration_minutes = Math.max(1, Math.round((cout.getTime() - cin.getTime()) / 60000));
+            status = 'completed';
+        }
+
+        const result = await db.query(`
+            INSERT INTO staff_shifts (user_id, clock_in, clock_out, duration_minutes, status)
+            VALUES (?, ?, ?, ?, ?)
+        `, [user_id, clock_in, clock_out || null, duration_minutes, status]);
+
+        broadcast({ type: 'staff_attendance_updated' });
+        res.json({ success: true, id: result.insertId });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET Payroll Settings & Global OT Rate
+app.get('/api/staff/payroll/settings', authenticateToken, async (req, res) => {
+    try {
+        await ensurePayrollTablesExist();
+        const globalSettingsRows = await db.query('SELECT * FROM global_settings');
+        const settingsMap = {};
+        for (const r of globalSettingsRows) {
+            settingsMap[r.setting_key] = r.setting_value;
+        }
+
+        const staffSettings = await db.query(`
+            SELECT u.id as user_id, u.name, u.username, u.role,
+                   COALESCE(sps.basic_salary, 0.00) as basic_salary,
+                   COALESCE(sps.salary_type, 'monthly') as salary_type,
+                   COALESCE(sps.daily_rate, 0.00) as daily_rate,
+                   sps.ot_rate_per_hour,
+                   COALESCE(sps.allowances, 0.00) as allowances,
+                   COALESCE(sps.salary_due_day, 28) as salary_due_day,
+                   COALESCE(sps.allow_ot, 1) as allow_ot
+            FROM users u
+            LEFT JOIN (
+                SELECT user_id,
+                       MAX(basic_salary) as basic_salary,
+                       MAX(salary_type) as salary_type,
+                       MAX(daily_rate) as daily_rate,
+                       MAX(ot_rate_per_hour) as ot_rate_per_hour,
+                       MAX(allowances) as allowances,
+                       MAX(salary_due_day) as salary_due_day,
+                       MAX(allow_ot) as allow_ot
+                FROM staff_payroll_settings
+                GROUP BY user_id
+            ) sps ON sps.user_id = u.id
+            WHERE u.status = 'active'
+            ORDER BY u.name ASC
+        `);
+
+        res.json({
+            global_ot_rate: parseFloat(settingsMap['global_ot_rate'] || '250.00'),
+            global_ot_start_time: settingsMap['global_ot_start_time'] || '17:00',
+            salary_notification_days: parseInt(settingsMap['salary_notification_days'] || '2'),
+            staff_settings: staffSettings.map(s => ({
+                user_id: s.user_id,
+                name: s.name,
+                username: s.username,
+                role: s.role,
+                basic_salary: parseFloat(s.basic_salary || 0.00),
+                salary_type: s.salary_type || 'monthly',
+                daily_rate: parseFloat(s.daily_rate || 0.00),
+                ot_rate_per_hour: s.ot_rate_per_hour !== null && s.ot_rate_per_hour !== undefined ? parseFloat(s.ot_rate_per_hour) : null,
+                allowances: parseFloat(s.allowances || 0.00),
+                salary_due_day: parseInt(s.salary_due_day || 28),
+                allow_ot: parseInt(s.allow_ot ?? 1) === 1
+            }))
+        });
+    } catch (err) {
+        console.error('Payroll Settings API Error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// PUT Payroll Settings & Global OT Rate
+app.put('/api/staff/payroll/settings', authenticateToken, async (req, res) => {
+    try {
+        const { global_ot_rate, global_ot_start_time, salary_notification_days, user_settings } = req.body;
+
+        if (global_ot_rate !== undefined) {
+            await db.query(`
+                INSERT INTO global_settings (setting_key, setting_value)
+                VALUES ('global_ot_rate', ?)
+                ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+            `, [global_ot_rate.toString()]);
+        }
+
+        if (global_ot_start_time !== undefined) {
+            await db.query(`
+                INSERT INTO global_settings (setting_key, setting_value)
+                VALUES ('global_ot_start_time', ?)
+                ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+            `, [global_ot_start_time.toString()]);
+        }
+
+        if (salary_notification_days !== undefined) {
+            await db.query(`
+                INSERT INTO global_settings (setting_key, setting_value)
+                VALUES ('salary_notification_days', ?)
+                ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+            `, [salary_notification_days.toString()]);
+        }
+
+        if (Array.isArray(user_settings)) {
+            for (const s of user_settings) {
+                await db.query(`
+                    INSERT INTO staff_payroll_settings (user_id, basic_salary, salary_type, daily_rate, ot_rate_per_hour, allowances, salary_due_day, allow_ot)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE
+                        basic_salary = VALUES(basic_salary),
+                        salary_type = VALUES(salary_type),
+                        daily_rate = VALUES(daily_rate),
+                        ot_rate_per_hour = VALUES(ot_rate_per_hour),
+                        allowances = VALUES(allowances),
+                        salary_due_day = VALUES(salary_due_day),
+                        allow_ot = VALUES(allow_ot)
+                `, [
+                    s.user_id,
+                    s.basic_salary || 0.00,
+                    s.salary_type || 'monthly',
+                    s.daily_rate || 0.00,
+                    s.ot_rate_per_hour !== undefined && s.ot_rate_per_hour !== null ? s.ot_rate_per_hour : null,
+                    s.allowances || 0.00,
+                    s.salary_due_day || 28,
+                    s.allow_ot === false || s.allow_ot === 0 ? 0 : 1
+                ]);
+            }
+        }
+
+        broadcast({ type: 'payroll_settings_updated' });
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET Staff Advances
+app.get('/api/staff/advances', authenticateToken, async (req, res) => {
+    try {
+        await ensurePayrollTablesExist();
+        const { user_id, status } = req.query;
+        let whereClauses = [];
+        let params = [];
+
+        if (user_id) {
+            whereClauses.push('sa.user_id = ?');
+            params.push(user_id);
+        }
+        if (status) {
+            whereClauses.push('sa.status = ?');
+            params.push(status);
+        }
+
+        const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+
+        const advances = await db.query(`
+            SELECT sa.*, u.name as user_name, rec.name as recorded_by_name
+            FROM staff_advances sa
+            JOIN users u ON sa.user_id = u.id
+            LEFT JOIN users rec ON sa.recorded_by = rec.id
+            ${whereSql}
+            ORDER BY sa.advance_date DESC, sa.id DESC
+        `, params);
+
+        res.json(advances);
+    } catch (err) {
+        console.error('Staff Advances API Error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST Grant Staff Advance
+app.post('/api/staff/advances', authenticateToken, async (req, res) => {
+    try {
+        await ensurePayrollTablesExist();
+        const { user_id, amount, reason, advance_date } = req.body;
+        if (!user_id || !amount) {
+            return res.status(400).json({ error: 'user_id and amount are required' });
+        }
+
+        const dateStr = advance_date || new Date().toISOString().slice(0, 10);
+
+        const result = await db.query(`
+            INSERT INTO staff_advances (user_id, amount, reason, advance_date, status, recorded_by)
+            VALUES (?, ?, ?, ?, 'pending', ?)
+        `, [user_id, amount, reason || 'Staff Cash Advance', dateStr, req.user.id]);
+
+        broadcast({ type: 'staff_advance_created' });
+        res.json({ success: true, id: result.insertId });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET Calculate Salary Breakdown for Staff Member & Period
+app.get('/api/staff/payroll/calculate', authenticateToken, async (req, res) => {
+    try {
+        await ensurePayrollTablesExist();
+        const { user_id, period_start, period_end } = req.query;
+        if (!user_id) {
+            return res.status(400).json({ error: 'user_id is required' });
+        }
+
+        const today = new Date().toISOString().slice(0, 10);
+        const startDate = period_start || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10);
+        const endDate = period_end || today;
+
+        const users = await db.query("SELECT id, name, username, role FROM users WHERE id = ?", [user_id]);
+        if (users.length === 0) return res.status(404).json({ error: 'User not found' });
+        const user = users[0];
+
+        const globalOtRows = await db.query("SELECT setting_value FROM global_settings WHERE setting_key = 'global_ot_rate'");
+        const globalOtRate = parseFloat(globalOtRows[0]?.setting_value || '250.00');
+
+        const staffSettingRows = await db.query("SELECT * FROM staff_payroll_settings WHERE user_id = ?", [user_id]);
+        const staffSetting = staffSettingRows[0] || {};
+
+        const salaryType = staffSetting.salary_type || 'monthly';
+        const dailyRate = parseFloat(staffSetting.daily_rate || 0.00);
+        const allowOt = parseInt(staffSetting.allow_ot ?? 1) !== 0;
+
+        const applicableOtRate = staffSetting.ot_rate_per_hour !== null && staffSetting.ot_rate_per_hour !== undefined
+            ? parseFloat(staffSetting.ot_rate_per_hour)
+            : globalOtRate;
+        const allowances = parseFloat(staffSetting.allowances || 0.00);
+
+        const shifts = await db.query(`
+            SELECT * FROM staff_shifts
+            WHERE user_id = ? AND DATE(clock_in) >= ? AND DATE(clock_in) <= ?
+            ORDER BY clock_in DESC
+        `, [user_id, startDate, endDate]);
+
+        const distinctDaysResult = await db.query(`
+            SELECT COUNT(DISTINCT DATE(clock_in)) as days_worked
+            FROM staff_shifts
+            WHERE user_id = ? AND DATE(clock_in) >= ? AND DATE(clock_in) <= ?
+        `, [user_id, startDate, endDate]);
+        const daysWorked = parseInt(distinctDaysResult[0]?.days_worked || 0);
+
+        let basicSalary = parseFloat(staffSetting.basic_salary || 0.00);
+        if (salaryType === 'daily') {
+            basicSalary = daysWorked * dailyRate;
+        }
+
+        const otTimeRows = await db.query("SELECT setting_value FROM global_settings WHERE setting_key = 'global_ot_start_time'");
+        const otThresholdHours = parseFloat(otTimeRows[0]?.setting_value) || 8.0;
+
+        let activeLiveMins = 0;
+        let totalMins = 0;
+        for (const sh of shifts) {
+            if (sh.status === 'completed') {
+                totalMins += (sh.duration_minutes || 0);
+            } else if (sh.status === 'active' && sh.clock_in) {
+                const diff = Math.max(0, Math.floor((new Date().getTime() - new Date(sh.clock_in).getTime()) / 60000));
+                activeLiveMins += diff;
+                totalMins += diff;
+            }
+        }
+
+        const workingHours = totalMins / 60;
+        const otMins = allowOt ? calculateOvertimeMinutesForUserShifts(shifts, otThresholdHours, activeLiveMins) : 0;
+        const otHours = otMins / 60;
+        const otAmount = otHours * applicableOtRate;
+
+        // No auto 5% tip calculation
+        const tipAmount = 0.00;
+
+        const advanceRows = await db.query(`
+            SELECT id, amount, COALESCE(amount_deducted, 0.00) as amount_deducted
+            FROM staff_advances
+            WHERE user_id = ? AND status IN ('pending', 'partially_deducted')
+            ORDER BY id ASC
+        `, [user_id]);
+
+        let totalOutstandingAdvance = 0.00;
+        for (const adv of advanceRows) {
+            const amt = parseFloat(adv.amount || 0.00);
+            const ded = parseFloat(adv.amount_deducted || 0.00);
+            totalOutstandingAdvance += Math.max(0, amt - ded);
+        }
+
+        const bonusesOthers = 0.00;
+        const grossSalary = basicSalary + otAmount + tipAmount + allowances + bonusesOthers;
+        const advanceDeduction = Math.min(grossSalary, totalOutstandingAdvance);
+        const remainingAdvanceBalance = Math.max(0.00, totalOutstandingAdvance - advanceDeduction);
+        const netSalary = Math.max(0.00, grossSalary - advanceDeduction);
+
+        res.json({
+            user_id: user.id,
+            name: user.name,
+            role: user.role,
+            period_start: startDate,
+            period_end: endDate,
+            salary_type: salaryType,
+            basic_salary: basicSalary,
+            working_hours: workingHours,
+            ot_hours: otHours,
+            ot_rate: applicableOtRate,
+            ot_amount: otAmount,
+            tip_amount: tipAmount,
+            allowances: allowances,
+            bonuses_others: bonusesOthers,
+            gross_salary: grossSalary,
+            advance_deduction: advanceDeduction,
+            remaining_advance_balance: remainingAdvanceBalance,
+            net_salary: netSalary
+        });
+    } catch (err) {
+        console.error('Calculate Salary API Error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST Finalize & Process Salary Payout
+app.post('/api/staff/payroll/pay', authenticateToken, async (req, res) => {
+    try {
+        const {
+            user_id, period_start, period_end, basic_salary, working_hours,
+            ot_hours, ot_rate, ot_amount, tip_amount, bonuses_others,
+            allowances, advance_deduction, remaining_advance_balance, net_salary, payment_method
+        } = req.body;
+
+        if (!user_id || net_salary === undefined) {
+            return res.status(400).json({ error: 'user_id and net_salary are required' });
+        }
+
+        const users = await db.query("SELECT name FROM users WHERE id = ?", [user_id]);
+        const userName = users[0]?.name || 'Staff';
+
+        const result = await db.query(`
+            INSERT INTO staff_payrolls (
+                user_id, period_start, period_end, basic_salary, working_hours,
+                ot_hours, ot_rate, ot_amount, tip_amount, bonuses_others,
+                allowances, advance_deduction, remaining_advance_balance, net_salary, payment_method,
+                payment_status, paid_at, created_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'paid', NOW(), ?)
+        `, [
+            user_id, period_start, period_end, basic_salary || 0.00, working_hours || 0.00,
+            ot_hours || 0.00, ot_rate || 0.00, ot_amount || 0.00, tip_amount || 0.00, bonuses_others || 0.00,
+            allowances || 0.00, advance_deduction || 0.00, remaining_advance_balance || 0.00, net_salary, payment_method || 'cash', req.user.id
+        ]);
+
+        let toDeduct = parseFloat(advance_deduction || 0.00);
+        if (toDeduct > 0) {
+            const pendingAdvances = await db.query(`
+                SELECT id, amount, COALESCE(amount_deducted, 0.00) as amount_deducted
+                FROM staff_advances
+                WHERE user_id = ? AND status IN ('pending', 'partially_deducted')
+                ORDER BY id ASC
+            `, [user_id]);
+
+            for (const adv of pendingAdvances) {
+                if (toDeduct <= 0) break;
+                const totalAmt = parseFloat(adv.amount || 0.00);
+                const alreadyDed = parseFloat(adv.amount_deducted || 0.00);
+                const openBal = Math.max(0, totalAmt - alreadyDed);
+
+                const deductHere = Math.min(toDeduct, openBal);
+                const newDedTotal = alreadyDed + deductHere;
+                const newRemBal = Math.max(0, totalAmt - newDedTotal);
+                const newStatus = newRemBal <= 0.01 ? 'settled' : 'partially_deducted';
+
+                await db.query(`
+                    UPDATE staff_advances
+                    SET amount_deducted = ?, remaining_balance = ?, status = ?
+                    WHERE id = ?
+                `, [newDedTotal, newRemBal, newStatus, adv.id]);
+
+                toDeduct -= deductHere;
+            }
+        }
+
+        const pSource = payment_method === 'drawer' ? 'drawer' : 'bank';
+        await db.query(`
+            INSERT INTO expenses (title, amount, category, payment_source, recorded_by, expense_date)
+            VALUES (?, ?, 'salary', ?, ?, CURDATE())
+        `, [`Staff Salary - ${userName}`, net_salary, pSource, req.user.id]);
+
+        broadcast({ type: 'staff_payroll_processed', data: { user_id, net_salary } });
+
+        res.json({ success: true, id: result.insertId, message: 'Salary payment processed successfully' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET Salary History (Payslips)
+app.get('/api/staff/payroll/history', authenticateToken, async (req, res) => {
+    try {
+        const { user_id } = req.query;
+        let whereSql = '';
+        let params = [];
+        if (user_id) {
+            whereSql = 'WHERE sp.user_id = ?';
+            params.push(user_id);
+        }
+
+        const history = await db.query(`
+            SELECT sp.*, u.name as user_name, u.role as user_role, creator.name as created_by_name
+            FROM staff_payrolls sp
+            JOIN users u ON sp.user_id = u.id
+            LEFT JOIN users creator ON sp.created_by = creator.id
+            ${whereSql}
+            ORDER BY sp.paid_at DESC, sp.id DESC
+        `, params);
+
+        res.json(history);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Background Salary Due Date Notification Interval (Runs every 1 hour)
+setInterval(async () => {
+    try {
+        const globalSettingsRows = await db.query("SELECT setting_value FROM global_settings WHERE setting_key = 'salary_notification_days'");
+        const noticeDays = parseInt(globalSettingsRows[0]?.setting_value || '2');
+
+        const today = new Date();
+        const currentDayOfMonth = today.getDate();
+        const currentYear = today.getFullYear();
+        const currentMonth = today.getMonth() + 1;
+
+        const staffSettings = await db.query(`
+            SELECT sps.*, u.name
+            FROM staff_payroll_settings sps
+            JOIN users u ON sps.user_id = u.id
+            WHERE u.status = 'active'
+        `);
+
+        for (const staff of staffSettings) {
+            const dueDay = staff.salary_due_day || 28;
+            let daysUntil = dueDay - currentDayOfMonth;
+            if (daysUntil < 0) {
+                const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
+                daysUntil = (daysInMonth - currentDayOfMonth) + dueDay;
+            }
+
+            if (daysUntil >= 0 && daysUntil <= noticeDays) {
+                const title = "Staff Salary Payment Due";
+                const message = `Salary payment for ${staff.name} is due in ${daysUntil === 0 ? 'TODAY' : daysUntil + ' day(s)'}!`;
+
+                const existing = await db.query(`
+                    SELECT id FROM notifications
+                    WHERE type = 'salary_due_alert' AND message LIKE ? AND DATE(created_at) = CURDATE()
+                `, [`%${staff.name}%`]);
+
+                if (existing.length === 0) {
+                    await db.query(
+                        "INSERT INTO notifications (title, message, type) VALUES (?, ?, 'salary_due_alert')",
+                        [title, message]
+                    );
+
+                    broadcast({
+                        type: 'new_notification',
+                        data: { title, message, type: 'salary_due_alert', created_at: new Date() }
+                    });
+                }
+            }
+        }
+    } catch (err) {
+        console.error("Error checking staff salary due notifications:", err.message);
+    }
+}, 3600000);
 
 // Start Server and Init Database
 server.listen(PORT, async () => {

@@ -9,6 +9,7 @@ const List<String> kAppPages = [
   'Dashboard', 'POS', 'POS: Dine-In Only', 'POS: Hide Cart View', 'Dining Tables', 'KDS', 'Order Queue',
   'Items', 'POS Orders', 'Pre Orders', 'Offers', 'Shifts & Cash', 'Reports & Logs',
   'Administrators', 'Delivery Boys', 'Customers', 'Employees', 'Waiters', 'Chefs', 'Short Eats Cabin',
+  'Staff Attendance & Salary',
   'Sales Report', 'Items Report', 'Credit Balance Report',
   'Raw Materials', 'POS Stock', 'Roles & Permissions', 'Settings',
 ];
@@ -16,6 +17,7 @@ const List<String> kAppPages = [
 const Set<String> kPagesWithActions = {
   'Items', 'Offers', 'Administrators', 'Delivery Boys',
   'Customers', 'Employees', 'Waiters', 'Chefs', 'Short Eats Cabin',
+  'Staff Attendance & Salary',
   'Raw Materials', 'POS Stock', 'Roles & Permissions',
   'Pre Orders',
 };

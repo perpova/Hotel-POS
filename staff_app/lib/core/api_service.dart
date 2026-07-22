@@ -134,4 +134,39 @@ class ApiService {
       return [];
     }
   }
+
+  Future<Map<String, dynamic>> getMyAttendanceReport(int userId) async {
+    final response = await http.get(
+      Uri.parse('$_baseUrl/api/staff/attendance/summary?user_id=$userId'),
+      headers: _headers,
+    );
+    if (response.statusCode == 200) {
+      final List data = jsonDecode(response.body);
+      if (data.isNotEmpty) return Map<String, dynamic>.from(data.first);
+    }
+    throw Exception('Failed to load attendance report');
+  }
+
+  Future<Map<String, dynamic>> getMySalaryBreakdown(int userId) async {
+    final response = await http.get(
+      Uri.parse('$_baseUrl/api/staff/payroll/calculate?user_id=$userId'),
+      headers: _headers,
+    );
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    }
+    throw Exception('Failed to calculate salary');
+  }
+
+  Future<List<Map<String, dynamic>>> getMyAdvances(int userId) async {
+    final response = await http.get(
+      Uri.parse('$_baseUrl/api/staff/advances?user_id=$userId'),
+      headers: _headers,
+    );
+    if (response.statusCode == 200) {
+      final List data = jsonDecode(response.body);
+      return List<Map<String, dynamic>>.from(data);
+    }
+    return [];
+  }
 }

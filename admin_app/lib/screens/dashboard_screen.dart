@@ -7,6 +7,7 @@ import '../core/theme.dart';
 import '../providers/dashboard_provider.dart';
 import '../providers/realtime_provider.dart';
 import '../providers/auth_provider.dart';
+import '../widgets/order_details_dialog.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({Key? key}) : super(key: key);
@@ -235,21 +236,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final sc = isCancelled ? AppColors.error : isPaid ? AppColors.success : AppColors.warning;
       return Column(children: [
         if (i > 0) const Divider(height: 1),
-        Padding(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Row(children: [
-            Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(color: sc.withOpacity(0.15), borderRadius: BorderRadius.circular(6)),
-              child: Text('#${o['order_number'] ?? ''}', style: TextStyle(color: sc, fontSize: 11, fontWeight: FontWeight.w700))),
-            const SizedBox(width: 10),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(orderType == 'dine_in' ? 'Dine In${o['table_number'] != null ? ' · T${o['table_number']}' : ''}' :
-                   orderType == 'takeaway' ? 'Takeaway' : 'Delivery',
-                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w500)),
-              Text(isCancelled ? 'Cancelled' : isPaid ? 'Paid · ${o['payment_method']?.toString().toUpperCase() ?? ''}' : 'Active',
-                  style: TextStyle(color: sc, fontSize: 11)),
+        InkWell(
+          onTap: () {
+            final orderId = o['id'] ?? o['order_id'] ?? o['order_number'];
+            if (orderId != null) OrderDetailsDialog.show(context, orderId);
+          },
+          child: Padding(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(children: [
+              Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(color: sc.withOpacity(0.15), borderRadius: BorderRadius.circular(6)),
+                child: Text('#${o['order_number'] ?? ''}', style: TextStyle(color: sc, fontSize: 11, fontWeight: FontWeight.w700))),
+              const SizedBox(width: 10),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(orderType == 'dine_in' ? 'Dine In${o['table_number'] != null ? ' · T${o['table_number']}' : ''}' :
+                     orderType == 'takeaway' ? 'Takeaway' : 'Delivery',
+                    style: const TextStyle(color: AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w500)),
+                Text(isCancelled ? 'Cancelled' : isPaid ? 'Paid · ${o['payment_method']?.toString().toUpperCase() ?? ''}' : 'Active',
+                    style: TextStyle(color: sc, fontSize: 11)),
+              ])),
+              Text('LKR ${_curr.format(total)}', style: const TextStyle(color: AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
             ])),
-            Text('LKR ${_curr.format(total)}', style: const TextStyle(color: AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
-          ])),
+        ),
       ]);
     }).toList()),
   );
@@ -505,30 +512,36 @@ class _TransactionDetailSheetState extends State<_TransactionDetailSheet> {
                             final mc = method == 'card' ? AppColors.info : method == 'credit' ? AppColors.warning : AppColors.success;
                             return Column(children: [
                               if (i > 0) const Divider(height: 1),
-                              Padding(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-                                child: Row(children: [
-                                  // Method icon
-                                  Container(width: 34, height: 34,
-                                    decoration: BoxDecoration(color: mc.withOpacity(0.12), borderRadius: BorderRadius.circular(9)),
-                                    child: Icon(method == 'card' ? Icons.credit_card_rounded :
-                                                method == 'credit' ? Icons.account_balance_rounded : Icons.money_rounded,
-                                      color: mc, size: 17)),
-                                  const SizedBox(width: 10),
-                                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                    Text('#${t['order_number'] ?? ''}',
-                                        style: const TextStyle(color: AppColors.textPrimary, fontSize: 12, fontWeight: FontWeight.w700)),
-                                    Text('${_ty(t['order_type'])} · ${t['cashier_name'] ?? 'N/A'} · ${isSingleDay ? _ft(t['created_at']?.toString() ?? '') : _fd(t['created_at']?.toString() ?? '')}',
-                                        style: const TextStyle(color: AppColors.textSecondary, fontSize: 10)),
+                              InkWell(
+                                onTap: () {
+                                  final orderId = t['id'] ?? t['order_id'] ?? t['order_number'];
+                                  if (orderId != null) OrderDetailsDialog.show(context, orderId);
+                                },
+                                child: Padding(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                                  child: Row(children: [
+                                    // Method icon
+                                    Container(width: 34, height: 34,
+                                      decoration: BoxDecoration(color: mc.withOpacity(0.12), borderRadius: BorderRadius.circular(9)),
+                                      child: Icon(method == 'card' ? Icons.credit_card_rounded :
+                                                  method == 'credit' ? Icons.account_balance_rounded : Icons.money_rounded,
+                                        color: mc, size: 17)),
+                                    const SizedBox(width: 10),
+                                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                      Text('#${t['order_number'] ?? ''}',
+                                          style: const TextStyle(color: AppColors.textPrimary, fontSize: 12, fontWeight: FontWeight.w700)),
+                                      Text('${_ty(t['order_type'])} · ${t['cashier_name'] ?? 'N/A'} · ${isSingleDay ? _ft(t['created_at']?.toString() ?? '') : _fd(t['created_at']?.toString() ?? '')}',
+                                          style: const TextStyle(color: AppColors.textSecondary, fontSize: 10)),
+                                    ])),
+                                    Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                                      Text('LKR ${_curr.format(_d(t['total']))}',
+                                          style: const TextStyle(color: AppColors.primary, fontSize: 13, fontWeight: FontWeight.w700)),
+                                      Container(margin: const EdgeInsets.only(top: 2),
+                                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                        decoration: BoxDecoration(color: mc.withOpacity(0.12), borderRadius: BorderRadius.circular(4)),
+                                        child: Text(method.toUpperCase(), style: TextStyle(color: mc, fontSize: 8, fontWeight: FontWeight.w700))),
+                                    ]),
                                   ])),
-                                  Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                                    Text('LKR ${_curr.format(_d(t['total']))}',
-                                        style: const TextStyle(color: AppColors.primary, fontSize: 13, fontWeight: FontWeight.w700)),
-                                    Container(margin: const EdgeInsets.only(top: 2),
-                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                                      decoration: BoxDecoration(color: mc.withOpacity(0.12), borderRadius: BorderRadius.circular(4)),
-                                      child: Text(method.toUpperCase(), style: TextStyle(color: mc, fontSize: 8, fontWeight: FontWeight.w700))),
-                                  ]),
-                                ])),
+                              ),
                             ]);
                           }).toList()),
                         ),

@@ -1255,6 +1255,139 @@ class APIService {
   }
 
   // ----------------------------------------------------
+  // STAFF ATTENDANCE & PAYROLL / SALARY APIs
+  // ----------------------------------------------------
+  Future<List<Map<String, dynamic>>> getStaffAttendanceSummary({int? userId, String? from, String? to}) async {
+    String url = '$_baseUrl/api/staff/attendance/summary';
+    final List<String> params = [];
+    if (userId != null) params.add('user_id=$userId');
+    if (from != null) params.add('from=$from');
+    if (to != null) params.add('to=$to');
+    if (params.isNotEmpty) url += '?${params.join('&')}';
+
+    final response = await http.get(Uri.parse(url), headers: _getHeaders());
+    if (response.statusCode == 200) {
+      final List data = jsonDecode(response.body);
+      return List<Map<String, dynamic>>.from(data);
+    }
+    throw Exception('Failed to load staff attendance summary');
+  }
+
+  Future<void> addManualAttendance(int userId, String clockIn, {String? clockOut}) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/api/staff/attendance/manual'),
+      headers: _getHeaders(),
+      body: jsonEncode({
+        'user_id': userId,
+        'clock_in': clockIn,
+        'clock_out': clockOut,
+      }),
+    );
+    if (response.statusCode != 200) {
+      final err = jsonDecode(response.body);
+      throw Exception(err['error'] ?? 'Failed to add manual attendance');
+    }
+  }
+
+  Future<Map<String, dynamic>> getPayrollSettings() async {
+    final response = await http.get(Uri.parse('$_baseUrl/api/staff/payroll/settings'), headers: _getHeaders());
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    }
+    throw Exception('Failed to load payroll settings');
+  }
+
+  Future<void> updatePayrollSettings({
+    double? globalOtRate,
+    String? globalOtStartTime,
+    int? salaryNotificationDays,
+    List<Map<String, dynamic>>? userSettings,
+  }) async {
+    final response = await http.put(
+      Uri.parse('$_baseUrl/api/staff/payroll/settings'),
+      headers: _getHeaders(),
+      body: jsonEncode({
+        if (globalOtRate != null) 'global_ot_rate': globalOtRate,
+        if (globalOtStartTime != null) 'global_ot_start_time': globalOtStartTime,
+        if (salaryNotificationDays != null) 'salary_notification_days': salaryNotificationDays,
+        if (userSettings != null) 'user_settings': userSettings,
+      }),
+    );
+    if (response.statusCode != 200) {
+      final err = jsonDecode(response.body);
+      throw Exception(err['error'] ?? 'Failed to update payroll settings');
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getStaffAdvances({int? userId, String? status}) async {
+    String url = '$_baseUrl/api/staff/advances';
+    final List<String> params = [];
+    if (userId != null) params.add('user_id=$userId');
+    if (status != null) params.add('status=$status');
+    if (params.isNotEmpty) url += '?${params.join('&')}';
+
+    final response = await http.get(Uri.parse(url), headers: _getHeaders());
+    if (response.statusCode == 200) {
+      final List data = jsonDecode(response.body);
+      return List<Map<String, dynamic>>.from(data);
+    }
+    throw Exception('Failed to load staff advances');
+  }
+
+  Future<void> grantStaffAdvance(int userId, double amount, String reason, String date) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/api/staff/advances'),
+      headers: _getHeaders(),
+      body: jsonEncode({
+        'user_id': userId,
+        'amount': amount,
+        'reason': reason,
+        'advance_date': date,
+      }),
+    );
+    if (response.statusCode != 200) {
+      final err = jsonDecode(response.body);
+      throw Exception(err['error'] ?? 'Failed to grant staff advance');
+    }
+  }
+
+  Future<Map<String, dynamic>> calculateStaffSalary(int userId, {String? periodStart, String? periodEnd}) async {
+    String url = '$_baseUrl/api/staff/payroll/calculate?user_id=$userId';
+    if (periodStart != null) url += '&period_start=$periodStart';
+    if (periodEnd != null) url += '&period_end=$periodEnd';
+
+    final response = await http.get(Uri.parse(url), headers: _getHeaders());
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    }
+    throw Exception('Failed to calculate staff salary');
+  }
+
+  Future<void> processSalaryPayment(Map<String, dynamic> payrollData) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/api/staff/payroll/pay'),
+      headers: _getHeaders(),
+      body: jsonEncode(payrollData),
+    );
+    if (response.statusCode != 200) {
+      final err = jsonDecode(response.body);
+      throw Exception(err['error'] ?? 'Failed to process salary payment');
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getPayrollHistory({int? userId}) async {
+    String url = '$_baseUrl/api/staff/payroll/history';
+    if (userId != null) url += '?user_id=$userId';
+
+    final response = await http.get(Uri.parse(url), headers: _getHeaders());
+    if (response.statusCode == 200) {
+      final List data = jsonDecode(response.body);
+      return List<Map<String, dynamic>>.from(data);
+    }
+    throw Exception('Failed to load payroll history');
+  }
+
+  // ----------------------------------------------------
   // NOTIFICATIONS APIs
   // ----------------------------------------------------
   Future<List<dynamic>> getNotifications() async {

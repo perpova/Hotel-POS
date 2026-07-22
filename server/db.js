@@ -529,6 +529,116 @@ async function initializeDatabase() {
                 await dbPool.query("ALTER TABLE orders ADD CONSTRAINT fk_orders_pre_order FOREIGN KEY (pre_order_id) REFERENCES pre_orders(id) ON DELETE SET NULL");
                 console.log("Migration: Added fk_orders_pre_order constraint.");
             } catch (_) {}
+
+            // Migration: Create global_settings, staff_payroll_settings, staff_advances, staff_payrolls tables
+            try {
+                await dbPool.query(`
+                    CREATE TABLE IF NOT EXISTS global_settings (
+                        setting_key VARCHAR(100) PRIMARY KEY,
+                        setting_value TEXT NULL,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                `);
+
+                await dbPool.query("INSERT IGNORE INTO global_settings (setting_key, setting_value) VALUES ('global_ot_rate', '250.00')");
+                await dbPool.query("INSERT IGNORE INTO global_settings (setting_key, setting_value) VALUES ('salary_notification_days', '2')");
+
+                await dbPool.query(`
+                    CREATE TABLE IF NOT EXISTS staff_payroll_settings (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        user_id INT NOT NULL UNIQUE,
+                        basic_salary DECIMAL(10,2) DEFAULT 0.00,
+                        salary_type ENUM('daily', 'weekly', 'monthly') DEFAULT 'monthly',
+                        ot_rate_per_hour DECIMAL(10,2) NULL,
+                        allowances DECIMAL(10,2) DEFAULT 0.00,
+                        salary_due_day INT DEFAULT 28,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                `);
+
+                await dbPool.query(`
+                    CREATE TABLE IF NOT EXISTS staff_advances (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        user_id INT NOT NULL,
+                        amount DECIMAL(10,2) NOT NULL,
+                        reason VARCHAR(255) DEFAULT NULL,
+                        advance_date DATE NOT NULL,
+                        status ENUM('pending', 'deducted', 'settled') DEFAULT 'pending',
+                        recorded_by INT NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                        FOREIGN KEY (recorded_by) REFERENCES users(id)
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                `);
+
+                await dbPool.query(`
+                    CREATE TABLE IF NOT EXISTS staff_payrolls (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        user_id INT NOT NULL,
+                        period_start DATE NOT NULL,
+                        period_end DATE NOT NULL,
+                        basic_salary DECIMAL(10,2) DEFAULT 0.00,
+                        working_hours DECIMAL(10,2) DEFAULT 0.00,
+                        ot_hours DECIMAL(10,2) DEFAULT 0.00,
+                        ot_rate DECIMAL(10,2) DEFAULT 0.00,
+                        ot_amount DECIMAL(10,2) DEFAULT 0.00,
+                        tip_amount DECIMAL(10,2) DEFAULT 0.00,
+                        bonuses_others DECIMAL(10,2) DEFAULT 0.00,
+                        allowances DECIMAL(10,2) DEFAULT 0.00,
+                        advance_deduction DECIMAL(10,2) DEFAULT 0.00,
+                        net_salary DECIMAL(10,2) NOT NULL,
+                        payment_method ENUM('cash', 'bank', 'drawer') DEFAULT 'cash',
+                        payment_status ENUM('draft', 'paid') DEFAULT 'paid',
+                        paid_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        created_by INT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                        FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                `);
+
+                console.log("Migration: Created global_settings, staff_payroll_settings, staff_advances, staff_payrolls tables successfully.");
+            } catch (err) {
+                console.error("Migration: Creating payroll tables failed:", err.message);
+            }
+
+            // Self-healing missing column migrations for pre-existing tables
+            try { await dbPool.query("ALTER TABLE staff_payroll_settings ADD COLUMN user_id INT NULL"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE staff_payroll_settings ADD COLUMN basic_salary DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE staff_payroll_settings ADD COLUMN salary_type ENUM('daily', 'weekly', 'monthly') DEFAULT 'monthly'"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE staff_payroll_settings ADD COLUMN ot_rate_per_hour DECIMAL(10,2) NULL"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE staff_payroll_settings ADD COLUMN allowances DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE staff_payroll_settings ADD COLUMN salary_due_day INT DEFAULT 28"); } catch (_) {}
+
+            try { await dbPool.query("ALTER TABLE staff_advances ADD COLUMN user_id INT NULL"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE staff_advances ADD COLUMN amount DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE staff_advances ADD COLUMN reason VARCHAR(255) DEFAULT NULL"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE staff_advances ADD COLUMN advance_date DATE NULL"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE staff_advances ADD COLUMN status ENUM('pending', 'deducted', 'settled') DEFAULT 'pending'"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE staff_advances ADD COLUMN recorded_by INT NULL"); } catch (_) {}
+
+            try { await dbPool.query("ALTER TABLE staff_payrolls ADD COLUMN user_id INT NULL"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE staff_payrolls ADD COLUMN period_start DATE NULL"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE staff_payrolls ADD COLUMN period_end DATE NULL"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE staff_payrolls ADD COLUMN basic_salary DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE staff_payrolls ADD COLUMN working_hours DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE staff_payrolls ADD COLUMN ot_hours DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE staff_payrolls ADD COLUMN ot_rate DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE staff_payrolls ADD COLUMN ot_amount DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE staff_payrolls ADD COLUMN tip_amount DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE staff_payrolls ADD COLUMN allowances DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE staff_payrolls ADD COLUMN advance_deduction DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE staff_payrolls ADD COLUMN net_salary DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE staff_payrolls ADD COLUMN payment_method ENUM('cash', 'bank', 'drawer') DEFAULT 'cash'"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE staff_payrolls ADD COLUMN created_by INT NULL"); } catch (_) {}
+
+            try { await dbPool.query("ALTER TABLE staff_shifts ADD COLUMN user_id INT NULL"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE staff_shifts ADD COLUMN clock_in DATETIME NULL"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE staff_shifts ADD COLUMN clock_out DATETIME DEFAULT NULL"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE staff_shifts ADD COLUMN duration_minutes INT DEFAULT 0"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE staff_shifts ADD COLUMN status ENUM('active', 'completed') DEFAULT 'active'"); } catch (_) {}
         }
     } catch (error) {
         console.error('Database initialization failed:', error.message);
