@@ -64,7 +64,7 @@ class _PreOrdersScreenState extends State<PreOrdersScreen> {
     }).toList();
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: AppTheme.bgLight,
       body: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(
@@ -127,13 +127,13 @@ class _PreOrdersScreenState extends State<PreOrdersScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: AppTheme.cardLight,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFE2E8F0)),
+                border: Border.all(color: AppTheme.borderLight),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.search, color: Color(0xFF94A3B8), size: 20),
+                  Icon(Icons.search, color: AppTheme.textLightSecondary, size: 20),
                   const SizedBox(width: 12),
                   Expanded(
                     child: TextField(
@@ -146,17 +146,19 @@ class _PreOrdersScreenState extends State<PreOrdersScreen> {
                       onSubmitted: (val) {
                         _checkForBarcodeScan(val, controller);
                       },
-                      style: GoogleFonts.inter(fontSize: 14),
+                      style: GoogleFonts.inter(fontSize: 14, color: AppTheme.textLightPrimary),
                       decoration: InputDecoration(
                         hintText: 'Search by Customer, Phone, or Pre Order No...'.tr(context),
-                        hintStyle: GoogleFonts.inter(color: const Color(0xFF94A3B8), fontSize: 13),
+                        hintStyle: GoogleFonts.inter(color: AppTheme.textLightSecondary, fontSize: 13),
                         border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
                         isDense: true,
                       ),
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.refresh, color: Color(0xFF64748B), size: 20),
+                    icon: Icon(Icons.refresh, color: AppTheme.textLightSecondary, size: 20),
                     onPressed: _loadData,
                     tooltip: 'Refresh Data',
                   ),
@@ -174,26 +176,26 @@ class _PreOrdersScreenState extends State<PreOrdersScreen> {
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.history_toggle_off, size: 64, color: Colors.grey[300]),
+                              Icon(Icons.history_toggle_off, size: 64, color: AppTheme.textLightSecondary.withOpacity(0.5)),
                               const SizedBox(height: 16),
                               Text(
                                 'No pre orders found'.tr(context),
-                                style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey[600]),
+                                style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary),
                               ),
                             ],
                           ),
                         )
                       : Container(
                           decoration: BoxDecoration(
-                            color: Colors.white,
+                            color: AppTheme.cardLight,
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                            border: Border.all(color: AppTheme.borderLight),
                           ),
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(12),
                             child: ListView.separated(
                               itemCount: filtered.length,
-                              separatorBuilder: (context, index) => const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                              separatorBuilder: (context, index) => Divider(height: 1, color: AppTheme.dividerColor),
                               itemBuilder: (context, index) {
                                 final po = filtered[index];
                                 return _buildPreOrderRow(po, controller);
@@ -804,10 +806,10 @@ class _PreOrdersScreenState extends State<PreOrdersScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFFFFECE5) : Colors.transparent,
+          color: isSelected ? AppTheme.primary.withOpacity(0.12) : AppTheme.cardLight,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: isSelected ? AppTheme.primary : const Color(0xFFE2E8F0),
+            color: isSelected ? AppTheme.primary : AppTheme.borderLight,
             width: isSelected ? 1.5 : 1,
           ),
         ),
@@ -816,7 +818,7 @@ class _PreOrdersScreenState extends State<PreOrdersScreen> {
           style: GoogleFonts.inter(
             fontSize: 12,
             fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-            color: isSelected ? AppTheme.primary : const Color(0xFF64748B),
+            color: isSelected ? AppTheme.primary : AppTheme.textLightSecondary,
           ),
         ),
       ),

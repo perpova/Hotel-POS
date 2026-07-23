@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform, kIsWeb;
+import '../services/window_helper.dart';
 import '../services/update_service.dart';
 import '../widgets/update_dialog.dart';
 import 'dart:ui' as ui;
@@ -946,6 +948,7 @@ class _MainLayoutState extends State<MainLayout> {
     final dividerColor = AppTheme.isDarkMode ? const Color(0xFF334155) : const Color(0xFFF1F5F9);
 
     final Widget scaffold = Scaffold(
+      backgroundColor: AppTheme.bgLight,
       key: _scaffoldKey,
       drawer: (!isDesktop && !isFullScreenMode) ? Drawer(child: buildSidebarContent()) : null,
       body: Row(
@@ -1220,6 +1223,27 @@ class _MainLayoutState extends State<MainLayout> {
                           onPressed: () {
                             setState(() {
                               _isSidebarCollapsed = !_isSidebarCollapsed;
+                            });
+                          },
+                        ),
+                        const SizedBox(width: 16),
+
+                        // Windows Fullscreen / Hide Title Bar toggle button
+                        IconButton(
+                          tooltip: WindowHelper.isFullScreen ? 'Exit Full Screen' : 'Enter Full Screen (Hide Title Bar)',
+                          icon: Icon(
+                            WindowHelper.isFullScreen ? Icons.fullscreen_exit : Icons.fullscreen,
+                            color: AppTheme.primary,
+                            size: 18,
+                          ),
+                          style: IconButton.styleFrom(
+                            backgroundColor: const Color(0xFFFFF0F5),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            padding: const EdgeInsets.all(10),
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              WindowHelper.toggleFullScreen();
                             });
                           },
                         ),

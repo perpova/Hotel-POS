@@ -1,5 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
+import 'package:path/path.dart' as p;
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
@@ -23,14 +26,28 @@ class APIService {
   bool _isConnectingWs = false;
 
   String get baseUrl => _baseUrl;
+  String get displayUrl {
+    if (_baseUrl == 'https://pos0001.perpova.com') return 'https://abc1.com';
+    if (_baseUrl == 'https://pos0001.perpova.dev') return 'https://abc2.com';
+    return _baseUrl;
+  }
   bool get isAuthenticated => _token != null;
 
-  Future<void> setBaseUrl(String url) async {
+  Future<void> setBaseUrl(String inputUrl) async {
+    String url = inputUrl.trim();
+    if (url == 'https://abc1.com' || url == 'abc1.com') {
+      url = 'https://pos0001.perpova.com';
+    } else if (url == 'https://abc2.com' || url == 'abc2.com') {
+      url = 'https://pos0001.perpova.dev';
+    }
     _baseUrl = url;
-    // Replace http(s) with ws(s)
-    _wsUrl = url.replaceFirst('http', 'ws');
+    if (_baseUrl.startsWith('https://')) {
+      _wsUrl = _baseUrl.replaceFirst('https://', 'wss://');
+    } else {
+      _wsUrl = _baseUrl.replaceFirst('http://', 'ws://');
+    }
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('api_base_url', url);
+    await prefs.setString('api_base_url', _baseUrl);
   }
 
   Future<void> init() async {
@@ -48,14 +65,34 @@ class APIService {
     }
   }
 
+  Future<void> autoLaunchLocalServer() async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.windows) return;
+    try {
+      final exePath = Platform.resolvedExecutable;
+      final appDir = p.dirname(exePath);
+      final vbsPath = p.join(appDir, 'server', 'start_server.vbs');
+      if (await File(vbsPath).exists()) {
+        await Process.run('wscript.exe', [vbsPath], workingDirectory: p.join(appDir, 'server'));
+      }
+    } catch (_) {}
+  }
+
   // Check network connectivity
   Future<bool> checkOnline() async {
     try {
       final response = await http.get(Uri.parse('$_baseUrl/api/categories')).timeout(const Duration(seconds: 2));
-      return response.statusCode == 200;
-    } catch (_) {
-      return false;
+      if (response.statusCode == 200) return true;
+    } catch (_) {}
+
+    if (_baseUrl.contains('localhost') || _baseUrl.contains('127.0.0.1')) {
+      await autoLaunchLocalServer();
+      try {
+        final res = await http.get(Uri.parse('http://localhost:3000/api/categories')).timeout(const Duration(seconds: 2));
+        return res.statusCode == 200;
+      } catch (_) {}
     }
+
+    return false;
   }
 
   // ----------------------------------------------------

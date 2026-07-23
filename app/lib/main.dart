@@ -12,6 +12,7 @@ import 'screens/order_queue_screen.dart';
 import 'package:flutter/foundation.dart';
 import 'package:video_player_win/video_player_win_plugin.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'services/window_helper.dart';
 
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -53,6 +54,12 @@ void main(List<String> args) async {
       child: HotelPOSApp(isQueueScreenMode: isQueueScreenMode),
     ),
   );
+
+  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows && !isQueueScreenMode) {
+    Future.delayed(const Duration(milliseconds: 300), () {
+      WindowHelper.enableFullScreen();
+    });
+  }
 }
 
 class HotelPOSApp extends StatelessWidget {

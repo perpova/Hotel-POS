@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform, kIsWeb;
+import '../services/window_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -59,7 +61,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _showServerConfigDialog() {
-    final urlController = TextEditingController(text: APIService.instance.baseUrl);
+    final urlController = TextEditingController(text: APIService.instance.displayUrl);
     bool testing = false;
     String? testResult;
     bool isSuccess = false;
@@ -92,8 +94,11 @@ class _LoginScreenState extends State<LoginScreen> {
                     const SizedBox(height: 6),
                     TextField(
                       controller: urlController,
+                      keyboardType: TextInputType.url,
+                      autocorrect: false,
+                      enableSuggestions: false,
                       decoration: InputDecoration(
-                        hintText: 'e.g. http://192.168.1.100:3000',
+                        hintText: 'e.g. https://abc1.com or http://192.168.1.100:3000',
                         prefixIcon: const Icon(Icons.dns_outlined, size: 20),
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                       ),
@@ -106,7 +111,18 @@ class _LoginScreenState extends State<LoginScreen> {
                       runSpacing: 6,
                       children: [
                         ActionChip(
-                          label: const Text('http://localhost:3000', style: TextStyle(fontSize: 11)),
+                          avatar: const Icon(Icons.cloud_done_outlined, size: 14, color: Colors.blue),
+                          label: const Text('Default (https://abc1.com)', style: TextStyle(fontSize: 11)),
+                          onPressed: () => setDialogState(() => urlController.text = 'https://abc1.com'),
+                        ),
+                        ActionChip(
+                          avatar: const Icon(Icons.bug_report_outlined, size: 14, color: Colors.orange),
+                          label: const Text('Testing (https://abc2.com)', style: TextStyle(fontSize: 11)),
+                          onPressed: () => setDialogState(() => urlController.text = 'https://abc2.com'),
+                        ),
+                        ActionChip(
+                          avatar: const Icon(Icons.computer_outlined, size: 14, color: Colors.green),
+                          label: const Text('Localhost (http://localhost:3000)', style: TextStyle(fontSize: 11)),
                           onPressed: () => setDialogState(() => urlController.text = 'http://localhost:3000'),
                         ),
                         ActionChip(
@@ -145,8 +161,10 @@ class _LoginScreenState extends State<LoginScreen> {
               actions: [
                 TextButton(
                   onPressed: testing ? null : () async {
-                    final targetUrl = urlController.text.trim();
+                    var targetUrl = urlController.text.trim();
                     if (targetUrl.isEmpty) return;
+                    if (targetUrl == 'https://abc1.com' || targetUrl == 'abc1.com') targetUrl = 'https://pos0001.perpova.com';
+                    if (targetUrl == 'https://abc2.com' || targetUrl == 'abc2.com') targetUrl = 'https://pos0001.perpova.dev';
                     setDialogState(() {
                       testing = true;
                       testResult = null;
@@ -295,6 +313,23 @@ class _LoginScreenState extends State<LoginScreen> {
                                             ),
                                           ),
                               ),
+                              if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows)
+                                Positioned(
+                                  left: 0,
+                                  top: 0,
+                                  child: IconButton(
+                                    icon: Icon(
+                                      WindowHelper.isFullScreen ? Icons.fullscreen_exit : Icons.fullscreen,
+                                      color: AppTheme.primary,
+                                    ),
+                                    tooltip: WindowHelper.isFullScreen ? 'Exit Full Screen' : 'Enter Full Screen (Hide Title Bar)',
+                                    onPressed: () {
+                                      setState(() {
+                                        WindowHelper.toggleFullScreen();
+                                      });
+                                    },
+                                  ),
+                                ),
                               Positioned(
                                 right: 0,
                                 top: 0,
@@ -439,7 +474,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   const SizedBox(width: 6),
                                   Flexible(
                                     child: Text(
-                                      'Server: ${APIService.instance.baseUrl}',
+                                      'Server: ${APIService.instance.displayUrl}',
                                       overflow: TextOverflow.ellipsis,
                                       style: GoogleFonts.inter(
                                         fontSize: 12,

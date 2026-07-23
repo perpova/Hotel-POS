@@ -15,6 +15,7 @@ import '../controllers/pos_controller.dart';
 import '../controllers/dashboard_controller.dart';
 import '../theme.dart';
 import '../services/api_service.dart';
+import '../services/translation_service.dart';
 import '../services/local_db.dart';
 import '../models/models.dart';
 import '../widgets/image_helper.dart';
@@ -399,7 +400,7 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
         // Search & Quick Tabs Bar
         Card(
           elevation: 0,
-          color: Colors.white,
+          color: AppTheme.cardLight,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           child: Padding(
             padding: const EdgeInsets.all(16.0),
@@ -410,14 +411,14 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
                   child: Container(
                     height: 44,
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF8FAFC),
+                      color: AppTheme.isDarkMode ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                      border: Border.all(color: AppTheme.borderLight),
                     ),
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     child: Row(
                       children: [
-                        const Icon(Icons.search, color: Color(0xFF94A3B8), size: 18),
+                        Icon(Icons.search, color: AppTheme.textLightSecondary, size: 18),
                         const SizedBox(width: 8),
                         Expanded(
                           child: TextField(
@@ -427,15 +428,16 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
                                 _currentPage = 1; // Reset to page 1
                               });
                             },
-                            decoration: const InputDecoration(
+                            decoration: InputDecoration(
                               hintText: 'Search by Order ID, customer...',
+                              hintStyle: TextStyle(color: AppTheme.textLightSecondary),
                               border: InputBorder.none,
                               enabledBorder: InputBorder.none,
                               focusedBorder: InputBorder.none,
                               contentPadding: EdgeInsets.zero,
                               isDense: true,
                             ),
-                            style: GoogleFonts.inter(fontSize: 13),
+                            style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary),
                           ),
                         ),
                         if (_searchQuery.isNotEmpty)
@@ -445,7 +447,7 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
                                 _searchQuery = '';
                               });
                             },
-                            child: const Icon(Icons.clear, color: Color(0xFF94A3B8), size: 16),
+                            child: Icon(Icons.clear, color: AppTheme.textLightSecondary, size: 16),
                           ),
                       ],
                     ),
@@ -470,7 +472,7 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
         Expanded(
           child: Card(
             elevation: 0,
-            color: Colors.white,
+            color: AppTheme.cardLight,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             child: _isLoadingOrders
                 ? Center(child: CircularProgressIndicator(color: AppTheme.primary))
@@ -492,7 +494,7 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
                             children: [
                               // Table Header
                               Container(
-                                color: const Color(0xFFF8FAFC),
+                                color: AppTheme.isDarkMode ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
                                 padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
                                 child: Row(
                                   children: [
@@ -510,7 +512,7 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
                               Expanded(
                                 child: ListView.separated(
                                   itemCount: paginatedOrders.length,
-                                  separatorBuilder: (context, index) => const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                                  separatorBuilder: (context, index) => Divider(height: 1, color: AppTheme.dividerColor),
                                   itemBuilder: (context, index) {
                                     final order = paginatedOrders[index];
                                     return _buildOrderRow(order, posController);
@@ -521,9 +523,9 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
                               // Table Footer (Pagination)
                               Container(
                                 padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
-                                decoration: const BoxDecoration(
-                                  color: Color(0xFFF8FAFC),
-                                  borderRadius: BorderRadius.only(
+                                decoration: BoxDecoration(
+                                  color: AppTheme.isDarkMode ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                                  borderRadius: const BorderRadius.only(
                                     bottomLeft: Radius.circular(12),
                                     bottomRight: Radius.circular(12),
                                   ),
@@ -574,11 +576,11 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
 
   Widget _buildTableHeaderText(String label) {
     return Text(
-      label,
+      label.tr(context),
       style: GoogleFonts.inter(
         fontSize: 11,
         fontWeight: FontWeight.bold,
-        color: const Color(0xFF475569),
+        color: AppTheme.textLightSecondary,
         letterSpacing: 0.5,
       ),
     );
@@ -662,7 +664,7 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
             flex: 2,
             child: Text(
               custName,
-              style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569), fontWeight: FontWeight.w500),
+              style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightSecondary, fontWeight: FontWeight.w500),
             ),
           ),
 
@@ -680,7 +682,7 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
             flex: 3,
             child: Text(
               _formatDate(order.createdAt),
-              style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+              style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary),
             ),
           ),
 
@@ -777,7 +779,7 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
         borderRadius: BorderRadius.circular(4),
       ),
       child: Text(
-        label,
+        label.tr(context),
         style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: text),
       ),
     );
@@ -791,7 +793,7 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
     return OutlinedButton.icon(
       onPressed: onTap,
       icon: Icon(icon, size: 14, color: AppTheme.primary),
-      label: Text(label, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primary)),
+      label: Text(label.tr(context), style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primary)),
       style: OutlinedButton.styleFrom(
         side: BorderSide(color: AppTheme.primary),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -824,7 +826,7 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
           ),
         ),
         child: Text(
-          label,
+          label.tr(context),
           style: GoogleFonts.inter(
             fontSize: 12,
             fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
