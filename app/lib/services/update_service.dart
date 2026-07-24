@@ -364,7 +364,7 @@ Log "=== Update Complete ==="
   /// Opens the GitHub releases page in the default browser.
   void openReleasePage([String? url]) {
     final target = url ?? _releasesUrl;
-    if (Platform.isWindows) {
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
       Process.run('cmd', ['/c', 'start', target]);
     }
   }

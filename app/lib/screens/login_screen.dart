@@ -19,8 +19,8 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _usernameController = TextEditingController(text: 'cashier');
-  final _passwordController = TextEditingController(text: '123456');
+  final _usernameController = TextEditingController();
+  final _passwordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
   String? _errorMessage;
@@ -312,7 +312,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                               color: AppTheme.primary,
                                             ),
                                           ),
-                              ),
+                               ),
                               if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows)
                                 Positioned(
                                   left: 0,
@@ -330,15 +330,16 @@ class _LoginScreenState extends State<LoginScreen> {
                                     },
                                   ),
                                 ),
-                              Positioned(
-                                right: 0,
-                                top: 0,
-                                child: IconButton(
-                                  icon: Icon(Icons.settings_ethernet, color: AppTheme.primary),
-                                  tooltip: 'Server Connection IP Settings',
-                                  onPressed: _showServerConfigDialog,
+                              if (!kIsWeb)
+                                Positioned(
+                                  right: 0,
+                                  top: 0,
+                                  child: IconButton(
+                                    icon: Icon(Icons.settings_ethernet, color: AppTheme.primary),
+                                    tooltip: 'Server Connection IP Settings',
+                                    onPressed: _showServerConfigDialog,
+                                  ),
                                 ),
-                              ),
                             ],
                           ),
                           const SizedBox(height: 16),
@@ -425,18 +426,19 @@ class _LoginScreenState extends State<LoginScreen> {
                             validator: (val) => val == null || val.isEmpty ? 'Password is required' : null,
                           ),
                           
-                          if (_errorMessage != null) ...[
-                            const SizedBox(height: 16),
-                            Text(
-                              _errorMessage!,
-                              textAlign: TextAlign.center,
-                              style: GoogleFonts.inter(
-                                color: AppTheme.danger,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
+                          if (_errorMessage != null)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 16),
+                              child: Text(
+                                _errorMessage!,
+                                textAlign: TextAlign.center,
+                                style: GoogleFonts.inter(
+                                  color: AppTheme.danger,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                ),
                               ),
                             ),
-                          ],
                           
                           const SizedBox(height: 32),
                           
@@ -461,41 +463,44 @@ class _LoginScreenState extends State<LoginScreen> {
                                     ),
                                   ),
                           ),
-                          const SizedBox(height: 20),
-                          InkWell(
-                            onTap: _showServerConfigDialog,
-                            borderRadius: BorderRadius.circular(8),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.wifi_tethering, size: 14, color: AppTheme.primary),
-                                  const SizedBox(width: 6),
-                                  Flexible(
-                                    child: Text(
-                                      'Server: ${APIService.instance.displayUrl}',
-                                      overflow: TextOverflow.ellipsis,
-                                      style: GoogleFonts.inter(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                        color: AppTheme.primary,
+                          if (!kIsWeb)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 20),
+                              child: InkWell(
+                                onTap: _showServerConfigDialog,
+                                borderRadius: BorderRadius.circular(8),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.wifi_tethering, size: 14, color: AppTheme.primary),
+                                      const SizedBox(width: 6),
+                                      Flexible(
+                                        child: Text(
+                                          'Server: ${APIService.instance.displayUrl}',
+                                          overflow: TextOverflow.ellipsis,
+                                          style: GoogleFonts.inter(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                            color: AppTheme.primary,
+                                          ),
+                                        ),
                                       ),
-                                    ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        '(Change IP)',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 11,
+                                          color: AppTheme.textLightSecondary,
+                                          decoration: TextDecoration.underline,
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    '(Change IP)',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 11,
-                                      color: AppTheme.textLightSecondary,
-                                      decoration: TextDecoration.underline,
-                                    ),
-                                  ),
-                                ],
+                                ),
                               ),
                             ),
-                          ),
                         ],
                       ),
                     ),

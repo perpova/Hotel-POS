@@ -13,9 +13,9 @@ class APIService {
   static final APIService instance = APIService._init();
   APIService._init();
 
-  // For localhost testing, default to standard express port 3000
-  String _baseUrl = 'http://localhost:3000';
-  String _wsUrl = 'ws://localhost:3000';
+  // For cloud / production server, default to pos0001.perpova.dev
+  String _baseUrl = 'https://pos0001.perpova.dev';
+  String _wsUrl = 'wss://pos0001.perpova.dev';
   String? _token;
   UserModel? currentUser;
 
@@ -52,8 +52,12 @@ class APIService {
 
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
-    _baseUrl = prefs.getString('api_base_url') ?? 'http://localhost:3000';
-    _wsUrl = _baseUrl.replaceFirst('http', 'ws');
+    _baseUrl = prefs.getString('api_base_url') ?? 'https://pos0001.perpova.dev';
+    if (_baseUrl.startsWith('https://')) {
+      _wsUrl = _baseUrl.replaceFirst('https://', 'wss://');
+    } else {
+      _wsUrl = _baseUrl.replaceFirst('http://', 'ws://');
+    }
     _token = prefs.getString('auth_token');
     
     final userJson = prefs.getString('auth_user');
