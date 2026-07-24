@@ -46,6 +46,46 @@ class _MyAttendanceScreenState extends State<MyAttendanceScreen> {
     final user = context.watch<AuthProvider>().user;
     final data = _attendanceData;
 
+    final List shiftsList = data != null ? (data['shifts'] as List? ?? []) : [];
+    double calculatedDailyHours = 0.0;
+    double calculatedWeeklyHours = 0.0;
+    double calculatedMonthlyHours = 0.0;
+    double calculatedYearlyHours = 0.0;
+    final now = DateTime.now();
+
+    for (final sh in shiftsList) {
+      final cinRaw = sh['clock_in']?.toString();
+      final coutRaw = sh['clock_out']?.toString();
+      if (cinRaw != null) {
+        final cinDt = parseServerDate(cinRaw);
+        final coutDt = coutRaw != null ? parseServerDate(coutRaw) : DateTime.now();
+        final diffMins = coutDt.difference(cinDt).inMinutes;
+        final mins = diffMins > 0 ? diffMins : ((sh['duration_minutes'] as num?)?.toInt() ?? 0);
+        final hrs = mins / 60.0;
+
+        final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
+        final startOfWeekMidnight = DateTime(startOfWeek.year, startOfWeek.month, startOfWeek.day);
+
+        if (cinDt.year == now.year && cinDt.month == now.month && cinDt.day == now.day) {
+          calculatedDailyHours += hrs;
+        }
+        if (cinDt.isAfter(startOfWeekMidnight)) {
+          calculatedWeeklyHours += hrs;
+        }
+        if (cinDt.year == now.year && cinDt.month == now.month) {
+          calculatedMonthlyHours += hrs;
+        }
+        if (cinDt.year == now.year) {
+          calculatedYearlyHours += hrs;
+        }
+      }
+    }
+
+    final double displayDaily = calculatedDailyHours > 0.0 ? calculatedDailyHours : ((data?['daily_hours'] as num?)?.toDouble() ?? 0.0);
+    final double displayWeekly = calculatedWeeklyHours > 0.0 ? calculatedWeeklyHours : ((data?['weekly_hours'] as num?)?.toDouble() ?? 0.0);
+    final double displayMonthly = calculatedMonthlyHours > 0.0 ? calculatedMonthlyHours : ((data?['monthly_hours'] as num?)?.toDouble() ?? 0.0);
+    final double displayYearly = calculatedYearlyHours > 0.0 ? calculatedYearlyHours : ((data?['yearly_hours'] as num?)?.toDouble() ?? 0.0);
+
     return Scaffold(
       backgroundColor: AppColors.bgDeep,
       appBar: AppBar(
@@ -109,12 +149,12 @@ class _MyAttendanceScreenState extends State<MyAttendanceScreen> {
                         mainAxisSpacing: 10,
                         childAspectRatio: 1.8,
                         children: [
-                          _buildCard('Daily Hours (Today)', '${(data['daily_hours'] as num?)?.toStringAsFixed(1) ?? "0.0"} h', AppColors.primary),
-                          _buildCard('Weekly Hours', '${(data['weekly_hours'] as num?)?.toStringAsFixed(1) ?? "0.0"} h', AppColors.info),
-                          _buildCard('Monthly Hours', '${(data['monthly_hours'] as num?)?.toStringAsFixed(1) ?? "0.0"} h', const Color(0xFF8B5CF6)),
-                          _buildCard('Yearly Hours', '${(data['yearly_hours'] as num?)?.toStringAsFixed(1) ?? "0.0"} h', const Color(0xFF6366F1)),
-                          _buildCard('Daily Average', '${(data['average_daily_hours'] as num?)?.toStringAsFixed(1) ?? "0.0"} h', AppColors.success),
-                          _buildCard('OT Hours Total', '${(data['ot_hours'] as num?)?.toStringAsFixed(1) ?? "0.0"} h', AppColors.warning),
+                          _buildCard('Daily Hours (Today)', '${displayDaily.toStringAsFixed(1)} h', AppColors.primary),
+                          _buildCard('Weekly Hours', '${displayWeekly.toStringAsFixed(1)} h', AppColors.info),
+                          _buildCard('Monthly Hours', '${displayMonthly.toStringAsFixed(1)} h', const Color(0xFF8B5CF6)),
+                          _buildCard('Yearly Hours', '${displayYearly.toStringAsFixed(1)} h', const Color(0xFF6366F1)),
+                          _buildCard('Daily Average', '${(data!['average_daily_hours'] as num?)?.toStringAsFixed(1) ?? displayDaily.toStringAsFixed(1)} h', AppColors.success),
+                          _buildCard('OT Hours Total', '${(data!['ot_hours'] as num?)?.toStringAsFixed(1) ?? "0.0"} h', AppColors.warning),
                         ],
                       ),
                       const SizedBox(height: 20),
@@ -136,7 +176,10 @@ class _MyAttendanceScreenState extends State<MyAttendanceScreen> {
                             if (coutRaw != null) coutStr = DateFormat('hh:mm a').format(parseServerDate(coutRaw));
                           } catch (_) {}
 
-                          final int mins = (sh['duration_minutes'] as num?)?.toInt() ?? 0;
+                          final DateTime cinDt = parseServerDate(cinRaw);
+                          final DateTime coutDt = parseServerDate(coutRaw);
+                          final int diffMins = coutRaw != null ? coutDt.difference(cinDt).inMinutes : DateTime.now().difference(cinDt).inMinutes;
+                          final int mins = diffMins > 0 ? diffMins : ((sh['duration_minutes'] as num?)?.toInt() ?? 0);
                           final hrs = (mins / 60).toStringAsFixed(1);
 
                           return Container(
@@ -213,11 +256,15 @@ class _MyAttendanceScreenState extends State<MyAttendanceScreen> {
           pw.TableHelper.fromTextArray(
             headers: ['Clock In', 'Clock Out', 'Duration (mins)', 'Hours (h)'],
             data: shifts.map((sh) {
+              final DateTime cinDt = parseServerDate(sh['clock_in']);
+              final DateTime coutDt = parseServerDate(sh['clock_out']);
+              final int diffMins = sh['clock_out'] != null ? coutDt.difference(cinDt).inMinutes : DateTime.now().difference(cinDt).inMinutes;
+              final int mins = diffMins > 0 ? diffMins : ((sh['duration_minutes'] as num? ?? 0).toInt());
               return [
                 sh['clock_in']?.toString() ?? '',
                 sh['clock_out']?.toString() ?? 'Active',
-                '${sh['duration_minutes'] ?? 0}',
-                '${((sh['duration_minutes'] as num? ?? 0) / 60).toStringAsFixed(1)}',
+                '$mins',
+                '${(mins / 60).toStringAsFixed(1)}',
               ];
             }).toList(),
             headerDecoration: const pw.BoxDecoration(color: PdfColors.amber800),

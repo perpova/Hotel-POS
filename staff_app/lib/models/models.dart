@@ -83,16 +83,11 @@ class ShiftLogModel {
   bool get isActive => status == 'active' && clockOut == null;
 
   String get durationFormatted {
-    if (isActive) {
-      final mins = DateTime.now().difference(clockIn).inMinutes;
-      final validMins = mins < 0 ? 0 : mins;
-      final hrs = validMins ~/ 60;
-      final remMins = validMins % 60;
-      return '${hrs}h ${remMins}m';
-    } else {
-      final hrs = durationMinutes ~/ 60;
-      final remMins = durationMinutes % 60;
-      return '${hrs}h ${remMins}m';
-    }
+    final DateTime end = clockOut ?? DateTime.now();
+    final mins = end.difference(clockIn).inMinutes;
+    final validMins = mins > 0 ? mins : (durationMinutes > 0 ? durationMinutes : 0);
+    final hrs = validMins ~/ 60;
+    final remMins = validMins % 60;
+    return '${hrs}h ${remMins}m';
   }
 }

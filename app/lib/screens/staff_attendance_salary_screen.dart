@@ -6,6 +6,7 @@ import '../theme.dart';
 import '../services/api_service.dart';
 import '../services/pdf_helper.dart';
 import '../widgets/image_helper.dart';
+import '../utils/date_helper.dart';
 
 class StaffAttendanceSalaryScreen extends StatefulWidget {
   const StaffAttendanceSalaryScreen({Key? key}) : super(key: key);
@@ -387,9 +388,10 @@ class _StaffAttendanceSalaryScreenState extends State<StaffAttendanceSalaryScree
         Expanded(
           child: ListView.builder(
             itemCount: _attendanceSummary.length,
-            itemBuilder: (context, index) {
+              itemBuilder: (context, index) {
               final staff = _attendanceSummary[index];
               final bool isClockedIn = staff['is_clocked_in'] == true;
+              final hoursMetrics = _calculateStaffWorkHours(staff);
 
               return Card(
                 elevation: 0,
@@ -460,17 +462,17 @@ class _StaffAttendanceSalaryScreenState extends State<StaffAttendanceSalaryScree
                       ),
 
                       // Worked Hours Breakdown Cards
-                      _buildMetricBox('Daily', '${(staff['daily_hours'] as num?)?.toStringAsFixed(1) ?? "0.0"} h', AppTheme.primary),
+                      _buildMetricBox('Daily', '${hoursMetrics['daily']!.toStringAsFixed(1)} h', AppTheme.primary),
                       const SizedBox(width: 8),
-                      _buildMetricBox('Weekly', '${(staff['weekly_hours'] as num?)?.toStringAsFixed(1) ?? "0.0"} h', const Color(0xFF3B82F6)),
+                      _buildMetricBox('Weekly', '${hoursMetrics['weekly']!.toStringAsFixed(1)} h', const Color(0xFF3B82F6)),
                       const SizedBox(width: 8),
-                      _buildMetricBox('Monthly', '${(staff['monthly_hours'] as num?)?.toStringAsFixed(1) ?? "0.0"} h', const Color(0xFF8B5CF6)),
+                      _buildMetricBox('Monthly', '${hoursMetrics['monthly']!.toStringAsFixed(1)} h', const Color(0xFF8B5CF6)),
                       const SizedBox(width: 8),
-                      _buildMetricBox('Yearly', '${(staff['yearly_hours'] as num?)?.toStringAsFixed(1) ?? "0.0"} h', const Color(0xFF6366F1)),
+                      _buildMetricBox('Yearly', '${hoursMetrics['yearly']!.toStringAsFixed(1)} h', const Color(0xFF6366F1)),
                       const SizedBox(width: 8),
-                      _buildMetricBox('Avg/Day', '${(staff['average_daily_hours'] as num?)?.toStringAsFixed(1) ?? "0.0"} h', const Color(0xFF10B981)),
+                      _buildMetricBox('Avg/Day', '${hoursMetrics['avgDaily']!.toStringAsFixed(1)} h', const Color(0xFF10B981)),
                       const SizedBox(width: 8),
-                      _buildMetricBox('OT Hours', '${(staff['ot_hours'] as num?)?.toStringAsFixed(1) ?? "0.0"} h', const Color(0xFFF59E0B)),
+                      _buildMetricBox('OT Hours', '${hoursMetrics['ot']!.toStringAsFixed(1)} h', const Color(0xFFF59E0B)),
                     ],
                   ),
                 ),
@@ -481,6 +483,61 @@ class _StaffAttendanceSalaryScreenState extends State<StaffAttendanceSalaryScree
         ),
       ],
     );
+  }
+
+  Map<String, double> _calculateStaffWorkHours(Map<String, dynamic> staff) {
+    final List shifts = staff['shifts'] as List? ?? [];
+    double daily = 0.0;
+    double weekly = 0.0;
+    double monthly = 0.0;
+    double yearly = 0.0;
+    final Set<String> workedDates = {};
+    final now = DateTime.now();
+    final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
+    final startOfWeekMidnight = DateTime(startOfWeek.year, startOfWeek.month, startOfWeek.day);
+
+    for (final sh in shifts) {
+      final cinRaw = sh['clock_in']?.toString();
+      final coutRaw = sh['clock_out']?.toString();
+      if (cinRaw != null) {
+        final cinDt = parseServerDateTime(cinRaw);
+        final coutDt = coutRaw != null ? parseServerDateTime(coutRaw) : DateTime.now();
+        final diffMins = coutDt.difference(cinDt).inMinutes;
+        final mins = diffMins > 0 ? diffMins : ((sh['duration_minutes'] as num?)?.toInt() ?? 0);
+        final hrs = mins / 60.0;
+
+        workedDates.add(DateFormat('yyyy-MM-dd').format(cinDt));
+
+        if (cinDt.year == now.year && cinDt.month == now.month && cinDt.day == now.day) {
+          daily += hrs;
+        }
+        if (cinDt.isAfter(startOfWeekMidnight)) {
+          weekly += hrs;
+        }
+        if (cinDt.year == now.year && cinDt.month == now.month) {
+          monthly += hrs;
+        }
+        if (cinDt.year == now.year) {
+          yearly += hrs;
+        }
+      }
+    }
+
+    final double finalDaily = daily > 0.0 ? daily : _parseDouble(staff['daily_hours']);
+    final double finalWeekly = weekly > 0.0 ? weekly : _parseDouble(staff['weekly_hours']);
+    final double finalMonthly = monthly > 0.0 ? monthly : _parseDouble(staff['monthly_hours']);
+    final double finalYearly = yearly > 0.0 ? yearly : _parseDouble(staff['yearly_hours']);
+    final int daysCount = workedDates.isNotEmpty ? workedDates.length : 1;
+    final double finalAvg = finalYearly > 0.0 ? (finalYearly / daysCount) : _parseDouble(staff['average_daily_hours']);
+
+    return {
+      'daily': finalDaily,
+      'weekly': finalWeekly,
+      'monthly': finalMonthly,
+      'yearly': finalYearly,
+      'avgDaily': finalAvg,
+      'ot': _parseDouble(staff['ot_hours']),
+    };
   }
 
   Widget _buildMetricBox(String label, String value, Color color) {
@@ -504,6 +561,7 @@ class _StaffAttendanceSalaryScreenState extends State<StaffAttendanceSalaryScree
 
   void _showStaffShiftDetailsDialog(Map<String, dynamic> staff) {
     final List<dynamic> shifts = staff['shifts'] ?? [];
+    final hoursMetrics = _calculateStaffWorkHours(staff);
 
     showDialog(
       context: context,
@@ -547,10 +605,10 @@ class _StaffAttendanceSalaryScreenState extends State<StaffAttendanceSalaryScree
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
-                      _buildDetailHeaderMetric('Daily Worked', '${_parseDouble(staff['daily_hours']).toStringAsFixed(1)} hrs'),
-                      _buildDetailHeaderMetric('Weekly Worked', '${_parseDouble(staff['weekly_hours']).toStringAsFixed(1)} hrs'),
-                      _buildDetailHeaderMetric('Monthly Worked', '${_parseDouble(staff['monthly_hours']).toStringAsFixed(1)} hrs'),
-                      _buildDetailHeaderMetric('OT Hours', '${_parseDouble(staff['ot_hours']).toStringAsFixed(1)} hrs'),
+                      _buildDetailHeaderMetric('Daily Worked', '${hoursMetrics['daily']!.toStringAsFixed(1)} hrs'),
+                      _buildDetailHeaderMetric('Weekly Worked', '${hoursMetrics['weekly']!.toStringAsFixed(1)} hrs'),
+                      _buildDetailHeaderMetric('Monthly Worked', '${hoursMetrics['monthly']!.toStringAsFixed(1)} hrs'),
+                      _buildDetailHeaderMetric('OT Hours', '${hoursMetrics['ot']!.toStringAsFixed(1)} hrs'),
                     ],
                   ),
                 ),
@@ -566,10 +624,11 @@ class _StaffAttendanceSalaryScreenState extends State<StaffAttendanceSalaryScree
                           separatorBuilder: (context, index) => const Divider(height: 1),
                           itemBuilder: (context, index) {
                             final sh = shifts[index];
-                            final DateTime? cin = DateTime.tryParse(sh['clock_in'] ?? '');
-                            final DateTime? cout = sh['clock_out'] != null ? DateTime.tryParse(sh['clock_out']) : null;
+                            final DateTime? cin = sh['clock_in'] != null ? parseServerDateTime(sh['clock_in']) : null;
+                            final DateTime? cout = sh['clock_out'] != null ? parseServerDateTime(sh['clock_out']) : null;
                             final bool isActive = sh['status'] == 'active' || cout == null;
-                            final int durMins = sh['duration_minutes'] ?? 0;
+                            final int calculatedDiff = (cin != null) ? (cout ?? DateTime.now()).difference(cin).inMinutes : 0;
+                            final int durMins = calculatedDiff > 0 ? calculatedDiff : (sh['duration_minutes'] ?? 0);
 
                             final cinStr = cin != null ? DateFormat('yyyy-MM-dd hh:mm a').format(cin) : 'N/A';
                             final coutStr = cout != null ? DateFormat('yyyy-MM-dd hh:mm a').format(cout) : 'IN PROGRESS (ACTIVE)';
