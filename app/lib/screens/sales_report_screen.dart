@@ -10,6 +10,7 @@ import 'package:printing/printing.dart';
 import '../theme.dart';
 import '../services/api_service.dart';
 import '../models/models.dart';
+import '../utils/date_helper.dart';
 
 class SalesReportScreen extends StatefulWidget {
   const SalesReportScreen({Key? key}) : super(key: key);
@@ -84,9 +85,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
 
   // Date Filtering Helper
   bool _isWithinDateRange(String dateStr) {
-    final dateTime = DateTime.tryParse(dateStr);
-    if (dateTime == null) return true;
-    final localDateTime = dateTime.toLocal();
+    final localDateTime = parseServerDateTime(dateStr);
 
     final now = DateTime.now();
     final startOfToday = DateTime(now.year, now.month, now.day);
@@ -156,7 +155,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
       // Filter by dynamic date preset
       if (!_isWithinDateRange(o.createdAt)) return false;
       
-      final dateFormatted = DateFormat('yyyy-MM-dd').format((DateTime.tryParse(o.createdAt) ?? DateTime.now()).toLocal());
+      final dateFormatted = DateFormat('yyyy-MM-dd').format(parseServerDateTime(o.createdAt));
       final matchDate = _appliedDate.isEmpty || dateFormatted.contains(_appliedDate);
       
       final payMethodStr = (o.paymentMethod ?? 'N/A').toLowerCase();
@@ -173,7 +172,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
     try {
       String csvContent = 'Order ID,Date,Total,Discount,Delivery Charge,Payment Type,Payment Status\n';
       for (var o in _filteredOrders.take(_entriesLimit)) {
-        final dateFormatted = DateFormat('hh:mm a, dd-MM-yyyy').format((DateTime.tryParse(o.createdAt) ?? DateTime.now()).toLocal());
+        final dateFormatted = formatServerDate(o.createdAt);
         final deliveryCharge = o.orderType == 'delivery' ? 150.00 : 0.00;
         final payType = o.paymentMethod ?? 'N/A';
         csvContent += '${o.orderNumber},$dateFormatted,${o.total},${o.discount},$deliveryCharge,$payType,${o.paymentStatus}\n';
@@ -211,7 +210,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
       
       final headers = ['Order ID', 'Date', 'Total', 'Discount', 'Delivery', 'Payment Type', 'Status'];
       final data = _filteredOrders.take(_entriesLimit).map((o) {
-        final dateFormatted = DateFormat('hh:mm a, dd-MM-yyyy').format((DateTime.tryParse(o.createdAt) ?? DateTime.now()).toLocal());
+        final dateFormatted = formatServerDate(o.createdAt);
         final deliveryCharge = o.orderType == 'delivery' ? '150.00' : '0.00';
         return [
           o.orderNumber.length > 12 ? o.orderNumber.substring(o.orderNumber.length - 8) : o.orderNumber,
@@ -294,7 +293,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
       
       final headers = ['Order ID', 'Date', 'Total', 'Discount', 'Delivery', 'Payment Type', 'Status'];
       final data = _filteredOrders.take(_entriesLimit).map((o) {
-        final dateFormatted = DateFormat('hh:mm a, dd-MM-yyyy').format((DateTime.tryParse(o.createdAt) ?? DateTime.now()).toLocal());
+        final dateFormatted = formatServerDate(o.createdAt);
         final deliveryCharge = o.orderType == 'delivery' ? '150.00' : '0.00';
         return [
           o.orderNumber.length > 12 ? o.orderNumber.substring(o.orderNumber.length - 8) : o.orderNumber,
@@ -769,7 +768,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
             separatorBuilder: (context, index) => Divider(height: 1, color: AppTheme.dividerColor),
             itemBuilder: (context, index) {
               final o = list[index];
-              final dateFormatted = DateFormat('hh:mm a, dd-MM-yyyy').format((DateTime.tryParse(o.createdAt) ?? DateTime.now()).toLocal());
+              final dateFormatted = formatServerDate(o.createdAt);
               final deliveryCharge = o.orderType == 'delivery' ? 150.00 : 0.00;
               final isPaid = o.paymentStatus.toLowerCase() == 'paid';
 

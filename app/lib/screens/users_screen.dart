@@ -12,6 +12,7 @@ import '../theme.dart';
 import '../services/api_service.dart';
 import '../models/models.dart';
 import '../widgets/image_helper.dart';
+import '../utils/date_helper.dart';
 
 class UsersScreen extends StatefulWidget {
   final String userType; // 'Administrators', 'Delivery Boys', 'Customers', 'Employees', 'Waiters', 'Chefs'
@@ -2125,7 +2126,7 @@ class _UsersScreenState extends State<UsersScreen> {
   List<OrderModel> get _filteredUserOrders {
     final now = DateTime.now();
     return _rawUserOrders.where((o) {
-      final orderDate = DateTime.tryParse(o.createdAt)?.toLocal() ?? DateTime.now();
+      final orderDate = parseServerDateTime(o.createdAt);
       
       if (_ordersFilterPreset == 'daily') {
         return orderDate.year == now.year && orderDate.month == now.month && orderDate.day == now.day;
@@ -2158,7 +2159,7 @@ class _UsersScreenState extends State<UsersScreen> {
   List<Map<String, dynamic>> get _filteredPreparedItems {
     final now = DateTime.now();
     return _preparedItems.where((item) {
-      final itemDate = DateTime.tryParse(item['created_at']?.toString() ?? '')?.toLocal() ?? DateTime.now();
+      final itemDate = parseServerDateTime(item['created_at']);
       
       if (_ordersFilterPreset == 'daily') {
         return itemDate.year == now.year && itemDate.month == now.month && itemDate.day == now.day;
@@ -2197,7 +2198,7 @@ class _UsersScreenState extends State<UsersScreen> {
 
     final headers = ['Order Number', 'Date & Time', 'Status', 'Amount'];
     final data = orders.map((o) {
-      final dateFormatted = DateFormat('yyyy-MM-dd hh:mm a').format((DateTime.tryParse(o.createdAt) ?? DateTime.now()).toLocal());
+      final dateFormatted = formatServerDate(o.createdAt);
       return [
         o.orderNumber,
         dateFormatted,
@@ -2295,7 +2296,7 @@ class _UsersScreenState extends State<UsersScreen> {
 
     final headers = ['Item Name', 'Invoice / Type', 'Date & Time', 'Qty', 'Ingredients Used'];
     final data = prepared.map((item) {
-      final dateFormatted = DateFormat('yyyy-MM-dd hh:mm a').format((DateTime.tryParse(item['created_at']?.toString() ?? '') ?? DateTime.now()).toLocal());
+      final dateFormatted = formatServerDate(item['created_at']);
       final isSale = item['source_type'] == 'sale';
       final orderNum = item['order_number']?.toString() ?? '';
       final double qty = double.tryParse(item['quantity']?.toString() ?? '1') ?? 1.0;
@@ -2590,7 +2591,7 @@ class _UsersScreenState extends State<UsersScreen> {
                   separatorBuilder: (context, index) => Divider(height: 1, color: AppTheme.dividerColor),
                   itemBuilder: (context, index) {
                     final item = prepared[index];
-                    final dateFormatted = DateFormat('hh:mm a, dd-MM-yyyy').format((DateTime.tryParse(item['created_at']?.toString() ?? '') ?? DateTime.now()).toLocal());
+                    final dateFormatted = formatServerDate(item['created_at']);
                     
                     // Format ingredients
                     final List ingList = item['ingredients'] ?? [];
@@ -2736,7 +2737,7 @@ class _UsersScreenState extends State<UsersScreen> {
                   separatorBuilder: (context, index) => Divider(height: 1, color: AppTheme.dividerColor),
                   itemBuilder: (context, index) {
                     final o = orders[index];
-                    final dateFormatted = DateFormat('hh:mm a, dd-MM-yyyy').format((DateTime.tryParse(o.createdAt) ?? DateTime.now()).toLocal());
+                    final dateFormatted = formatServerDate(o.createdAt);
                     
                     return Padding(
                       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
@@ -2887,7 +2888,7 @@ class _UsersScreenState extends State<UsersScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Date: ${DateFormat('yyyy-MM-dd hh:mm a').format((DateTime.tryParse(order.createdAt) ?? DateTime.now()).toLocal())}',
+                        'Date: ${formatServerDate(order.createdAt)}',
                         style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary),
                       ),
                       const SizedBox(height: 16),

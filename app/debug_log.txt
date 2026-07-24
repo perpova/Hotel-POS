@@ -1701,3 +1701,8 @@
 2026-07-21T14:56:33.621469: Creating VideoPlayerController (isLocalFile=true)...
 2026-07-21T14:56:34.338039: Controller initialized successfully.
 2026-07-21T14:56:34.338550: Playback started.
+2026-07-24T22:11:01.179657: --- _initializeBackgroundVideo started ---
+2026-07-24T22:11:07.459361: --- _initializeBackgroundVideo started ---
+2026-07-24T22:11:07.460565: BgType: none, Source: link, Path: C:\Users\sahan\AppData\Local\Temp\queue_background_video.mp4, Url: https://youtu.be/vYjrGxlKjYo?si=YcHbrDmjrn0HEkiQ
+2026-07-24T22:11:07.474257: BgType is not video, disposing controller
+2026-07-24T22:24:19.746564: --- _initializeBackgroundVideo started ---

@@ -19,6 +19,7 @@ import '../services/translation_service.dart';
 import '../services/local_db.dart';
 import '../models/models.dart';
 import '../widgets/image_helper.dart';
+import '../utils/date_helper.dart';
 
 class POSOrdersScreen extends StatefulWidget {
   const POSOrdersScreen({Key? key}) : super(key: key);
@@ -188,12 +189,8 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
   // Helper: Format Date
   String _formatDate(String dateStr) {
     try {
-      final dt = DateTime.tryParse(dateStr);
-      if (dt != null) {
-        // Convert to local time and format
-        final localDt = dt.toLocal();
-        return DateFormat('hh:mm a, dd-MM-yyyy').format(localDt);
-      }
+      final dt = parseServerDateTime(dateStr);
+      return DateFormat('hh:mm a, dd-MM-yyyy').format(dt);
     } catch (_) {}
     return dateStr;
   }
@@ -590,17 +587,17 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
     final custName = _getCustomerName(order.customerId, posController.customers);
     
     // Order Type badging
-    Color typeBg = const Color(0xFFFFF0F5);
-    Color typeText = AppTheme.primary;
+    Color typeBg = AppTheme.isDarkMode ? const Color(0xFF831843).withOpacity(0.3) : const Color(0xFFFFF0F5);
+    Color typeText = AppTheme.isDarkMode ? const Color(0xFFF472B6) : AppTheme.primary;
     String typeLabel = 'Dining Table';
 
     if (order.orderType == 'takeaway') {
-      typeBg = const Color(0xFFFFF7ED);
-      typeText = const Color(0xFFEA580C);
+      typeBg = AppTheme.isDarkMode ? const Color(0xFF7C2D12).withOpacity(0.3) : const Color(0xFFFFF7ED);
+      typeText = AppTheme.isDarkMode ? const Color(0xFFFB923C) : const Color(0xFFEA580C);
       typeLabel = 'Takeaway';
     } else if (order.orderType == 'delivery') {
-      typeBg = const Color(0xFFF0FDF4);
-      typeText = const Color(0xFF16A34A);
+      typeBg = AppTheme.isDarkMode ? const Color(0xFF064E3B).withOpacity(0.3) : const Color(0xFFF0FDF4);
+      typeText = AppTheme.isDarkMode ? const Color(0xFF4ADE80) : const Color(0xFF16A34A);
       typeLabel = 'Delivery';
     }
 
@@ -958,16 +955,16 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFEEF2FF),
+                          color: AppTheme.isDarkMode ? const Color(0xFF1E1B4B) : const Color(0xFFEEF2FF),
                           borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: const Color(0xFFC7D2FE)),
+                          border: Border.all(color: AppTheme.isDarkMode ? const Color(0xFF3730A3) : const Color(0xFFC7D2FE)),
                         ),
                         child: Text(
                           'Pre-Order',
                           style: GoogleFonts.inter(
                             fontSize: 10,
                             fontWeight: FontWeight.bold,
-                            color: const Color(0xFF4F46E5),
+                            color: AppTheme.isDarkMode ? const Color(0xFF818CF8) : const Color(0xFF4F46E5),
                           ),
                         ),
                       ),
@@ -1006,9 +1003,9 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: AppTheme.cardLight,
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
+            border: Border.all(color: AppTheme.borderLight),
           ),
           child: Wrap(
             spacing: 24,
@@ -1034,8 +1031,11 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
                 flex: 3,
                 child: Card(
                   elevation: 0,
-                  color: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  color: AppTheme.cardLight,
+                  shape: RoundedRectangleBorder(
+                    side: BorderSide(color: AppTheme.borderLight),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                   child: Padding(
                     padding: const EdgeInsets.all(20.0),
                     child: Column(
@@ -1052,7 +1052,7 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
                             : Expanded(
                                 child: ListView.separated(
                             itemCount: order.items.length,
-                            separatorBuilder: (context, index) => const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                            separatorBuilder: (context, index) => Divider(height: 1, color: AppTheme.dividerColor),
                             itemBuilder: (context, index) {
                               final item = order.items[index];
                               // Fetch product picture if available
@@ -1069,8 +1069,8 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
                                     Container(
                                       width: 28,
                                       height: 28,
-                                      decoration: const BoxDecoration(
-                                        color: Colors.black,
+                                      decoration: BoxDecoration(
+                                        color: AppTheme.isDarkMode ? const Color(0xFF334155) : Colors.black,
                                         shape: BoxShape.circle,
                                       ),
                                       alignment: Alignment.center,
@@ -1086,7 +1086,7 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
                                       child: Container(
                                         width: 50,
                                         height: 50,
-                                        color: const Color(0xFFF1F5F9),
+                                        color: AppTheme.isDarkMode ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
                                         child: product.imageBase64 != null && product.imageBase64!.isNotEmpty
                                             ? Base64ImageWidget(base64Str: product.imageBase64, fit: BoxFit.cover)
                                             : const Icon(Icons.fastfood, color: Color(0xFF94A3B8), size: 24),
@@ -1134,8 +1134,11 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
                       // Status Modification Card
                       Card(
                         elevation: 0,
-                        color: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        color: AppTheme.cardLight,
+                        shape: RoundedRectangleBorder(
+                          side: BorderSide(color: AppTheme.borderLight),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                         child: Padding(
                           padding: const EdgeInsets.all(20.0),
                           child: Column(
@@ -1150,16 +1153,19 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 12),
                                 decoration: BoxDecoration(
-                                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                                  border: Border.all(color: AppTheme.borderLight),
                                   borderRadius: BorderRadius.circular(8),
+                                  color: AppTheme.isDarkMode ? const Color(0xFF0F172A) : Colors.white,
                                 ),
                                 child: DropdownButtonHideUnderline(
                                   child: DropdownButton<String>(
                                     value: order.paymentStatus,
                                     isExpanded: true,
-                                    items: const [
-                                      DropdownMenuItem(value: 'unpaid', child: Text('Unpaid')),
-                                      DropdownMenuItem(value: 'paid', child: Text('Paid')),
+                                    dropdownColor: AppTheme.cardLight,
+                                    style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary),
+                                    items: [
+                                      DropdownMenuItem(value: 'unpaid', child: Text('Unpaid', style: TextStyle(color: AppTheme.textLightPrimary))),
+                                      DropdownMenuItem(value: 'paid', child: Text('Paid', style: TextStyle(color: AppTheme.textLightPrimary))),
                                     ],
                                     onChanged: _isUpdatingStatus 
                                         ? null 
@@ -1175,19 +1181,22 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 12),
                                 decoration: BoxDecoration(
-                                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                                  border: Border.all(color: AppTheme.borderLight),
                                   borderRadius: BorderRadius.circular(8),
+                                  color: AppTheme.isDarkMode ? const Color(0xFF0F172A) : Colors.white,
                                 ),
                                 child: DropdownButtonHideUnderline(
                                   child: DropdownButton<String>(
                                     value: order.status,
                                     isExpanded: true,
-                                    items: const [
-                                      DropdownMenuItem(value: 'pending', child: Text('Accept')),
-                                      DropdownMenuItem(value: 'preparing', child: Text('Preparing')),
-                                      DropdownMenuItem(value: 'prepared', child: Text('Prepared')),
-                                      DropdownMenuItem(value: 'delivered', child: Text('Delivered')),
-                                      DropdownMenuItem(value: 'cancelled', child: Text('Cancelled')),
+                                    dropdownColor: AppTheme.cardLight,
+                                    style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary),
+                                    items: [
+                                      DropdownMenuItem(value: 'pending', child: Text('Accept', style: TextStyle(color: AppTheme.textLightPrimary))),
+                                      DropdownMenuItem(value: 'preparing', child: Text('Preparing', style: TextStyle(color: AppTheme.textLightPrimary))),
+                                      DropdownMenuItem(value: 'prepared', child: Text('Prepared', style: TextStyle(color: AppTheme.textLightPrimary))),
+                                      DropdownMenuItem(value: 'delivered', child: Text('Delivered', style: TextStyle(color: AppTheme.textLightPrimary))),
+                                      DropdownMenuItem(value: 'cancelled', child: Text('Cancelled', style: TextStyle(color: AppTheme.textLightPrimary))),
                                     ],
                                     onChanged: _isUpdatingStatus 
                                         ? null 
@@ -1204,8 +1213,11 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
                       // Totals Summary Card
                       Card(
                         elevation: 0,
-                        color: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        color: AppTheme.cardLight,
+                        shape: RoundedRectangleBorder(
+                          side: BorderSide(color: AppTheme.borderLight),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                         child: Padding(
                           padding: const EdgeInsets.all(20.0),
                           child: Column(
@@ -1214,10 +1226,10 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
                               _buildSummaryRow('Subtotal', 'LKR ${order.subtotal.toStringAsFixed(2)}'),
                               const SizedBox(height: 8),
                               _buildSummaryRow('Discount', 'LKR ${order.discount.toStringAsFixed(2)}'),
-                              const Divider(height: 24, color: Color(0xFFF1F5F9)),
+                              Divider(height: 24, color: AppTheme.dividerColor),
                               _buildSummaryRow('Total', 'LKR ${order.total.toStringAsFixed(2)}', isBold: true, isPrice: true),
                               if ((order.paymentMethod ?? 'cash').toLowerCase() == 'cash' && order.receivedAmount > 0) ...[
-                                const Divider(height: 24, color: Color(0xFFF1F5F9)),
+                                Divider(height: 24, color: AppTheme.dividerColor),
                                 _buildSummaryRow('Received Amount', 'LKR ${order.receivedAmount.toStringAsFixed(2)}'),
                                 const SizedBox(height: 8),
                                 _buildSummaryRow('Change Amount', 'LKR ${order.changeAmount.toStringAsFixed(2)}'),
@@ -1231,8 +1243,11 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
                       // Delivery / Customer Info Card
                       Card(
                         elevation: 0,
-                        color: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        color: AppTheme.cardLight,
+                        shape: RoundedRectangleBorder(
+                          side: BorderSide(color: AppTheme.borderLight),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                         child: Padding(
                           padding: const EdgeInsets.all(20.0),
                           child: Column(
@@ -1538,7 +1553,7 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
     } catch (_) {}
     
     final int totalQty = data.items.fold(0, (sum, item) => sum + item.quantity);
-    final dt = DateTime.tryParse(data.createdAt)?.toLocal() ?? DateTime.now();
+    final dt = parseServerDateTime(data.createdAt);
 
     pdf.addPage(
       pw.Page(
@@ -1858,7 +1873,7 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
     final bool isSinhala = lang == 'Sinhala';
 
     final int totalQty = data.items.fold(0, (sum, item) => sum + item.quantity);
-    final dt = DateTime.tryParse(data.createdAt)?.toLocal() ?? DateTime.now();
+    final dt = parseServerDateTime(data.createdAt);
 
     return Container(
       padding: const EdgeInsets.all(16),

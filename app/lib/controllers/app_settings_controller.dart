@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:pdf/pdf.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hotel_pos/theme/theme.dart';
 import 'package:hotel_pos/services/api_service.dart';
@@ -43,6 +44,19 @@ class AppSettingsController extends ChangeNotifier {
   String _mainScannerPrefix = 'ORD-,INV-';
   String _kitchenScannerPrefix = 'KOT-';
   bool _autoRouteKitchenBarcodes = true;
+  String _mainScannerUsbPort = 'Auto-Detect (USB HID Port 1)';
+  String _kitchenScannerUsbPort = 'Auto-Detect (USB HID Port 2)';
+
+  // ── Thermal Printer & Paper Size Setup ─────────────────────────────────────
+  String _receiptPaperSize = '80mm'; // '80mm' | '58mm' | 'A4'
+  String? _selectedInvoicePrinter; // Selected cashier printer name/URL
+  String? _selectedKotPrinter; // Selected kitchen printer name/URL
+  bool _autoPrintInvoice = true; // Auto print invoice on checkout
+  bool _autoPrintKot = true; // Auto print KOT on order
+  bool _autoPrintKotAfterInvoice = true; // Auto print KOT after cutting invoice bill
+  bool _directPrint = false; // Bypass system print dialog
+  int _invoiceCopies = 1;
+  int _kotCopies = 1;
 
   // ── Branches ───────────────────────────────────────────────────────────────
   List<BranchItem> _branches = [];
@@ -78,6 +92,30 @@ class AppSettingsController extends ChangeNotifier {
   String get mainScannerPrefix => _mainScannerPrefix;
   String get kitchenScannerPrefix => _kitchenScannerPrefix;
   bool get autoRouteKitchenBarcodes => _autoRouteKitchenBarcodes;
+  String get mainScannerUsbPort => _mainScannerUsbPort;
+  String get kitchenScannerUsbPort => _kitchenScannerUsbPort;
+
+  String get receiptPaperSize => _receiptPaperSize;
+  String? get selectedInvoicePrinter => _selectedInvoicePrinter;
+  String? get selectedKotPrinter => _selectedKotPrinter;
+  bool get autoPrintInvoice => _autoPrintInvoice;
+  bool get autoPrintKot => _autoPrintKot;
+  bool get autoPrintKotAfterInvoice => _autoPrintKotAfterInvoice;
+  bool get directPrint => _directPrint;
+  int get invoiceCopies => _invoiceCopies;
+  int get kotCopies => _kotCopies;
+
+  PdfPageFormat get receiptPageFormat {
+    switch (_receiptPaperSize) {
+      case '58mm':
+        return const PdfPageFormat(58 * PdfPageFormat.mm, double.infinity, marginAll: 5);
+      case 'A4':
+        return PdfPageFormat.a4;
+      case '80mm':
+      default:
+        return PdfPageFormat.roll80;
+    }
+  }
 
   List<BranchItem> get branches => List.unmodifiable(_branches);
 
@@ -98,6 +136,18 @@ class AppSettingsController extends ChangeNotifier {
     _mainScannerPrefix = prefs.getString('main_scanner_prefix') ?? 'ORD-,INV-';
     _kitchenScannerPrefix = prefs.getString('kitchen_scanner_prefix') ?? 'KOT-';
     _autoRouteKitchenBarcodes = prefs.getBool('auto_route_kitchen_barcodes') ?? true;
+    _mainScannerUsbPort = prefs.getString('main_scanner_usb_port') ?? 'Auto-Detect (USB HID Port 1)';
+    _kitchenScannerUsbPort = prefs.getString('kitchen_scanner_usb_port') ?? 'Auto-Detect (USB HID Port 2)';
+
+    _receiptPaperSize = prefs.getString('receipt_paper_size') ?? '80mm';
+    _selectedInvoicePrinter = prefs.getString('selected_invoice_printer');
+    _selectedKotPrinter = prefs.getString('selected_kot_printer');
+    _autoPrintInvoice = prefs.getBool('auto_print_invoice') ?? true;
+    _autoPrintKot = prefs.getBool('auto_print_kot') ?? true;
+    _autoPrintKotAfterInvoice = prefs.getBool('auto_print_kot_after_invoice') ?? true;
+    _directPrint = prefs.getBool('direct_print') ?? false;
+    _invoiceCopies = prefs.getInt('invoice_copies') ?? 1;
+    _kotCopies = prefs.getInt('kot_copies') ?? 1;
 
     final colorHex = prefs.getString('primary_color');
     if (colorHex != null) {
@@ -258,17 +308,67 @@ class AppSettingsController extends ChangeNotifier {
     required String mainPrefix,
     required String kitchenPrefix,
     required bool autoRouteKitchen,
+    String? mainUsbPort,
+    String? kitchenUsbPort,
   }) async {
     _enableDualBarcodeScanners = enableDual;
     _mainScannerPrefix = mainPrefix.trim().isEmpty ? 'ORD-,INV-' : mainPrefix.trim();
     _kitchenScannerPrefix = kitchenPrefix.trim().isEmpty ? 'KOT-' : kitchenPrefix.trim();
     _autoRouteKitchenBarcodes = autoRouteKitchen;
+    if (mainUsbPort != null) _mainScannerUsbPort = mainUsbPort;
+    if (kitchenUsbPort != null) _kitchenScannerUsbPort = kitchenUsbPort;
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('enable_dual_barcode_scanners', _enableDualBarcodeScanners);
     await prefs.setString('main_scanner_prefix', _mainScannerPrefix);
     await prefs.setString('kitchen_scanner_prefix', _kitchenScannerPrefix);
     await prefs.setBool('auto_route_kitchen_barcodes', _autoRouteKitchenBarcodes);
+    await prefs.setString('main_scanner_usb_port', _mainScannerUsbPort);
+    await prefs.setString('kitchen_scanner_usb_port', _kitchenScannerUsbPort);
+    notifyListeners();
+  }
+
+  // ── Thermal Printer & Paper Size Settings Update ──────────────────────────
+  Future<void> savePrinterSettings({
+    required String receiptPaperSize,
+    String? selectedInvoicePrinter,
+    String? selectedKotPrinter,
+    required bool autoPrintInvoice,
+    required bool autoPrintKot,
+    required bool autoPrintKotAfterInvoice,
+    required bool directPrint,
+    required int invoiceCopies,
+    required int kotCopies,
+  }) async {
+    _receiptPaperSize = receiptPaperSize;
+    _selectedInvoicePrinter = selectedInvoicePrinter;
+    _selectedKotPrinter = selectedKotPrinter;
+    _autoPrintInvoice = autoPrintInvoice;
+    _autoPrintKot = autoPrintKot;
+    _autoPrintKotAfterInvoice = autoPrintKotAfterInvoice;
+    _directPrint = directPrint;
+    _invoiceCopies = invoiceCopies;
+    _kotCopies = kotCopies;
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('receipt_paper_size', _receiptPaperSize);
+    if (_selectedInvoicePrinter != null) {
+      await prefs.setString('selected_invoice_printer', _selectedInvoicePrinter!);
+    } else {
+      await prefs.remove('selected_invoice_printer');
+    }
+    if (_selectedKotPrinter != null) {
+      await prefs.setString('selected_kot_printer', _selectedKotPrinter!);
+    } else {
+      await prefs.remove('selected_kot_printer');
+    }
+    await prefs.setBool('auto_print_invoice', _autoPrintInvoice);
+    await prefs.setBool('auto_print_kot', _autoPrintKot);
+    await prefs.setBool('auto_print_kot_after_invoice', _autoPrintKotAfterInvoice);
+    await prefs.setBool('direct_print', _directPrint);
+    await prefs.setInt('invoice_copies', _invoiceCopies);
+    await prefs.setInt('kot_copies', _kotCopies);
+
     notifyListeners();
   }
 

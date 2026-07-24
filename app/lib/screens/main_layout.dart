@@ -16,6 +16,7 @@ import '../services/translation_service.dart';
 import '../theme.dart';
 import '../api_service.dart';
 import '../widgets/image_helper.dart';
+import '../utils/date_helper.dart';
 import 'login_screen.dart';
 import 'dashboard_screen.dart';
 import 'pos_screen.dart';
@@ -1042,578 +1043,590 @@ class _MainLayoutState extends State<MainLayout> {
                         ),
                       ),
 
-                      const Spacer(),
-
-                      // Sync indicator
-                      GestureDetector(
-                        onTap: () async {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Triggering sync...')),
-                          );
-                          await posController.reloadEnvironment();
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  posController.isOnline
-                                      ? 'System Online. Data synchronized successfully.'
-                                      : 'System Offline. Offline data remains cached.'
-                                ),
-                                backgroundColor: posController.isOnline ? AppTheme.accent : AppTheme.warning,
-                              ),
-                            );
-                          }
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                          decoration: BoxDecoration(
-                            color: posController.isOnline
-                                ? AppTheme.accent.withOpacity(0.08)
-                                : AppTheme.warning.withOpacity(0.08),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: posController.isOnline ? AppTheme.accent : AppTheme.warning,
-                              width: 1,
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                width: 6,
-                                height: 6,
-                                decoration: BoxDecoration(
-                                  color: posController.isOnline ? AppTheme.accent : AppTheme.warning,
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                posController.isOnline ? 'LAN Online' : 'Offline',
-                                style: GoogleFonts.inter(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  color: posController.isOnline ? AppTheme.accent : AppTheme.warning,
-                                ),
-                              ),
-                              const SizedBox(width: 4),
-                              Icon(
-                                Icons.sync,
-                                size: 12,
-                                color: posController.isOnline ? AppTheme.accent : AppTheme.warning,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-
-                      const SizedBox(width: 12),
-
-                      // Shift Badge (simplified)
-                      if (isDesktop && posController.activeShift != null) ...[
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                          decoration: BoxDecoration(
-                            color: AppTheme.secondary.withOpacity(0.08),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: AppTheme.secondary, width: 1),
-                          ),
-                          child: Text(
-                            'SHIFT OPEN',
-                            style: GoogleFonts.inter(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: AppTheme.secondary,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                      ],
-
-                      // Branch selection dropdown
-                      if (isDesktop) ...[
-                        Row(
-                          children: [
-                            Icon(Icons.storefront_outlined, color: AppTheme.primary, size: 18),
-                            const SizedBox(width: 6),
-                            isAdmin
-                                ? DropdownButton<String>(
-                                    value: currentSelectedBranch,
-                                    icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF64748B), size: 18),
-                                    underline: const SizedBox(),
-                                    style: GoogleFonts.inter(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
-                                      color: AppTheme.textLightPrimary,
-                                    ),
-                                    items: branchNames.map<DropdownMenuItem<String>>((String value) {
-                                      return DropdownMenuItem<String>(
-                                        value: value,
-                                        child: Text(value, style: TextStyle(color: AppTheme.textLightPrimary)),
-                                      );
-                                    }).toList(),
-                                    onChanged: (String? newValue) {
-                                      if (newValue != null) {
-                                        dashController.setBranch(newValue);
-                                      }
-                                    },
-                                  )
-                                : Text(
-                                    currentSelectedBranch,
-                                    style: GoogleFonts.inter(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
-                                      color: const Color(0xFF1E293B),
-                                    ),
-                                  ),
-                          ],
-                        ),
-                        const SizedBox(width: 16),
-                      ],
-
-                      // Language selection dropdown
-                      if (isDesktop) ...[
-                        Row(
-                          children: [
-                            const Icon(Icons.language_outlined, color: Colors.blue, size: 18),
-                            const SizedBox(width: 6),
-                            DropdownButton<String>(
-                              value: currentSelectedLanguage,
-                              icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF64748B), size: 18),
-                              underline: const SizedBox(),
-                              style: GoogleFonts.inter(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: AppTheme.textLightPrimary,
-                              ),
-                              items: <String>['English', 'Sinhala']
-                                  .map<DropdownMenuItem<String>>((String value) {
-                                return DropdownMenuItem<String>(
-                                  value: value,
-                                  child: Text(value),
-                                );
-                              }).toList(),
-                              onChanged: (String? newValue) {
-                                if (newValue != null) {
-                                  dashController.setLanguage(newValue);
-                                  try {
-                                    Provider.of<POSController>(context, listen: false).setVoiceLanguage(newValue);
-                                  } catch (_) {}
-                                }
-                              },
-                            ),
-                          ],
-                        ),
-                        const SizedBox(width: 16),
-                      ],
-
-                      // Pink menu toggle button on desktop
-                      if (isDesktop) ...[
-                        IconButton(
-                          icon: Icon(
-                            _isSidebarCollapsed ? Icons.menu : Icons.menu_open,
-                            color: AppTheme.primary,
-                            size: 18,
-                          ),
-                          style: IconButton.styleFrom(
-                            backgroundColor: const Color(0xFFFFF0F5),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                            padding: const EdgeInsets.all(10),
-                          ),
-                          onPressed: () {
-                            setState(() {
-                              _isSidebarCollapsed = !_isSidebarCollapsed;
-                            });
-                          },
-                        ),
-                        const SizedBox(width: 16),
-
-                        // Windows Fullscreen / Hide Title Bar toggle button
-                        IconButton(
-                          tooltip: WindowHelper.isFullScreen ? 'Exit Full Screen' : 'Enter Full Screen (Hide Title Bar)',
-                          icon: Icon(
-                            WindowHelper.isFullScreen ? Icons.fullscreen_exit : Icons.fullscreen,
-                            color: AppTheme.primary,
-                            size: 18,
-                          ),
-                          style: IconButton.styleFrom(
-                            backgroundColor: const Color(0xFFFFF0F5),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                            padding: const EdgeInsets.all(10),
-                          ),
-                          onPressed: () {
-                            setState(() {
-                              WindowHelper.toggleFullScreen();
-                            });
-                          },
-                        ),
-                        const SizedBox(width: 16),
-                      ],
-
-                      // Low Stock Raw Materials Warning Icon Badge with popup
-                      if (posController.lowStockIngredientsCount > 0) ...[
-                        PopupMenuButton<dynamic>(
-                          offset: const Offset(0, 50),
-                          icon: Badge(
-                            label: Text(
-                              '${posController.lowStockIngredientsCount}',
-                              style: const TextStyle(fontSize: 8, color: Colors.white),
-                            ),
-                            isLabelVisible: true,
-                            backgroundColor: Colors.amber.shade700,
-                            child: Icon(Icons.warning_amber_rounded, color: Colors.amber.shade700, size: 20),
-                          ),
-                          tooltip: 'Low Stock Ingredients',
-                          itemBuilder: (BuildContext context) {
-                            final List<IngredientModel> lowStockIngs = posController.ingredients.where((i) => i.stockQty <= i.minStockLevel).toList();
-                            return [
-                              PopupMenuItem<dynamic>(
-                                enabled: false,
-                                child: Container(
-                                  width: 320,
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          Icon(Icons.warning_amber_rounded, color: Colors.amber.shade700, size: 18),
-                                          const SizedBox(width: 8),
-                                          Text(
-                                            'Low Stock Raw Materials'.tr(context),
-                                            style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
-                                          ),
-                                        ],
-                                      ),
-                                      const Divider(height: 8, color: Color(0xFFE2E8F0)),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              ...lowStockIngs.map((i) {
-                                return PopupMenuItem<dynamic>(
-                                  enabled: false,
-                                  child: Container(
-                                    width: 320,
-                                    padding: const EdgeInsets.symmetric(vertical: 4),
-                                    child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Expanded(
-                                          child: Text(
-                                            i.name,
-                                            style: GoogleFonts.inter(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.bold,
-                                              color: AppTheme.textLightPrimary,
-                                            ),
-                                          ),
-                                        ),
-                                        Text(
-                                          '${i.stockQty.toStringAsFixed(1)} ${i.unit}',
-                                          style: GoogleFonts.inter(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.red.shade600,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                );
-                              }).toList(),
-                            ];
-                          },
-                        ),
-                        const SizedBox(width: 8),
-                      ],
-
-                      // Notification Bell with dynamic badge and dropdown menu
-                      PopupMenuButton<dynamic>(
-                        offset: const Offset(0, 50),
-                        icon: Badge(
-                          label: Text(
-                            '${posController.unreadNotificationCount}',
-                            style: const TextStyle(fontSize: 8, color: Colors.white),
-                          ),
-                          isLabelVisible: posController.unreadNotificationCount > 0,
-                          backgroundColor: Colors.red,
-                          child: const Icon(Icons.notifications_none_outlined, color: Color(0xFF64748B), size: 20),
-                        ),
-                        tooltip: 'Notifications',
-                        itemBuilder: (BuildContext context) {
-                          final list = posController.notifications;
-                          return [
-                            PopupMenuItem<dynamic>(
-                              enabled: false,
-                              child: Container(
-                                width: 320,
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                                  children: [
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Text(
-                                          'Notifications'.tr(context),
-                                          style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
-                                        ),
-                                        if (posController.unreadNotificationCount > 0)
-                                          TextButton(
-                                            onPressed: () async {
-                                              await posController.readAllNotifications();
-                                              Navigator.pop(context);
-                                            },
-                                            child: Text('Mark all as read'.tr(context), style: const TextStyle(fontSize: 11)),
-                                          ),
-                                      ],
-                                    ),
-                                    const Divider(height: 8, color: Color(0xFFE2E8F0)),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            if (list.isEmpty)
-                              PopupMenuItem<dynamic>(
-                                enabled: false,
-                                child: Container(
-                                  width: 320,
-                                  padding: const EdgeInsets.symmetric(vertical: 24),
-                                  child: Center(
-                                    child: Text(
-                                      'No notifications yet'.tr(context),
-                                      style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8)),
-                                    ),
-                                  ),
-                                ),
-                              )
-                            else
-                              ...list.map((n) {
-                                final bool isRead = n['is_read'] == 1 || n['is_read'] == true;
-                                return PopupMenuItem<dynamic>(
+                      // Right-side actions (pushed to top-right corner, overflow safe)
+                      Expanded(
+                        child: Align(
+                          alignment: Alignment.centerRight,
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                // Sync indicator
+                                GestureDetector(
                                   onTap: () async {
-                                    if (!isRead) {
-                                      await posController.readNotification(n['id']);
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('Triggering sync...')),
+                                    );
+                                    await posController.reloadEnvironment();
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            posController.isOnline
+                                                ? 'System Online. Data synchronized successfully.'
+                                                : 'System Offline. Offline data remains cached.'
+                                          ),
+                                          backgroundColor: posController.isOnline ? AppTheme.accent : AppTheme.warning,
+                                        ),
+                                      );
                                     }
                                   },
                                   child: Container(
-                                    width: 320,
-                                    padding: const EdgeInsets.symmetric(vertical: 6),
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                    decoration: BoxDecoration(
+                                      color: posController.isOnline
+                                          ? AppTheme.accent.withOpacity(0.08)
+                                          : AppTheme.warning.withOpacity(0.08),
+                                      borderRadius: BorderRadius.circular(20),
+                                      border: Border.all(
+                                        color: posController.isOnline ? AppTheme.accent : AppTheme.warning,
+                                        width: 1,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        Row(
-                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            Expanded(
-                                              child: Text(
-                                                n['title'] ?? 'Alert',
-                                                overflow: TextOverflow.ellipsis,
-                                                style: GoogleFonts.inter(
-                                                  fontSize: 12,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: isRead ? AppTheme.textLightSecondary : AppTheme.primary,
-                                                ),
-                                              ),
-                                            ),
-                                            if (!isRead)
-                                              Container(
-                                                width: 6,
-                                                height: 6,
-                                                decoration: const BoxDecoration(
-                                                  color: Colors.blue,
-                                                  shape: BoxShape.circle,
-                                                ),
-                                              ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          n['message'] ?? '',
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: GoogleFonts.inter(
-                                            fontSize: 11,
-                                            color: isRead ? AppTheme.textLightSecondary : AppTheme.textLightPrimary,
+                                        Container(
+                                          width: 6,
+                                          height: 6,
+                                          decoration: BoxDecoration(
+                                            color: posController.isOnline ? AppTheme.accent : AppTheme.warning,
+                                            shape: BoxShape.circle,
                                           ),
                                         ),
-                                        const SizedBox(height: 4),
+                                        const SizedBox(width: 6),
                                         Text(
-                                          DateFormat('yyyy-MM-dd hh:mm a').format(DateTime.tryParse(n['created_at'])?.toLocal() ?? DateTime.now()),
-                                          style: GoogleFonts.inter(fontSize: 9, color: AppTheme.textLightSecondary),
+                                          posController.isOnline ? 'LAN Online' : 'Offline',
+                                          style: GoogleFonts.inter(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                            color: posController.isOnline ? AppTheme.accent : AppTheme.warning,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Icon(
+                                          Icons.sync,
+                                          size: 12,
+                                          color: posController.isOnline ? AppTheme.accent : AppTheme.warning,
                                         ),
                                       ],
                                     ),
                                   ),
-                                );
-                              }).toList(),
-                          ];
-                        },
-                      ),
-
-                      const SizedBox(width: 8),
-
-                      // Profile Display (Clickable Dropdown Popup)
-                      PopupMenuButton<int>(
-                        offset: const Offset(0, 50),
-                        tooltip: 'User Profile Menu',
-                        child: MouseRegion(
-                          cursor: SystemMouseCursors.click,
-                          child: Row(
-                            children: [
-                              CircleAvatar(
-                                radius: 16,
-                                backgroundColor: Colors.teal.shade100,
-                                child: APIService.instance.currentUser?.imageBase64 != null && APIService.instance.currentUser!.imageBase64!.isNotEmpty
-                                    ? ClipOval(
-                                        child: Base64ImageWidget(
-                                          base64Str: APIService.instance.currentUser!.imageBase64,
-                                          width: 32,
-                                          height: 32,
-                                          fit: BoxFit.cover,
-                                        ),
-                                      )
-                                    : const Icon(Icons.face, color: Colors.teal, size: 20),
-                              ),
-                              if (isDesktop) ...[
-                                const SizedBox(width: 8),
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Text(
-                                      'Hello'.tr(context),
-                                      style: GoogleFonts.inter(
-                                        fontSize: 9,
-                                        color: AppTheme.textLightSecondary,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                    Text(
-                                      APIService.instance.currentUser?.name ?? 'John Doe',
-                                      style: GoogleFonts.inter(
-                                        fontSize: 12,
-                                        color: AppTheme.textLightPrimary,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
                                 ),
-                              ],
-                            ],
-                          ),
-                        ),
-                        onSelected: (val) async {
-                          if (val == 1) {
-                            setState(() {
-                              _selectedIndex = 22; // Edit Profile
-                            });
-                          } else if (val == 2) {
-                            setState(() {
-                              _selectedIndex = 23; // Change Password
-                            });
-                          } else if (val == 3) {
-                            await APIService.instance.logout();
-                            if (mounted) {
-                              Navigator.pushReplacement(
-                                context,
-                                MaterialPageRoute(builder: (context) => const LoginScreen()),
-                              );
-                            }
-                          }
-                        },
-                        itemBuilder: (context) {
-                          final user = APIService.instance.currentUser;
-                          final userRole = (user?.role ?? 'cashier').toUpperCase();
-                          return [
-                            PopupMenuItem<int>(
-                              enabled: false,
-                              child: Container(
-                                width: 220,
-                                padding: const EdgeInsets.symmetric(vertical: 8),
-                                child: Column(
-                                  children: [
-                                    CircleAvatar(
-                                      radius: 36,
-                                      backgroundColor: Colors.teal.shade50,
-                                      child: (user?.imageBase64 ?? '').isNotEmpty
-                                          ? ClipOval(
-                                              child: Base64ImageWidget(
-                                                base64Str: user?.imageBase64,
-                                                width: 72,
-                                                height: 72,
-                                                fit: BoxFit.cover,
+
+                                const SizedBox(width: 12),
+
+                                // Shift Badge (simplified)
+                                if (isDesktop && posController.activeShift != null) ...[
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.secondary.withOpacity(0.08),
+                                      borderRadius: BorderRadius.circular(20),
+                                      border: Border.all(color: AppTheme.secondary, width: 1),
+                                    ),
+                                    child: Text(
+                                      'SHIFT OPEN',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppTheme.secondary,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 16),
+                                ],
+
+                                // Branch selection dropdown
+                                if (isDesktop) ...[
+                                  Row(
+                                    children: [
+                                      Icon(Icons.storefront_outlined, color: AppTheme.primary, size: 18),
+                                      const SizedBox(width: 6),
+                                      isAdmin
+                                          ? DropdownButton<String>(
+                                              value: currentSelectedBranch,
+                                              icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF64748B), size: 18),
+                                              underline: const SizedBox(),
+                                              style: GoogleFonts.inter(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.bold,
+                                                color: AppTheme.textLightPrimary,
                                               ),
+                                              items: branchNames.map<DropdownMenuItem<String>>((String value) {
+                                                return DropdownMenuItem<String>(
+                                                  value: value,
+                                                  child: Text(value, style: TextStyle(color: AppTheme.textLightPrimary)),
+                                                );
+                                              }).toList(),
+                                              onChanged: (String? newValue) {
+                                                if (newValue != null) {
+                                                  dashController.setBranch(newValue);
+                                                }
+                                              },
                                             )
-                                          : const Icon(Icons.face, color: Colors.teal, size: 40),
-                                    ),
-                                    const SizedBox(height: 12),
-                                    Text(
-                                      user?.name ?? 'John Doe',
-                                      style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      user?.email ?? 'admin@example.com',
-                                      style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary),
-                                    ),
-                                    if ((user?.phone ?? '').isNotEmpty) ...[
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        user?.phone ?? '',
-                                        style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary),
+                                          : Text(
+                                              currentSelectedBranch,
+                                              style: GoogleFonts.inter(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.bold,
+                                                color: const Color(0xFF1E293B),
+                                              ),
+                                            ),
+                                    ],
+                                  ),
+                                  const SizedBox(width: 16),
+                                ],
+
+                                // Language selection dropdown
+                                if (isDesktop) ...[
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.language_outlined, color: Colors.blue, size: 18),
+                                      const SizedBox(width: 6),
+                                      DropdownButton<String>(
+                                        value: currentSelectedLanguage,
+                                        icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF64748B), size: 18),
+                                        underline: const SizedBox(),
+                                        style: GoogleFonts.inter(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: AppTheme.textLightPrimary,
+                                        ),
+                                        items: <String>['English', 'Sinhala']
+                                            .map<DropdownMenuItem<String>>((String value) {
+                                          return DropdownMenuItem<String>(
+                                            value: value,
+                                            child: Text(value),
+                                          );
+                                        }).toList(),
+                                        onChanged: (String? newValue) {
+                                          if (newValue != null) {
+                                            dashController.setLanguage(newValue);
+                                            try {
+                                              Provider.of<POSController>(context, listen: false).setVoiceLanguage(newValue);
+                                            } catch (_) {}
+                                          }
+                                        },
                                       ),
                                     ],
-                                    const SizedBox(height: 8),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                      decoration: BoxDecoration(
-                                        color: AppTheme.primary.withOpacity(0.08),
-                                        borderRadius: BorderRadius.circular(20),
-                                      ),
-                                      child: Text(
-                                        userRole,
-                                        style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold, color: AppTheme.primary),
-                                      ),
+                                  ),
+                                  const SizedBox(width: 16),
+                                ],
+
+                                // Pink menu toggle button on desktop
+                                if (isDesktop) ...[
+                                  IconButton(
+                                    icon: Icon(
+                                      _isSidebarCollapsed ? Icons.menu : Icons.menu_open,
+                                      color: AppTheme.primary,
+                                      size: 18,
                                     ),
-                                  ],
+                                    style: IconButton.styleFrom(
+                                      backgroundColor: const Color(0xFFFFF0F5),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                      padding: const EdgeInsets.all(10),
+                                    ),
+                                    onPressed: () {
+                                      setState(() {
+                                        _isSidebarCollapsed = !_isSidebarCollapsed;
+                                      });
+                                    },
+                                  ),
+                                  const SizedBox(width: 16),
+
+                                  // Windows Fullscreen / Hide Title Bar toggle button
+                                  IconButton(
+                                    tooltip: WindowHelper.isFullScreen ? 'Exit Full Screen' : 'Enter Full Screen (Hide Title Bar)',
+                                    icon: Icon(
+                                      WindowHelper.isFullScreen ? Icons.fullscreen_exit : Icons.fullscreen,
+                                      color: AppTheme.primary,
+                                      size: 18,
+                                    ),
+                                    style: IconButton.styleFrom(
+                                      backgroundColor: const Color(0xFFFFF0F5),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                      padding: const EdgeInsets.all(10),
+                                    ),
+                                    onPressed: () {
+                                      setState(() {
+                                        WindowHelper.toggleFullScreen();
+                                      });
+                                    },
+                                  ),
+                                  const SizedBox(width: 16),
+                                ],
+
+                                // Low Stock Raw Materials Warning Icon Badge with popup
+                                if (posController.lowStockIngredientsCount > 0) ...[
+                                  PopupMenuButton<dynamic>(
+                                    offset: const Offset(0, 50),
+                                    icon: Badge(
+                                      label: Text(
+                                        '${posController.lowStockIngredientsCount}',
+                                        style: const TextStyle(fontSize: 8, color: Colors.white),
+                                      ),
+                                      isLabelVisible: true,
+                                      backgroundColor: Colors.amber.shade700,
+                                      child: Icon(Icons.warning_amber_rounded, color: Colors.amber.shade700, size: 20),
+                                    ),
+                                    tooltip: 'Low Stock Ingredients',
+                                    itemBuilder: (BuildContext context) {
+                                      final List<IngredientModel> lowStockIngs = posController.ingredients.where((i) => i.stockQty <= i.minStockLevel).toList();
+                                      return [
+                                        PopupMenuItem<dynamic>(
+                                          enabled: false,
+                                          child: Container(
+                                            width: 320,
+                                            child: Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                                              children: [
+                                                Row(
+                                                  children: [
+                                                    Icon(Icons.warning_amber_rounded, color: Colors.amber.shade700, size: 18),
+                                                    const SizedBox(width: 8),
+                                                    Text(
+                                                      'Low Stock Raw Materials'.tr(context),
+                                                      style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+                                                    ),
+                                                  ],
+                                                ),
+                                                const Divider(height: 8, color: Color(0xFFE2E8F0)),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                        ...lowStockIngs.map((i) {
+                                          return PopupMenuItem<dynamic>(
+                                            enabled: false,
+                                            child: Container(
+                                              width: 320,
+                                              padding: const EdgeInsets.symmetric(vertical: 4),
+                                              child: Row(
+                                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                children: [
+                                                  Expanded(
+                                                    child: Text(
+                                                      i.name,
+                                                      style: GoogleFonts.inter(
+                                                        fontSize: 12,
+                                                        fontWeight: FontWeight.bold,
+                                                        color: AppTheme.textLightPrimary,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  Text(
+                                                    '${i.stockQty.toStringAsFixed(1)} ${i.unit}',
+                                                    style: GoogleFonts.inter(
+                                                      fontSize: 12,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: Colors.red.shade600,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          );
+                                        }).toList(),
+                                      ];
+                                    },
+                                  ),
+                                  const SizedBox(width: 8),
+                                ],
+
+                                // Notification Bell with dynamic badge and dropdown menu
+                                PopupMenuButton<dynamic>(
+                                  offset: const Offset(0, 50),
+                                  icon: Badge(
+                                    label: Text(
+                                      '${posController.unreadNotificationCount}',
+                                      style: const TextStyle(fontSize: 8, color: Colors.white),
+                                    ),
+                                    isLabelVisible: posController.unreadNotificationCount > 0,
+                                    backgroundColor: Colors.red,
+                                    child: const Icon(Icons.notifications_none_outlined, color: Color(0xFF64748B), size: 20),
+                                  ),
+                                  tooltip: 'Notifications',
+                                  itemBuilder: (BuildContext context) {
+                                    final list = posController.notifications;
+                                    return [
+                                      PopupMenuItem<dynamic>(
+                                        enabled: false,
+                                        child: Container(
+                                          width: 320,
+                                          child: Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                                            children: [
+                                              Row(
+                                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                children: [
+                                                  Text(
+                                                    'Notifications'.tr(context),
+                                                    style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+                                                  ),
+                                                  if (posController.unreadNotificationCount > 0)
+                                                    TextButton(
+                                                      onPressed: () async {
+                                                        await posController.readAllNotifications();
+                                                        Navigator.pop(context);
+                                                      },
+                                                      child: Text('Mark all as read'.tr(context), style: const TextStyle(fontSize: 11)),
+                                                    ),
+                                                ],
+                                              ),
+                                              const Divider(height: 8, color: Color(0xFFE2E8F0)),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                      if (list.isEmpty)
+                                        PopupMenuItem<dynamic>(
+                                          enabled: false,
+                                          child: Container(
+                                            width: 320,
+                                            padding: const EdgeInsets.symmetric(vertical: 24),
+                                            child: Center(
+                                              child: Text(
+                                                'No notifications yet'.tr(context),
+                                                style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8)),
+                                              ),
+                                            ),
+                                          ),
+                                        )
+                                      else
+                                        ...list.map((n) {
+                                          final bool isRead = n['is_read'] == 1 || n['is_read'] == true;
+                                          return PopupMenuItem<dynamic>(
+                                            onTap: () async {
+                                              if (!isRead) {
+                                                await posController.readNotification(n['id']);
+                                              }
+                                            },
+                                            child: Container(
+                                              width: 320,
+                                              padding: const EdgeInsets.symmetric(vertical: 6),
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  Row(
+                                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                    children: [
+                                                      Expanded(
+                                                        child: Text(
+                                                          n['title'] ?? 'Alert',
+                                                          overflow: TextOverflow.ellipsis,
+                                                          style: GoogleFonts.inter(
+                                                            fontSize: 12,
+                                                            fontWeight: FontWeight.bold,
+                                                            color: isRead ? AppTheme.textLightSecondary : AppTheme.primary,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                      if (!isRead)
+                                                        Container(
+                                                          width: 6,
+                                                          height: 6,
+                                                          decoration: const BoxDecoration(
+                                                            color: Colors.blue,
+                                                            shape: BoxShape.circle,
+                                                          ),
+                                                        ),
+                                                    ],
+                                                  ),
+                                                  const SizedBox(height: 4),
+                                                  Text(
+                                                    n['message'] ?? '',
+                                                    maxLines: 2,
+                                                    overflow: TextOverflow.ellipsis,
+                                                    style: GoogleFonts.inter(
+                                                      fontSize: 11,
+                                                      color: isRead ? AppTheme.textLightSecondary : AppTheme.textLightPrimary,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 4),
+                                                  Text(
+                                                    formatServerDate(n['created_at']),
+                                                    style: GoogleFonts.inter(fontSize: 9, color: AppTheme.textLightSecondary),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          );
+                                        }).toList(),
+                                    ];
+                                  },
                                 ),
-                              ),
+
+                                const SizedBox(width: 8),
+
+                                // Profile Display (Clickable Dropdown Popup)
+                                PopupMenuButton<int>(
+                                  offset: const Offset(0, 50),
+                                  tooltip: 'User Profile Menu',
+                                  child: MouseRegion(
+                                    cursor: SystemMouseCursors.click,
+                                    child: Row(
+                                      children: [
+                                        CircleAvatar(
+                                          radius: 16,
+                                          backgroundColor: Colors.teal.shade100,
+                                          child: APIService.instance.currentUser?.imageBase64 != null && APIService.instance.currentUser!.imageBase64!.isNotEmpty
+                                              ? ClipOval(
+                                                  child: Base64ImageWidget(
+                                                    base64Str: APIService.instance.currentUser!.imageBase64,
+                                                    width: 32,
+                                                    height: 32,
+                                                    fit: BoxFit.cover,
+                                                  ),
+                                                )
+                                              : const Icon(Icons.face, color: Colors.teal, size: 20),
+                                        ),
+                                        if (isDesktop) ...[
+                                          const SizedBox(width: 8),
+                                          Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            children: [
+                                              Text(
+                                                'Hello'.tr(context),
+                                                style: GoogleFonts.inter(
+                                                  fontSize: 9,
+                                                  color: AppTheme.textLightSecondary,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                              ),
+                                              Text(
+                                                APIService.instance.currentUser?.name ?? 'John Doe',
+                                                style: GoogleFonts.inter(
+                                                  fontSize: 12,
+                                                  color: AppTheme.textLightPrimary,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
+                                  onSelected: (val) async {
+                                    if (val == 1) {
+                                      setState(() {
+                                        _selectedIndex = 22; // Edit Profile
+                                      });
+                                    } else if (val == 2) {
+                                      setState(() {
+                                        _selectedIndex = 23; // Change Password
+                                      });
+                                    } else if (val == 3) {
+                                      await APIService.instance.logout();
+                                      if (mounted) {
+                                        Navigator.pushReplacement(
+                                          context,
+                                          MaterialPageRoute(builder: (context) => const LoginScreen()),
+                                        );
+                                      }
+                                    }
+                                  },
+                                  itemBuilder: (context) {
+                                    final user = APIService.instance.currentUser;
+                                    final userRole = (user?.role ?? 'cashier').toUpperCase();
+                                    return [
+                                      PopupMenuItem<int>(
+                                        enabled: false,
+                                        child: Container(
+                                          width: 220,
+                                          padding: const EdgeInsets.symmetric(vertical: 8),
+                                          child: Column(
+                                            children: [
+                                              CircleAvatar(
+                                                radius: 36,
+                                                backgroundColor: Colors.teal.shade50,
+                                                child: (user?.imageBase64 ?? '').isNotEmpty
+                                                    ? ClipOval(
+                                                        child: Base64ImageWidget(
+                                                          base64Str: user?.imageBase64,
+                                                          width: 72,
+                                                          height: 72,
+                                                          fit: BoxFit.cover,
+                                                        ),
+                                                      )
+                                                    : const Icon(Icons.face, color: Colors.teal, size: 40),
+                                              ),
+                                              const SizedBox(height: 12),
+                                              Text(
+                                                user?.name ?? 'John Doe',
+                                                style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+                                              ),
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                user?.email ?? 'admin@example.com',
+                                                style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary),
+                                              ),
+                                              if ((user?.phone ?? '').isNotEmpty) ...[
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  user?.phone ?? '',
+                                                  style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary),
+                                                ),
+                                              ],
+                                              const SizedBox(height: 8),
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                                decoration: BoxDecoration(
+                                                  color: AppTheme.primary.withOpacity(0.08),
+                                                  borderRadius: BorderRadius.circular(20),
+                                                ),
+                                                child: Text(
+                                                  userRole,
+                                                  style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold, color: AppTheme.primary),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                      const PopupMenuDivider(),
+                                       PopupMenuItem<int>(
+                                        value: 1,
+                                        child: Row(
+                                          children: [
+                                            Icon(Icons.edit_outlined, size: 16, color: AppTheme.textLightSecondary),
+                                            const SizedBox(width: 10),
+                                            Text('Edit Profile', style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary)),
+                                          ],
+                                        ),
+                                      ),
+                                      PopupMenuItem<int>(
+                                        value: 2,
+                                        child: Row(
+                                          children: [
+                                            Icon(Icons.key_outlined, size: 16, color: AppTheme.textLightSecondary),
+                                            const SizedBox(width: 10),
+                                            Text('Change Password', style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary)),
+                                          ],
+                                        ),
+                                      ),
+                                      PopupMenuItem<int>(
+                                        value: 3,
+                                        child: Row(
+                                          children: [
+                                            const Icon(Icons.logout_outlined, size: 16, color: AppTheme.danger),
+                                            const SizedBox(width: 10),
+                                            Text('Logout', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.danger)),
+                                          ],
+                                        ),
+                                      ),
+                                    ];
+                                  },
+                                ),
+                              ],
                             ),
-                            const PopupMenuDivider(),
-                             PopupMenuItem<int>(
-                              value: 1,
-                              child: Row(
-                                children: [
-                                  Icon(Icons.edit_outlined, size: 16, color: AppTheme.textLightSecondary),
-                                  const SizedBox(width: 10),
-                                  Text('Edit Profile', style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary)),
-                                ],
-                              ),
-                            ),
-                            PopupMenuItem<int>(
-                              value: 2,
-                              child: Row(
-                                children: [
-                                  Icon(Icons.key_outlined, size: 16, color: AppTheme.textLightSecondary),
-                                  const SizedBox(width: 10),
-                                  Text('Change Password', style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary)),
-                                ],
-                              ),
-                            ),
-                            PopupMenuItem<int>(
-                              value: 3,
-                              child: Row(
-                                children: [
-                                  const Icon(Icons.logout_outlined, size: 16, color: AppTheme.danger),
-                                  const SizedBox(width: 10),
-                                  Text('Logout', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.danger)),
-                                ],
-                              ),
-                            ),
-                          ];
-                        },
+                          ),
+                        ),
                       ),
                     ],
                   ),

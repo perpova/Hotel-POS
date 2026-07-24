@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:printing/printing.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
 import '../theme.dart';
 import '../api_service.dart';
 import '../pos_controller.dart';
@@ -19,7 +22,7 @@ class SettingsScreen extends StatefulWidget {
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
-enum _SettingsTab { company, theme, branches, editProfile, changePassword, rolesPermissions, connection, externalDisplay, kotSound, barcodeScanners }
+enum _SettingsTab { company, theme, branches, editProfile, changePassword, rolesPermissions, connection, externalDisplay, kotSound, barcodeScanners, printers }
 
 class _SettingsScreenState extends State<SettingsScreen> {
   _SettingsTab _activeTab = _SettingsTab.company;
@@ -130,6 +133,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         Divider(height: 1, color: AppTheme.isDarkMode ? const Color(0xFF334155) : const Color(0xFFF1F5F9)),
                       ],
                       _section('SYSTEM'),
+                      _item(Icons.print_outlined,        'Printer & Paper Setup', _SettingsTab.printers),
                       _item(Icons.settings_ethernet,     'API Connection',   _SettingsTab.connection),
                       _item(Icons.monitor,               'External Display', _SettingsTab.externalDisplay),
                       _item(Icons.volume_up_outlined,    'KOT Sound',        _SettingsTab.kotSound),
@@ -206,6 +210,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _SettingsTab.externalDisplay  => 'External Display',
     _SettingsTab.kotSound         => 'KOT Sound Settings',
     _SettingsTab.barcodeScanners  => 'Barcode Scanners',
+    _SettingsTab.printers         => 'Printer Machine & Thermal Paper Setup',
   };
 
   Widget _buildContent() => switch (_activeTab) {
@@ -226,6 +231,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _SettingsTab.externalDisplay  => _buildExternalDisplay(),
     _SettingsTab.kotSound         => const _KotSoundTab(),
     _SettingsTab.barcodeScanners  => const _BarcodeScannersTab(),
+    _SettingsTab.printers         => const _PrinterSettingsTab(),
   };
 
   // ── Edit Profile ─────────────────────────────────────────────────────────
@@ -2295,6 +2301,8 @@ class _BarcodeScannersTabState extends State<_BarcodeScannersTab> {
   final _mainPrefixController = TextEditingController();
   final _kitchenPrefixController = TextEditingController();
   bool _autoRouteKitchen = true;
+  String _mainUsbPort = 'Auto-Detect (USB HID Port 1)';
+  String _kitchenUsbPort = 'Auto-Detect (USB HID Port 2)';
   bool _saving = false;
 
   final _mainTestController = TextEditingController();
@@ -2310,6 +2318,8 @@ class _BarcodeScannersTabState extends State<_BarcodeScannersTab> {
     _mainPrefixController.text = appSettings.mainScannerPrefix;
     _kitchenPrefixController.text = appSettings.kitchenScannerPrefix;
     _autoRouteKitchen = appSettings.autoRouteKitchenBarcodes;
+    _mainUsbPort = appSettings.mainScannerUsbPort;
+    _kitchenUsbPort = appSettings.kitchenScannerUsbPort;
   }
 
   @override
@@ -2330,6 +2340,8 @@ class _BarcodeScannersTabState extends State<_BarcodeScannersTab> {
         mainPrefix: _mainPrefixController.text,
         kitchenPrefix: _kitchenPrefixController.text,
         autoRouteKitchen: _autoRouteKitchen,
+        mainUsbPort: _mainUsbPort,
+        kitchenUsbPort: _kitchenUsbPort,
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -2469,6 +2481,30 @@ class _BarcodeScannersTabState extends State<_BarcodeScannersTab> {
                         style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
                       ),
                       const SizedBox(height: 16),
+
+                      // USB Port Hardware Selection Dropdown
+                      DropdownButtonFormField<String>(
+                        value: _mainUsbPort,
+                        isExpanded: true,
+                        decoration: InputDecoration(
+                          labelText: 'Assigned USB Port / Hardware Slot',
+                          labelStyle: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          prefixIcon: const Icon(Icons.usb, size: 18, color: Colors.blue),
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'Auto-Detect (USB HID Port 1)', child: Text('Auto-Detect (USB HID Port 1)', overflow: TextOverflow.ellipsis)),
+                          DropdownMenuItem(value: 'USB Port 1 (Main Cashier Terminal)', child: Text('USB Port 1 (Main Cashier Terminal)', overflow: TextOverflow.ellipsis)),
+                          DropdownMenuItem(value: 'USB Port 2 (Main Counter)', child: Text('USB Port 2 (Main Counter)', overflow: TextOverflow.ellipsis)),
+                          DropdownMenuItem(value: 'COM / Virtual Serial Port', child: Text('COM / Virtual Serial Port', overflow: TextOverflow.ellipsis)),
+                        ],
+                        onChanged: (val) {
+                          if (val != null) setState(() => _mainUsbPort = val);
+                        },
+                      ),
+                      const SizedBox(height: 16),
+
                       TextField(
                         controller: _mainPrefixController,
                         style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary),
@@ -2490,7 +2526,7 @@ class _BarcodeScannersTabState extends State<_BarcodeScannersTab> {
                         controller: _mainTestController,
                         onSubmitted: (val) {
                           setState(() {
-                            _mainLastScan = 'Scanned: "$val" (${DateTime.now().hour}:${DateTime.now().minute}:${DateTime.now().second})';
+                            _mainLastScan = 'Scanned from $_mainUsbPort: "$val" (${DateTime.now().hour}:${DateTime.now().minute}:${DateTime.now().second})';
                           });
                         },
                         style: GoogleFonts.inter(fontSize: 12, color: Colors.blue, fontWeight: FontWeight.bold),
@@ -2576,6 +2612,30 @@ class _BarcodeScannersTabState extends State<_BarcodeScannersTab> {
                         style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
                       ),
                       const SizedBox(height: 16),
+
+                      // USB Port Hardware Selection Dropdown
+                      DropdownButtonFormField<String>(
+                        value: _kitchenUsbPort,
+                        isExpanded: true,
+                        decoration: InputDecoration(
+                          labelText: 'Assigned USB Port / Hardware Slot',
+                          labelStyle: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          prefixIcon: const Icon(Icons.usb, size: 18, color: Color(0xFFFF9800)),
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'Auto-Detect (USB HID Port 2)', child: Text('Auto-Detect (USB HID Port 2)', overflow: TextOverflow.ellipsis)),
+                          DropdownMenuItem(value: 'USB Port 2 (Kitchen KDS Station)', child: Text('USB Port 2 (Kitchen KDS Station)', overflow: TextOverflow.ellipsis)),
+                          DropdownMenuItem(value: 'USB Port 3 (Short Eats / Bar)', child: Text('USB Port 3 (Short Eats / Bar)', overflow: TextOverflow.ellipsis)),
+                          DropdownMenuItem(value: 'COM / Virtual Serial Port', child: Text('COM / Virtual Serial Port', overflow: TextOverflow.ellipsis)),
+                        ],
+                        onChanged: (val) {
+                          if (val != null) setState(() => _kitchenUsbPort = val);
+                        },
+                      ),
+                      const SizedBox(height: 16),
+
                       TextField(
                         controller: _kitchenPrefixController,
                         style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary),
@@ -2597,7 +2657,7 @@ class _BarcodeScannersTabState extends State<_BarcodeScannersTab> {
                         controller: _kitchenTestController,
                         onSubmitted: (val) {
                           setState(() {
-                            _kitchenLastScan = 'Scanned: "$val" (${DateTime.now().hour}:${DateTime.now().minute}:${DateTime.now().second})';
+                            _kitchenLastScan = 'Scanned from $_kitchenUsbPort: "$val" (${DateTime.now().hour}:${DateTime.now().minute}:${DateTime.now().second})';
                           });
                         },
                         style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFFFF9800), fontWeight: FontWeight.bold),
@@ -2675,6 +2735,552 @@ class _BarcodeScannersTabState extends State<_BarcodeScannersTab> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// PRINTER MACHINE & THERMAL PAPER SETUP TAB
+// ════════════════════════════════════════════════════════════════════════════
+class _PrinterSettingsTab extends StatefulWidget {
+  const _PrinterSettingsTab();
+
+  @override
+  State<_PrinterSettingsTab> createState() => _PrinterSettingsTabState();
+}
+
+class _PrinterSettingsTabState extends State<_PrinterSettingsTab> {
+  List<Printer> _availablePrinters = [];
+  bool _loadingPrinters = true;
+  String _selectedPaperSize = '80mm';
+  String? _invoicePrinterName;
+  String? _kotPrinterName;
+  bool _autoPrintInvoice = true;
+  bool _autoPrintKot = true;
+  bool _autoPrintKotAfterInvoice = true;
+  bool _directPrint = false;
+  int _invoiceCopies = 1;
+  int _kotCopies = 1;
+  bool _saving = false;
+  bool _initialized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchPrinters();
+  }
+
+  Future<void> _fetchPrinters() async {
+    try {
+      final list = await Printing.listPrinters();
+      if (mounted) {
+        setState(() {
+          _availablePrinters = list;
+          _loadingPrinters = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _loadingPrinters = false);
+      }
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_initialized) return;
+    _initialized = true;
+    final s = context.read<AppSettingsController>();
+    _selectedPaperSize = s.receiptPaperSize;
+    _invoicePrinterName = s.selectedInvoicePrinter;
+    _kotPrinterName = s.selectedKotPrinter;
+    _autoPrintInvoice = s.autoPrintInvoice;
+    _autoPrintKot = s.autoPrintKot;
+    _autoPrintKotAfterInvoice = s.autoPrintKotAfterInvoice;
+    _directPrint = s.directPrint;
+    _invoiceCopies = s.invoiceCopies;
+    _kotCopies = s.kotCopies;
+  }
+
+  Future<void> _save() async {
+    setState(() => _saving = true);
+    try {
+      await context.read<AppSettingsController>().savePrinterSettings(
+        receiptPaperSize: _selectedPaperSize,
+        selectedInvoicePrinter: _invoicePrinterName,
+        selectedKotPrinter: _kotPrinterName,
+        autoPrintInvoice: _autoPrintInvoice,
+        autoPrintKot: _autoPrintKot,
+        autoPrintKotAfterInvoice: _autoPrintKotAfterInvoice,
+        directPrint: _directPrint,
+        invoiceCopies: _invoiceCopies,
+        kotCopies: _kotCopies,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Printer & paper settings saved successfully!'),
+            backgroundColor: Color(0xFF10B981),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error saving printer settings: $e'), backgroundColor: AppTheme.danger),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _testPrint(String title) async {
+    try {
+      final s = context.read<AppSettingsController>();
+      final doc = pw.Document();
+      doc.addPage(
+        pw.Page(
+          pageFormat: s.receiptPageFormat,
+          margin: const pw.EdgeInsets.all(6),
+          build: (pw.Context context) {
+            return pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.center,
+              children: [
+                pw.Text('=== $title TEST ===', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12)),
+                pw.SizedBox(height: 6),
+                pw.Text('Paper Size: $_selectedPaperSize', style: const pw.TextStyle(fontSize: 9)),
+                pw.Text('Printer: ${title == "INVOICE" ? (_invoicePrinterName ?? "System Default") : (_kotPrinterName ?? "System Default")}', style: const pw.TextStyle(fontSize: 9)),
+                pw.Text('Date: ${DateTime.now().toString().substring(0, 19)}', style: const pw.TextStyle(fontSize: 8)),
+                pw.SizedBox(height: 8),
+                pw.Divider(),
+                pw.Text('Perpova Thermal Printer Setup OK', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                pw.Divider(),
+              ],
+            );
+          },
+        ),
+      );
+      final pdfBytes = await doc.save();
+      final targetPrinterName = title == "INVOICE" ? _invoicePrinterName : _kotPrinterName;
+
+      Printer? targetPrinter;
+      if (targetPrinterName != null && _availablePrinters.isNotEmpty) {
+        final found = _availablePrinters.where((p) => p.name == targetPrinterName).toList();
+        if (found.isNotEmpty) targetPrinter = found.first;
+      }
+
+      if (_directPrint && targetPrinter != null) {
+        await Printing.directPrintPdf(printer: targetPrinter, onLayout: (format) async => pdfBytes);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Sent test print directly to ${targetPrinter.name}'), backgroundColor: const Color(0xFF10B981)),
+          );
+        }
+      } else {
+        await Printing.layoutPdf(onLayout: (format) async => pdfBytes, name: 'Test_Print_$title');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Test print failed: $e'), backgroundColor: AppTheme.danger),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Printer Machine & Paper Setup',
+                      style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Configure thermal receipt paper sizes, cashier/kitchen printer machines, auto-print triggers, and direct printing.',
+                      style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                onPressed: () {
+                  setState(() => _loadingPrinters = true);
+                  _fetchPrinters();
+                },
+                icon: const Icon(Icons.refresh_rounded),
+                tooltip: 'Refresh Printer List',
+              ),
+            ],
+          ),
+          Divider(color: AppTheme.dividerColor),
+          const SizedBox(height: 20),
+
+          // 1. PAPER SIZE SELECTION
+          Text(
+            'Thermal Paper Size',
+            style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Select the width of your thermal paper roll or paper type.',
+            style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              _buildPaperSizeCard('80mm', '80mm / 3 inch Roll', 'Standard Thermal POS Printers (Epson, Xprinter, POS-80)', Icons.receipt_long),
+              const SizedBox(width: 12),
+              _buildPaperSizeCard('58mm', '58mm / 2 inch Roll', 'Compact & Portable Bluetooth Thermal Printers', Icons.receipt),
+              const SizedBox(width: 12),
+              _buildPaperSizeCard('A4', 'A4 Sheet', 'Standard Laser / Inkjet Printers', Icons.description),
+            ],
+          ),
+
+          const SizedBox(height: 28),
+          Divider(color: AppTheme.dividerColor),
+          const SizedBox(height: 20),
+
+          // 2. PRINTER MACHINES SETUP
+          Text(
+            'Printer Machine Setup',
+            style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Assign specific hardware thermal printers connected to your computer for Invoice Receipts and Kitchen KOT.',
+            style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary),
+          ),
+          const SizedBox(height: 16),
+
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Cashier Invoice Printer Selection
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppTheme.cardLight,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppTheme.borderLight),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.point_of_sale_rounded, color: Color(0xFF10B981), size: 20),
+                          const SizedBox(width: 10),
+                          Text('Cashier Receipt Printer', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      _loadingPrinters
+                          ? const Center(child: CircularProgressIndicator())
+                          : DropdownButtonFormField<String?>(
+                              value: _availablePrinters.any((p) => p.name == _invoicePrinterName) ? _invoicePrinterName : null,
+                              isExpanded: true,
+                              decoration: InputDecoration(
+                                labelText: 'Selected Cashier Printer',
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              ),
+                              items: [
+                                const DropdownMenuItem<String?>(
+                                  value: null,
+                                  child: Text('System Default Printer', overflow: TextOverflow.ellipsis),
+                                ),
+                                ..._availablePrinters.map((p) => DropdownMenuItem<String?>(
+                                      value: p.name,
+                                      child: Text('${p.name} ${p.isDefault ? "(Default)" : ""}', overflow: TextOverflow.ellipsis),
+                                    )),
+                              ],
+                              onChanged: (val) => setState(() => _invoicePrinterName = val),
+                            ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Text('Copies: ', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
+                          const SizedBox(width: 8),
+                          DropdownButton<int>(
+                            value: _invoiceCopies,
+                            items: [1, 2, 3, 4, 5].map((c) => DropdownMenuItem(value: c, child: Text('$c copy'))).toList(),
+                            onChanged: (val) => setState(() => _invoiceCopies = val ?? 1),
+                          ),
+                          const Spacer(),
+                          OutlinedButton.icon(
+                            onPressed: () => _testPrint("INVOICE"),
+                            icon: const Icon(Icons.print, size: 14),
+                            label: const Text('Test Print'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: const Color(0xFF10B981),
+                              side: const BorderSide(color: Color(0xFF10B981)),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+
+              // Kitchen KOT Printer Selection
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppTheme.cardLight,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppTheme.borderLight),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.soup_kitchen_rounded, color: Color(0xFF6366F1), size: 20),
+                          const SizedBox(width: 10),
+                          Text('Kitchen KOT Printer', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      _loadingPrinters
+                          ? const Center(child: CircularProgressIndicator())
+                          : DropdownButtonFormField<String?>(
+                              value: _availablePrinters.any((p) => p.name == _kotPrinterName) ? _kotPrinterName : null,
+                              isExpanded: true,
+                              decoration: InputDecoration(
+                                labelText: 'Selected Kitchen Printer',
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              ),
+                              items: [
+                                const DropdownMenuItem<String?>(
+                                  value: null,
+                                  child: Text('System Default Printer', overflow: TextOverflow.ellipsis),
+                                ),
+                                ..._availablePrinters.map((p) => DropdownMenuItem<String?>(
+                                      value: p.name,
+                                      child: Text('${p.name} ${p.isDefault ? "(Default)" : ""}', overflow: TextOverflow.ellipsis),
+                                    )),
+                              ],
+                              onChanged: (val) => setState(() => _kotPrinterName = val),
+                            ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Text('Copies: ', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
+                          const SizedBox(width: 8),
+                          DropdownButton<int>(
+                            value: _kotCopies,
+                            items: [1, 2, 3, 4, 5].map((c) => DropdownMenuItem(value: c, child: Text('$c copy'))).toList(),
+                            onChanged: (val) => setState(() => _kotCopies = val ?? 1),
+                          ),
+                          const Spacer(),
+                          OutlinedButton.icon(
+                            onPressed: () => _testPrint("KOT"),
+                            icon: const Icon(Icons.print, size: 14),
+                            label: const Text('Test Print'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: const Color(0xFF6366F1),
+                              side: const BorderSide(color: Color(0xFF6366F1)),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 28),
+          Divider(color: AppTheme.dividerColor),
+          const SizedBox(height: 20),
+
+          // 3. AUTOMATIC PRINTING & DIRECT PRINT TRIGGERS
+          Text(
+            'Automatic Printing & Triggers',
+            style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Configure automatic printing behavior when orders are created or bills are cut.',
+            style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary),
+          ),
+          const SizedBox(height: 16),
+
+          // Direct Print Switch
+          _buildToggleRow(
+            icon: Icons.flash_on_rounded,
+            iconColor: Colors.amber.shade700,
+            title: 'Direct Printing (Bypass System Dialog)',
+            subtitle: 'Directly print receipts to the selected thermal printer machine without opening a print preview dialog.',
+            value: _directPrint,
+            onChanged: (val) => setState(() => _directPrint = val),
+          ),
+          const SizedBox(height: 12),
+
+          // Auto Print KOT
+          _buildToggleRow(
+            icon: Icons.restaurant_menu_rounded,
+            iconColor: const Color(0xFF6366F1),
+            title: 'Auto Print KOT Bill on Kitchen Order',
+            subtitle: 'Automatically print KOT ticket to kitchen printer when placing a new order or updating table order.',
+            value: _autoPrintKot,
+            onChanged: (val) => setState(() => _autoPrintKot = val),
+          ),
+          const SizedBox(height: 12),
+
+          // Auto Print Invoice
+          _buildToggleRow(
+            icon: Icons.receipt_long_rounded,
+            iconColor: const Color(0xFF10B981),
+            title: 'Auto Print Invoice Bill on Checkout / Payment',
+            subtitle: 'Automatically print Customer Invoice receipt when cutting bill or completing payment.',
+            value: _autoPrintInvoice,
+            onChanged: (val) => setState(() => _autoPrintInvoice = val),
+          ),
+          const SizedBox(height: 12),
+
+          // Auto Print KOT after Invoice
+          _buildToggleRow(
+            icon: Icons.print_rounded,
+            iconColor: Colors.deepOrange,
+            title: 'Print KOT Bill After Cutting Invoice Bill',
+            subtitle: 'Automatically print kitchen KOT ticket along with / after cutting customer invoice bill.',
+            value: _autoPrintKotAfterInvoice,
+            onChanged: (val) => setState(() => _autoPrintKotAfterInvoice = val),
+          ),
+
+          const SizedBox(height: 32),
+
+          // Save Button
+          Align(
+            alignment: Alignment.centerRight,
+            child: ElevatedButton.icon(
+              onPressed: _saving ? null : _save,
+              icon: _saving
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Icon(Icons.save_outlined, size: 18),
+              label: Text('Save Printer Settings', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPaperSizeCard(String code, String title, String subtitle, IconData icon) {
+    final isSelected = _selectedPaperSize == code;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => _selectedPaperSize = code),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: isSelected ? AppTheme.primary.withOpacity(0.08) : AppTheme.cardLight,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isSelected ? AppTheme.primary : AppTheme.borderLight,
+              width: isSelected ? 2.0 : 1.0,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(icon, color: isSelected ? AppTheme.primary : AppTheme.textLightSecondary, size: 22),
+                  const Spacer(),
+                  Icon(
+                    isSelected ? Icons.check_circle : Icons.radio_button_off,
+                    color: isSelected ? AppTheme.primary : AppTheme.textLightSecondary,
+                    size: 18,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                title,
+                style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: isSelected ? AppTheme.primary : AppTheme.textLightPrimary),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                subtitle,
+                style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildToggleRow({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String subtitle,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.cardLight,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.borderLight),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: iconColor, size: 22),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+                ),
+                Text(
+                  subtitle,
+                  style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary),
+                ),
+              ],
+            ),
+          ),
+          Switch(
+            value: value,
+            activeColor: AppTheme.primary,
+            onChanged: onChanged,
           ),
         ],
       ),

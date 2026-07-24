@@ -2793,6 +2793,7 @@ class _POSScreenState extends State<POSScreen> {
               isSubmitting = true;
 
               try {
+                final parentContext = this.context;
                 if (paymentMethod == 'credit' && selectedCreditCustomer != null) {
                   controller.selectCustomer(selectedCreditCustomer);
                 }
@@ -2870,18 +2871,53 @@ class _POSScreenState extends State<POSScreen> {
                   cashierName: cashierUsername,
                 );
 
-                final isDineIn = controller.orderType == 'dine_in';
+                if (parentContext.mounted) {
+                  final appSettings = Provider.of<AppSettingsController>(parentContext, listen: false);
+                  final isDineIn = controller.orderType == 'dine_in';
+                  final bool shouldAutoPrintKot = hasKotItems && (appSettings.autoPrintKot || appSettings.autoPrintKotAfterInvoice);
+                  final bool shouldAutoPrintInvoice = appSettings.autoPrintInvoice;
 
-                _showReceiptDialog(
-                  receiptData,
-                  showKOT: !isDineIn && hasKotItems,
-                  showInvoice: true,
-                );
+                  // 1. Direct Print to thermal printer if enabled
+                  if (appSettings.directPrint && (shouldAutoPrintKot || shouldAutoPrintInvoice)) {
+                    if (shouldAutoPrintKot) {
+                      try {
+                        final kotBytes = await _generateKOTPdfBytes(receiptData, controller);
+                        await _printReceiptPdf(
+                          bytes: kotBytes,
+                          name: 'KOT_${receiptData.orderNumber}',
+                          printerName: appSettings.selectedKotPrinter ?? appSettings.selectedInvoicePrinter,
+                          copies: appSettings.kotCopies,
+                        );
+                      } catch (_) {}
+                    }
+
+                    if (shouldAutoPrintInvoice) {
+                      try {
+                        final invBytes = await _generateInvoicePdfBytes(receiptData, controller);
+                        await _printReceiptPdf(
+                          bytes: invBytes,
+                          name: 'Invoice_${receiptData.orderNumber}',
+                          printerName: appSettings.selectedInvoicePrinter ?? appSettings.selectedKotPrinter,
+                          copies: appSettings.invoiceCopies,
+                        );
+                      } catch (_) {}
+                    }
+                  }
+
+                  // 2. ALWAYS display the on-screen Receipt & KOT preview modal
+                  _showReceiptDialog(
+                    receiptData,
+                    showKOT: (!isDineIn || appSettings.autoPrintKotAfterInvoice) && hasKotItems,
+                    showInvoice: true,
+                  );
+                }
                 _tokenNoController.clear();
 
               } catch (e) {
                 if (mounted) {
-                  context.showErrorToast(e.toString());
+                  ScaffoldMessenger.of(this.context).showSnackBar(
+                    SnackBar(content: Text(e.toString()), backgroundColor: AppTheme.danger),
+                  );
                 }
               }
             }
@@ -3482,9 +3518,12 @@ class _POSScreenState extends State<POSScreen> {
                           onPressed: () async {
                             try {
                               final bytes = await _generateKOTPdfBytes(data, controller);
-                              await Printing.layoutPdf(
-                                onLayout: (format) async => bytes,
+                              final appSettings = Provider.of<AppSettingsController>(context, listen: false);
+                              await _printReceiptPdf(
+                                bytes: bytes,
                                 name: 'KOT_Token_${data.tokenNumber}',
+                                printerName: appSettings.selectedKotPrinter,
+                                copies: appSettings.kotCopies,
                               );
                             } catch (e) {
                               _showErrorSnackBar('Failed to print KOT: $e');
@@ -3527,9 +3566,12 @@ class _POSScreenState extends State<POSScreen> {
                           onPressed: () async {
                             try {
                               final bytes = await _generateInvoicePdfBytes(data, controller);
-                              await Printing.layoutPdf(
-                                onLayout: (format) async => bytes,
+                              final appSettings = Provider.of<AppSettingsController>(context, listen: false);
+                              await _printReceiptPdf(
+                                bytes: bytes,
                                 name: 'Invoice_Token_${data.tokenNumber}',
+                                printerName: appSettings.selectedInvoicePrinter,
+                                copies: appSettings.invoiceCopies,
                               );
                             } catch (e) {
                               _showErrorSnackBar('Failed to print Invoice: $e');
@@ -3622,6 +3664,31 @@ class _POSScreenState extends State<POSScreen> {
     }
   }
 
+  /// Print receipt PDF either directly to configured printer or via system print layout dialog.
+  Future<void> _printReceiptPdf({
+    required Uint8List bytes,
+    required String name,
+    required String? printerName,
+    int copies = 1,
+  }) async {
+    final appSettings = Provider.of<AppSettingsController>(context, listen: false);
+    if (appSettings.directPrint && printerName != null && printerName.isNotEmpty) {
+      try {
+        final list = await Printing.listPrinters();
+        final found = list.where((p) => p.name == printerName).toList();
+        if (found.isNotEmpty) {
+          for (int i = 0; i < copies; i++) {
+            await Printing.directPrintPdf(printer: found.first, onLayout: (format) async => bytes);
+          }
+          return;
+        }
+      } catch (_) {}
+    }
+    for (int i = 0; i < copies; i++) {
+      await Printing.layoutPdf(onLayout: (format) async => bytes, name: name);
+    }
+  }
+
   List<OrderItemModel> _groupDuplicateOrderItems(List<OrderItemModel> items) {
     final Map<String, OrderItemModel> grouped = {};
     for (var item in items) {
@@ -3653,6 +3720,8 @@ class _POSScreenState extends State<POSScreen> {
   Future<Uint8List> _generateKOTPdfBytes(ReceiptData data, POSController controller) async {
     final lang = Provider.of<DashboardController>(this.context, listen: false).selectedLanguage;
     final bool isSinhala = lang == 'Sinhala';
+    final appSettings = Provider.of<AppSettingsController>(this.context, listen: false);
+    final receiptFormat = appSettings.receiptPageFormat;
     
     // Load Sinhala Font
     final fontData = await rootBundle.load('assets/fonts/NotoSansSinhala-Regular.ttf');
@@ -3677,7 +3746,7 @@ class _POSScreenState extends State<POSScreen> {
     
     pdf.addPage(
       pw.Page(
-        pageFormat: PdfPageFormat.roll80,
+        pageFormat: receiptFormat,
         margin: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 3),
         build: (pw.Context context) {
           return pw.Column(
@@ -3810,6 +3879,8 @@ class _POSScreenState extends State<POSScreen> {
   Future<Uint8List> _generateInvoicePdfBytes(ReceiptData data, POSController controller) async {
     final lang = Provider.of<DashboardController>(this.context, listen: false).selectedLanguage;
     final bool isSinhala = lang == 'Sinhala';
+    final appSettings = Provider.of<AppSettingsController>(this.context, listen: false);
+    final receiptFormat = appSettings.receiptPageFormat;
     
     // Load Sinhala Font
     final fontData = await rootBundle.load('assets/fonts/NotoSansSinhala-Regular.ttf');
@@ -3863,7 +3934,7 @@ class _POSScreenState extends State<POSScreen> {
 
     pdf.addPage(
       pw.Page(
-        pageFormat: PdfPageFormat.roll80,
+        pageFormat: receiptFormat,
         margin: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 3),
         build: (pw.Context context) {
           return pw.Column(
