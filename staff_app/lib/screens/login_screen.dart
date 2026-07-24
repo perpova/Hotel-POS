@@ -172,7 +172,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           controller: _urlCtrl,
                           style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
                           decoration: InputDecoration(
-                            labelText: 'Server URL (e.g. http://192.168.1.100:3000)',
+                            labelText: 'Server URL (e.g. https://pos0001.perpova.dev)',
                             labelStyle: const TextStyle(color: AppColors.textMuted, fontSize: 11),
                             filled: true,
                             fillColor: AppColors.bgDeep,

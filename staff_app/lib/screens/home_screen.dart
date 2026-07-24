@@ -10,6 +10,7 @@ import '../providers/shift_provider.dart';
 import 'history_screen.dart';
 import 'my_attendance_screen.dart';
 import 'my_salary_screen.dart';
+import '../models/models.dart';
 import '../services/update_service.dart';
 import '../widgets/update_dialog.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -402,7 +403,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     final dateRaw = item['created_at']?.toString();
                     String dateStr = '';
                     try {
-                      if (dateRaw != null) dateStr = DateFormat('dd MMM  hh:mm a').format(DateTime.parse(dateRaw).toLocal());
+                      if (dateRaw != null) dateStr = DateFormat('dd MMM  hh:mm a').format(parseServerDate(dateRaw));
                     } catch (_) {}
 
                     return Column(

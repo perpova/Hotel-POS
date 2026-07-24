@@ -9,8 +9,8 @@ class ApiService {
   static final ApiService instance = ApiService._init();
   ApiService._init();
 
-  String _baseUrl = 'http://192.168.1.100:3000';
-  String _wsUrl = 'ws://192.168.1.100:3000';
+  String _baseUrl = 'https://pos0001.perpova.dev';
+  String _wsUrl = 'wss://pos0001.perpova.dev';
   String? _token;
   UserModel? currentUser;
 
@@ -34,8 +34,12 @@ class ApiService {
   // ─── INIT ────────────────────────────────────────────────────────────
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
-    _baseUrl = prefs.getString('admin_base_url') ?? 'http://192.168.1.100:3000';
-    _wsUrl = _baseUrl.replaceFirst('http', 'ws');
+    _baseUrl = prefs.getString('admin_base_url') ?? 'https://pos0001.perpova.dev';
+    if (_baseUrl.startsWith('https://')) {
+      _wsUrl = _baseUrl.replaceFirst('https://', 'wss://');
+    } else {
+      _wsUrl = _baseUrl.replaceFirst('http://', 'ws://');
+    }
     _token = prefs.getString('admin_token');
 
     final userJson = prefs.getString('admin_user');
@@ -48,8 +52,20 @@ class ApiService {
   }
 
   Future<void> setBaseUrl(String url) async {
-    _baseUrl = url.trim().replaceAll(RegExp(r'/$'), '');
-    _wsUrl = _baseUrl.replaceFirst('http', 'ws');
+    var formatted = url.trim().replaceAll(RegExp(r'/*$'), '');
+    if (formatted.isNotEmpty && !formatted.startsWith('http://') && !formatted.startsWith('https://')) {
+      if (formatted.contains('localhost') || RegExp(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}').hasMatch(formatted)) {
+        formatted = 'http://$formatted';
+      } else {
+        formatted = 'https://$formatted';
+      }
+    }
+    _baseUrl = formatted;
+    if (_baseUrl.startsWith('https://')) {
+      _wsUrl = _baseUrl.replaceFirst('https://', 'wss://');
+    } else {
+      _wsUrl = _baseUrl.replaceFirst('http://', 'ws://');
+    }
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('admin_base_url', _baseUrl);
   }
@@ -66,7 +82,8 @@ class ApiService {
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         final user = UserModel.fromJson(data['user']);
-        if (user.role != 'admin' && user.role != 'owner') {
+        final roleLower = user.role.trim().toLowerCase();
+        if (roleLower != 'admin' && roleLower != 'owner' && roleLower != 'superadmin' && roleLower != 'manager') {
           throw Exception('Access denied. Admin or Owner role required.');
         }
         _token = data['token'];

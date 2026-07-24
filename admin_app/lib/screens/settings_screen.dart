@@ -238,7 +238,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
                   decoration: const InputDecoration(
                     labelText: 'Server URL',
-                    hintText: 'http://192.168.1.x:3000',
+                    hintText: 'https://pos0001.perpova.dev',
                     prefixIcon: Icon(Icons.dns_rounded, color: AppColors.textMuted, size: 18),
                   ),
                 ),

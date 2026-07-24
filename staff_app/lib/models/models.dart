@@ -36,6 +36,22 @@ class StaffUserModel {
       };
 }
 
+DateTime parseServerDate(dynamic d) {
+  if (d == null) return DateTime.now();
+  final str = d.toString().trim();
+  if (str.isEmpty) return DateTime.now();
+  try {
+    // Backend MySQL stores local wall-clock times.
+    // Node.js JSON serialization turns Date objects into ISO strings ending with 'Z' (e.g. "2026-07-24T15:58:00.000Z").
+    // Stripping 'Z' ensures Dart parses wall-clock time as local time rather than double-applying timezone offset.
+    final cleanStr = str.replaceAll(RegExp(r'[Zz]'), '');
+    final parsed = DateTime.parse(cleanStr);
+    return parsed.isUtc ? parsed.toLocal() : parsed;
+  } catch (_) {
+    return DateTime.now();
+  }
+}
+
 class ShiftLogModel {
   final int id;
   final int userId;
@@ -54,20 +70,11 @@ class ShiftLogModel {
   });
 
   factory ShiftLogModel.fromJson(Map<String, dynamic> json) {
-    DateTime parseDate(dynamic d) {
-      if (d == null) return DateTime.now();
-      try {
-        return DateTime.parse(d.toString()).toLocal();
-      } catch (_) {
-        return DateTime.now();
-      }
-    }
-
     return ShiftLogModel(
       id: int.tryParse(json['id']?.toString() ?? '0') ?? 0,
       userId: int.tryParse(json['user_id']?.toString() ?? '0') ?? 0,
-      clockIn: parseDate(json['clock_in']),
-      clockOut: json['clock_out'] != null ? parseDate(json['clock_out']) : null,
+      clockIn: parseServerDate(json['clock_in']),
+      clockOut: json['clock_out'] != null ? parseServerDate(json['clock_out']) : null,
       durationMinutes: int.tryParse(json['duration_minutes']?.toString() ?? '0') ?? 0,
       status: json['status']?.toString() ?? 'active',
     );
@@ -78,8 +85,9 @@ class ShiftLogModel {
   String get durationFormatted {
     if (isActive) {
       final mins = DateTime.now().difference(clockIn).inMinutes;
-      final hrs = mins ~/ 60;
-      final remMins = mins % 60;
+      final validMins = mins < 0 ? 0 : mins;
+      final hrs = validMins ~/ 60;
+      final remMins = validMins % 60;
       return '${hrs}h ${remMins}m';
     } else {
       final hrs = durationMinutes ~/ 60;

@@ -22,9 +22,10 @@ class ShiftProvider extends ChangeNotifier {
   int get liveSeconds => _liveSeconds;
 
   String get liveDurationFormatted {
-    final hrs = _liveSeconds ~/ 3600;
-    final mins = (_liveSeconds % 3600) ~/ 60;
-    final secs = _liveSeconds % 60;
+    final sec = _liveSeconds < 0 ? 0 : _liveSeconds;
+    final hrs = sec ~/ 3600;
+    final mins = (sec % 3600) ~/ 60;
+    final secs = sec % 60;
     return '${hrs.toString().padLeft(2, '0')}:${mins.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
   }
 
@@ -62,10 +63,12 @@ class ShiftProvider extends ChangeNotifier {
   void _startTimer() {
     _timer?.cancel();
     if (_activeShift != null) {
-      _liveSeconds = DateTime.now().difference(_activeShift!.clockIn).inSeconds;
+      final diff = DateTime.now().difference(_activeShift!.clockIn).inSeconds;
+      _liveSeconds = diff < 0 ? 0 : diff;
       _timer = Timer.periodic(const Duration(seconds: 1), (t) {
         if (_activeShift != null) {
-          _liveSeconds = DateTime.now().difference(_activeShift!.clockIn).inSeconds;
+          final d = DateTime.now().difference(_activeShift!.clockIn).inSeconds;
+          _liveSeconds = d < 0 ? 0 : d;
           notifyListeners();
         }
       });
@@ -137,6 +140,10 @@ class ShiftProvider extends ChangeNotifier {
       await HomeWidget.saveWidgetData<String>('widget_time', timeStr);
       await HomeWidget.saveWidgetData<String>('widget_button', btnStr);
       await HomeWidget.saveWidgetData<bool>('widget_is_in', isSw);
+      await HomeWidget.saveWidgetData<String>('api_base_url', ApiService.instance.baseUrl);
+      if (ApiService.instance.token != null) {
+        await HomeWidget.saveWidgetData<String>('auth_token', ApiService.instance.token!);
+      }
 
       await HomeWidget.updateWidget(
         name: 'StaffShiftWidgetProvider',

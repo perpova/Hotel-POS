@@ -7,6 +7,7 @@ import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 import '../core/api_service.dart';
 import '../core/theme.dart';
+import '../models/models.dart';
 import '../providers/auth_provider.dart';
 
 class MyAttendanceScreen extends StatefulWidget {
@@ -131,8 +132,8 @@ class _MyAttendanceScreenState extends State<MyAttendanceScreen> {
                           String cinStr = cinRaw ?? '';
                           String coutStr = coutRaw ?? 'In Progress';
                           try {
-                            if (cinRaw != null) cinStr = DateFormat('dd MMM, hh:mm a').format(DateTime.parse(cinRaw).toLocal());
-                            if (coutRaw != null) coutStr = DateFormat('hh:mm a').format(DateTime.parse(coutRaw).toLocal());
+                            if (cinRaw != null) cinStr = DateFormat('dd MMM, hh:mm a').format(parseServerDate(cinRaw));
+                            if (coutRaw != null) coutStr = DateFormat('hh:mm a').format(parseServerDate(coutRaw));
                           } catch (_) {}
 
                           final int mins = (sh['duration_minutes'] as num?)?.toInt() ?? 0;

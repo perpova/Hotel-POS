@@ -1,14 +1,15 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:home_widget/home_widget.dart';
 import '../models/models.dart';
 
 class ApiService {
   static final ApiService instance = ApiService._internal();
   ApiService._internal();
 
-  // Base URL — defaults to localhost/LAN IP, configurable
-  String _baseUrl = 'http://192.168.1.100:3000';
+  // Base URL — defaults to pos0001.perpova.dev, configurable
+  String _baseUrl = 'https://pos0001.perpova.dev';
   String? _token;
 
   String get baseUrl => _baseUrl;
@@ -16,18 +17,24 @@ class ApiService {
 
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
-    _baseUrl = prefs.getString('api_base_url') ?? 'http://192.168.1.100:3000';
+    _baseUrl = prefs.getString('api_base_url') ?? 'https://pos0001.perpova.dev';
     _token = prefs.getString('auth_token');
+    await _syncWidgetCredentials();
   }
 
   Future<void> setBaseUrl(String url) async {
     var formatted = url.trim().replaceAll(RegExp(r'/*$'), '');
     if (formatted.isNotEmpty && !formatted.startsWith('http://') && !formatted.startsWith('https://')) {
-      formatted = 'http://$formatted';
+      if (formatted.contains('localhost') || RegExp(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}').hasMatch(formatted)) {
+        formatted = 'http://$formatted';
+      } else {
+        formatted = 'https://$formatted';
+      }
     }
     _baseUrl = formatted;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('api_base_url', _baseUrl);
+    await _syncWidgetCredentials();
   }
 
   Future<void> setToken(String? token) async {
@@ -38,6 +45,18 @@ class ApiService {
     } else {
       await prefs.setString('auth_token', token);
     }
+    await _syncWidgetCredentials();
+  }
+
+  Future<void> _syncWidgetCredentials() async {
+    try {
+      await HomeWidget.saveWidgetData<String>('api_base_url', _baseUrl);
+      if (_token != null && _token!.isNotEmpty) {
+        await HomeWidget.saveWidgetData<String>('auth_token', _token!);
+      } else {
+        await HomeWidget.saveWidgetData<String>('auth_token', '');
+      }
+    } catch (_) {}
   }
 
   Map<String, String> get _headers => {

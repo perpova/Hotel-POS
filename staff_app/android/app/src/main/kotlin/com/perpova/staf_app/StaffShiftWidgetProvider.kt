@@ -6,7 +6,13 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.graphics.Color
+import android.os.Handler
+import android.os.Looper
 import android.widget.RemoteViews
+import android.widget.Toast
+import java.io.BufferedReader
+import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
@@ -34,7 +40,16 @@ class StaffShiftWidgetProvider : AppWidgetProvider() {
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
         if (intent.action == ACTION_TOGGLE_SHIFT) {
-            handleBackgroundToggle(context)
+            val pendingResult = goAsync()
+            thread {
+                try {
+                    handleBackgroundToggle(context)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                } finally {
+                    pendingResult.finish()
+                }
+            }
         }
     }
 
@@ -57,7 +72,12 @@ class StaffShiftWidgetProvider : AppWidgetProvider() {
             ?: flPrefs.getString("widget_button", "CLOCK IN")
             ?: "CLOCK IN"
 
-        // Silent broadcast PendingIntent — does NOT open app
+        val isIn = status.contains("IN", ignoreCase = true)
+        val statusColor = if (isIn) Color.parseColor("#EF4444") else Color.parseColor("#10B981")
+        val btnBgColor = if (isIn) Color.parseColor("#EF4444") else Color.parseColor("#10B981")
+        val btnTextColor = if (isIn) Color.WHITE else Color.BLACK
+
+        // Silent broadcast PendingIntent for Button click
         val toggleIntent = Intent(context, StaffShiftWidgetProvider::class.java).apply {
             action = ACTION_TOGGLE_SHIFT
         }
@@ -68,96 +88,162 @@ class StaffShiftWidgetProvider : AppWidgetProvider() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        // PendingIntent to launch App when container (outside button) is clicked
+        val openAppIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val openAppPendingIntent = if (openAppIntent != null) {
+            PendingIntent.getActivity(
+                context,
+                1,
+                openAppIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+        } else null
+
         val views = RemoteViews(context.packageName, R.layout.staff_shift_widget).apply {
             setTextViewText(R.id.widget_status, status)
+            setTextColor(R.id.widget_status, statusColor)
+
             setTextViewText(R.id.widget_time, time)
+
             setTextViewText(R.id.widget_button, button)
+            setInt(R.id.widget_button, "setBackgroundColor", btnBgColor)
+            setTextColor(R.id.widget_button, btnTextColor)
 
             setOnClickPendingIntent(R.id.widget_button, pendingIntent)
-            setOnClickPendingIntent(R.id.widget_container, pendingIntent)
+            if (openAppPendingIntent != null) {
+                setOnClickPendingIntent(R.id.widget_container, openAppPendingIntent)
+            }
         }
 
         appWidgetManager.updateAppWidget(appWidgetId, views)
     }
 
     private fun handleBackgroundToggle(context: Context) {
-        thread {
-            try {
-                val hwPrefs = context.getSharedPreferences("HomeWidgetPreferences", Context.MODE_PRIVATE)
-                val flPrefs = context.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+        val hwPrefs = context.getSharedPreferences("HomeWidgetPreferences", Context.MODE_PRIVATE)
+        val flPrefs = context.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
 
-                val token = flPrefs.getString("flutter.auth_token", null)
-                var baseUrl = flPrefs.getString("flutter.api_base_url", "http://192.168.1.100:3000") ?: "http://192.168.1.100:3000"
-                if (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://")) {
-                    baseUrl = "http://$baseUrl"
-                }
-                baseUrl = baseUrl.trimEnd('/')
+        val token = hwPrefs.getString("auth_token", null)
+            ?: flPrefs.getString("flutter.auth_token", null)
+            ?: flPrefs.getString("auth_token", null)
 
-                var isIn = hwPrefs.getBoolean("widget_is_in", false)
-                if (!hwPrefs.contains("widget_is_in")) {
-                    if (flPrefs.contains("flutter.widget_is_in")) {
-                        isIn = flPrefs.getBoolean("flutter.widget_is_in", false)
-                    } else if (flPrefs.contains("widget_is_in")) {
-                        isIn = flPrefs.getBoolean("widget_is_in", false)
-                    }
-                }
+        if (token.isNullOrEmpty()) {
+            showToast(context, "Please open Staff App and log in first!")
+            return
+        }
 
-                val endpoint = if (isIn) "$baseUrl/api/staff/clock-out" else "$baseUrl/api/staff/clock-in"
+        var baseUrl = hwPrefs.getString("api_base_url", null)
+            ?: flPrefs.getString("flutter.api_base_url", null)
+            ?: flPrefs.getString("api_base_url", "https://pos0001.perpova.dev")
+            ?: "https://pos0001.perpova.dev"
 
-                val url = URL(endpoint)
-                val conn = url.openConnection() as HttpURLConnection
-                conn.requestMethod = "POST"
-                conn.setRequestProperty("Content-Type", "application/json")
-                if (!token.isNullOrEmpty()) {
-                    conn.setRequestProperty("Authorization", "Bearer $token")
-                }
-                conn.connectTimeout = 8000
-                conn.readTimeout = 8000
-                conn.doOutput = true
-
-                val os = OutputStreamWriter(conn.outputStream)
-                os.write("{}")
-                os.flush()
-                os.close()
-
-                val responseCode = conn.responseCode
-                if (responseCode == 200) {
-                    val newIsIn = !isIn
-                    val nowTime = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date())
-                    val newStatus = if (newIsIn) "CLOCKED IN" else "CLOCKED OUT"
-                    val newTime = if (newIsIn) "Since $nowTime" else "Ready for shift"
-                    val newButton = if (newIsIn) "CLOCK OUT" else "CLOCK IN"
-
-                    hwPrefs.edit()
-                        .putString("widget_status", newStatus)
-                        .putString("widget_time", newTime)
-                        .putString("widget_button", newButton)
-                        .putBoolean("widget_is_in", newIsIn)
-                        .apply()
-
-                    flPrefs.edit()
-                        .putString("flutter.widget_status", newStatus)
-                        .putString("flutter.widget_time", newTime)
-                        .putString("flutter.widget_button", newButton)
-                        .putBoolean("flutter.widget_is_in", newIsIn)
-                        .putString("widget_status", newStatus)
-                        .putString("widget_time", newTime)
-                        .putString("widget_button", newButton)
-                        .putBoolean("widget_is_in", newIsIn)
-                        .apply()
-
-                    // Instantly update widget UI on home screen
-                    val appWidgetManager = AppWidgetManager.getInstance(context)
-                    val componentName = ComponentName(context, StaffShiftWidgetProvider::class.java)
-                    val ids = appWidgetManager.getAppWidgetIds(componentName)
-                    for (id in ids) {
-                        updateWidgetUI(context, appWidgetManager, id)
-                    }
-                }
-                conn.disconnect()
-            } catch (e: Exception) {
-                e.printStackTrace()
+        baseUrl = baseUrl.trim().trimEnd('/')
+        if (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://")) {
+            if (baseUrl.contains("localhost") || Regex("^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}").containsMatchIn(baseUrl)) {
+                baseUrl = "http://$baseUrl"
+            } else {
+                baseUrl = "https://$baseUrl"
             }
+        }
+
+        var isIn = hwPrefs.getBoolean("widget_is_in", false)
+        if (!hwPrefs.contains("widget_is_in")) {
+            if (flPrefs.contains("flutter.widget_is_in")) {
+                isIn = flPrefs.getBoolean("flutter.widget_is_in", false)
+            } else if (flPrefs.contains("widget_is_in")) {
+                isIn = flPrefs.getBoolean("widget_is_in", false)
+            }
+        }
+
+        showToast(context, if (isIn) "Clocking Out..." else "Clocking In...")
+
+        val endpoint = if (isIn) "$baseUrl/api/staff/clock-out" else "$baseUrl/api/staff/clock-in"
+
+        try {
+            val url = URL(endpoint)
+            val conn = url.openConnection() as HttpURLConnection
+            conn.requestMethod = "POST"
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.setRequestProperty("Authorization", "Bearer $token")
+            conn.connectTimeout = 10000
+            conn.readTimeout = 10000
+            conn.doOutput = true
+
+            val os = OutputStreamWriter(conn.outputStream)
+            os.write("{}")
+            os.flush()
+            os.close()
+
+            val responseCode = conn.responseCode
+            if (responseCode == 200) {
+                val newIsIn = !isIn
+                val nowTime = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date())
+                val newStatus = if (newIsIn) "CLOCKED IN" else "CLOCKED OUT"
+                val newTime = if (newIsIn) "Since $nowTime" else "Ready for shift"
+                val newButton = if (newIsIn) "CLOCK OUT" else "CLOCK IN"
+
+                hwPrefs.edit()
+                    .putString("widget_status", newStatus)
+                    .putString("widget_time", newTime)
+                    .putString("widget_button", newButton)
+                    .putBoolean("widget_is_in", newIsIn)
+                    .apply()
+
+                flPrefs.edit()
+                    .putString("flutter.widget_status", newStatus)
+                    .putString("flutter.widget_time", newTime)
+                    .putString("flutter.widget_button", newButton)
+                    .putBoolean("flutter.widget_is_in", newIsIn)
+                    .putString("widget_status", newStatus)
+                    .putString("widget_time", newTime)
+                    .putString("widget_button", newButton)
+                    .putBoolean("widget_is_in", newIsIn)
+                    .apply()
+
+                // Instantly update widget UI on home screen
+                val appWidgetManager = AppWidgetManager.getInstance(context)
+                val componentName = ComponentName(context, StaffShiftWidgetProvider::class.java)
+                val ids = appWidgetManager.getAppWidgetIds(componentName)
+                for (id in ids) {
+                    updateWidgetUI(context, appWidgetManager, id)
+                }
+
+                showToast(context, if (newIsIn) "Clocked In successfully!" else "Clocked Out successfully!")
+            } else if (responseCode == 401) {
+                showToast(context, "Session expired. Please log in to Staff App.")
+            } else {
+                var errDetail = "Error $responseCode"
+                try {
+                    val stream = conn.errorStream ?: conn.inputStream
+                    if (stream != null) {
+                        val reader = BufferedReader(InputStreamReader(stream))
+                        val sb = StringBuilder()
+                        var line: String? = reader.readLine()
+                        while (line != null) {
+                            sb.append(line)
+                            line = reader.readLine()
+                        }
+                        reader.close()
+                        val errJson = sb.toString()
+                        if (errJson.contains("\"error\":")) {
+                            val msg = errJson.substringAfter("\"error\":\"").substringBefore("\"")
+                            if (msg.isNotEmpty()) errDetail = msg
+                        }
+                    }
+                } catch (_: Exception) {}
+                showToast(context, "Shift action failed: $errDetail")
+            }
+            conn.disconnect()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            showToast(context, "Connection error. Please check server IP / network.")
+        }
+    }
+
+    private fun showToast(context: Context, message: String) {
+        Handler(Looper.getMainLooper()).post {
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
         }
     }
 }

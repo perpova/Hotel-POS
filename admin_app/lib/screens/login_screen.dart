@@ -5,6 +5,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 import '../core/theme.dart';
 import '../providers/auth_provider.dart';
+import 'main_shell.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
@@ -15,7 +16,7 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _urlCtrl = TextEditingController(text: 'http://192.168.1.100:3000');
+  final _urlCtrl = TextEditingController(text: 'https://pos0001.perpova.dev');
   final _userCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
   bool _obscure = true;
@@ -32,10 +33,16 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
     final auth = context.read<AuthProvider>();
-    if (_showUrlField) {
+    if (_urlCtrl.text.trim().isNotEmpty) {
       await auth.setBaseUrl(_urlCtrl.text.trim());
     }
-    await auth.login(_userCtrl.text.trim(), _passCtrl.text.trim());
+    final success = await auth.login(_userCtrl.text.trim(), _passCtrl.text.trim());
+    if (success && mounted) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const MainShell()),
+        (route) => false,
+      );
+    }
   }
 
   @override
@@ -43,7 +50,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final auth = context.watch<AuthProvider>();
 
     // Init URL field from saved value
-    if (!_showUrlField && _urlCtrl.text == 'http://192.168.1.100:3000') {
+    if (!_showUrlField && auth.baseUrl.isNotEmpty && _urlCtrl.text == 'https://pos0001.perpova.dev') {
       _urlCtrl.text = auth.baseUrl;
     }
 
@@ -239,12 +246,11 @@ class _LoginScreenState extends State<LoginScreen> {
                   autocorrect: false,
                   style: const TextStyle(color: AppColors.textPrimary),
                   decoration: const InputDecoration(
-                    hintText: 'http://192.168.1.x:3000',
+                    hintText: 'https://pos0001.perpova.dev',
                     prefixIcon: Icon(Icons.dns_rounded, color: AppColors.textMuted),
                   ),
                   validator: (v) {
-                    if (v == null || v.trim().isEmpty) return 'Enter server URL';
-                    if (!v.startsWith('http')) return 'Must start with http://';
+                    if (_showUrlField && (v == null || v.trim().isEmpty)) return 'Enter server URL';
                     return null;
                   },
                 ).animate().fadeIn(duration: 300.ms).slideY(begin: -0.1, end: 0),
