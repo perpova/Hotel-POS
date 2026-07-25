@@ -21,6 +21,7 @@ dependencies:
   # Storage & Caching
   shared_preferences: ^2.3.2
   sqflite: ^2.3.2
+  sqflite_common_ffi: ^2.3.2
 
   # Icons, Fonts & Styling
   google_fonts: ^6.2.1

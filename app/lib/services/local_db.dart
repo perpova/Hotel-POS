@@ -1,7 +1,9 @@
 import 'dart:convert';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart' as p;
 import 'package:hotel_pos/models/models.dart';
 
@@ -19,6 +21,12 @@ class LocalDB {
     if (kIsWeb) {
       throw UnsupportedError('SQLite is not supported on web. Use web storage helpers.');
     }
+    if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS || defaultTargetPlatform == TargetPlatform.windows)) {
+      try {
+        sqfliteFfiInit();
+        databaseFactory = databaseFactoryFfi;
+      } catch (_) {}
+    }
     _database = await _initDB('local_pos.db');
     return _database!;
   }
@@ -29,9 +37,26 @@ class LocalDB {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 3,
       onCreate: _createDB,
+      onUpgrade: _onUpgradeDB,
     );
+  }
+
+  Future _onUpgradeDB(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      // Add cached_shifts table introduced in v2
+      await db.execute('CREATE TABLE IF NOT EXISTS cached_shifts (id INTEGER PRIMARY KEY, user_id INTEGER, start_time TEXT, end_time TEXT, opening_balance REAL, closing_balance REAL, actual_closing_balance REAL, status TEXT)');
+    }
+    if (oldVersion < 3) {
+      // Re-create cached_categories and master tables to ensure correct column definitions
+      await db.execute('DROP TABLE IF EXISTS cached_categories');
+      await db.execute('CREATE TABLE IF NOT EXISTS cached_categories (id INTEGER PRIMARY KEY, name TEXT, parent_id INTEGER, image_base64 TEXT)');
+      await db.execute('CREATE TABLE IF NOT EXISTS cached_products (id INTEGER PRIMARY KEY, json_data TEXT)');
+      await db.execute('CREATE TABLE IF NOT EXISTS cached_tables (id INTEGER PRIMARY KEY, table_number TEXT, capacity INTEGER, status TEXT, current_order_id INTEGER, steward_name TEXT)');
+      await db.execute('CREATE TABLE IF NOT EXISTS cached_customers (id INTEGER PRIMARY KEY, name TEXT, phone TEXT, birthday TEXT, credit_limit REAL, outstanding_balance REAL, favorite_items TEXT)');
+      await db.execute('CREATE TABLE IF NOT EXISTS cached_users (id INTEGER PRIMARY KEY, name TEXT, username TEXT, role TEXT, phone TEXT, image_base64 TEXT, status TEXT)');
+    }
   }
 
   Future _createDB(Database db, int version) async {
@@ -144,6 +169,14 @@ class LocalDB {
         sync_status $textType
       )
     ''');
+
+    // Master Data Local Mirror Tables (Never Auto-Deleted)
+    await db.execute('CREATE TABLE IF NOT EXISTS cached_categories (id INTEGER PRIMARY KEY, name TEXT, parent_id INTEGER, image_base64 TEXT)');
+    await db.execute('CREATE TABLE IF NOT EXISTS cached_products (id INTEGER PRIMARY KEY, json_data TEXT)');
+    await db.execute('CREATE TABLE IF NOT EXISTS cached_tables (id INTEGER PRIMARY KEY, table_number TEXT, capacity INTEGER, status TEXT, current_order_id INTEGER, steward_name TEXT)');
+    await db.execute('CREATE TABLE IF NOT EXISTS cached_customers (id INTEGER PRIMARY KEY, name TEXT, phone TEXT, birthday TEXT, credit_limit REAL, outstanding_balance REAL, favorite_items TEXT)');
+    await db.execute('CREATE TABLE IF NOT EXISTS cached_users (id INTEGER PRIMARY KEY, name TEXT, username TEXT, role TEXT, phone TEXT, image_base64 TEXT, status TEXT)');
+    await db.execute('CREATE TABLE IF NOT EXISTS cached_shifts (id INTEGER PRIMARY KEY, user_id INTEGER, start_time TEXT, end_time TEXT, opening_balance REAL, closing_balance REAL, actual_closing_balance REAL, status TEXT)');
   }
 
   // ----------------------------------------------------
@@ -461,25 +494,418 @@ class LocalDB {
   }
 
   // ----------------------------------------------------
-  // CLEAR OUT PENDING AFTER SYNC COMPLETE
+  // CLEAR OUT & RETENTION (2 DAYS RULE FOR SYNCED ORDERS)
   // ----------------------------------------------------
-  Future<void> clearSyncedData() async {
+  Future<void> markAllPendingAsSynced() async {
     if (kIsWeb) {
-      final prefs = await _getPrefs();
-      await prefs.remove('offline_orders');
-      await prefs.remove('offline_order_items');
-      await prefs.remove('offline_shifts');
-      await prefs.remove('offline_expenses');
-      await prefs.remove('offline_stock_logs');
-      await prefs.remove('offline_audit_logs');
+      final orders = await _webGetList('offline_orders');
+      for (var o in orders) {
+        o['sync_status'] = 'synced';
+      }
+      await _webSaveList('offline_orders', orders);
     } else {
       final db = await instance.database;
-      await db.delete('offline_orders', where: 'sync_status = ?', whereArgs: ['pending']);
-      await db.delete('offline_order_items');
-      await db.delete('offline_shifts', where: 'sync_status = ?', whereArgs: ['pending']);
-      await db.delete('offline_expenses', where: 'sync_status = ?', whereArgs: ['pending']);
-      await db.delete('offline_stock_logs', where: 'sync_status = ?', whereArgs: ['pending']);
-      await db.delete('offline_audit_logs', where: 'sync_status = ?', whereArgs: ['pending']);
+      await db.update('offline_orders', {'sync_status': 'synced'}, where: 'sync_status = ?', whereArgs: ['pending']);
+      await db.update('offline_shifts', {'sync_status': 'synced'}, where: 'sync_status = ?', whereArgs: ['pending']);
+      await db.update('offline_expenses', {'sync_status': 'synced'}, where: 'sync_status = ?', whereArgs: ['pending']);
+      await db.update('offline_stock_logs', {'sync_status': 'synced'}, where: 'sync_status = ?', whereArgs: ['pending']);
+      await db.update('offline_audit_logs', {'sync_status': 'synced'}, where: 'sync_status = ?', whereArgs: ['pending']);
+    }
+  }
+
+  Future<void> purgeSyncedDataOlderThan2Days() async {
+    // NOTE: This method ONLY purges transactional offline records.
+    // cached_products, cached_categories, cached_users, cached_tables, cached_shifts
+    // are NEVER touched here — they are master data and must persist indefinitely.
+    final cutoffDate = DateTime.now().subtract(const Duration(days: 2)).toIso8601String();
+    if (kIsWeb) {
+      final orders = await _webGetList('offline_orders');
+      final items = await _webGetList('offline_order_items');
+      
+      final remainingOrders = orders.where((o) {
+        if (o['sync_status'] == 'synced') {
+          final createdAt = o['created_at']?.toString() ?? '';
+          return createdAt.compareTo(cutoffDate) >= 0;
+        }
+        return true;
+      }).toList();
+
+      final remainingOrderNumbers = remainingOrders.map((o) => o['order_number']).toSet();
+      final remainingItems = items.where((i) => remainingOrderNumbers.contains(i['order_number'])).toList();
+
+      await _webSaveList('offline_orders', remainingOrders);
+      await _webSaveList('offline_order_items', remainingItems);
+    } else {
+      final db = await instance.database;
+      // Only delete TRANSACTIONAL offline tables — never cached master data tables
+      await db.delete('offline_orders', where: 'sync_status = ? AND created_at < ?', whereArgs: ['synced', cutoffDate]);
+      await db.execute('DELETE FROM offline_order_items WHERE order_number NOT IN (SELECT order_number FROM offline_orders)');
+      await db.delete('offline_shifts', where: 'sync_status = ? AND start_time < ?', whereArgs: ['synced', cutoffDate]);
+      await db.delete('offline_expenses', where: 'sync_status = ? AND created_at < ?', whereArgs: ['synced', cutoffDate]);
+      await db.delete('offline_stock_logs', where: 'sync_status = ? AND timestamp < ?', whereArgs: ['synced', cutoffDate]);
+      await db.delete('offline_audit_logs', where: 'sync_status = ? AND timestamp < ?', whereArgs: ['synced', cutoffDate]);
+    }
+  }
+
+  Future<void> clearSyncedData() async {
+    await markAllPendingAsSynced();
+    await purgeSyncedDataOlderThan2Days();
+  }
+
+  // ----------------------------------------------------
+  // MASTER DATA LOCAL MIRROR (ITEMS, CATEGORIES, TABLES, USERS, CUSTOMERS)
+  // ----------------------------------------------------
+  Future<void> cacheCategories(List<CategoryModel> categories) async {
+    if (kIsWeb) {
+      await _webSaveList('cached_categories', categories.map((c) => c.toJson()).toList());
+    } else {
+      final db = await instance.database;
+      try {
+        final batch = db.batch();
+        batch.delete('cached_categories');
+        for (var c in categories) {
+          batch.insert('cached_categories', {
+            'id': c.id,
+            'name': c.name,
+            'parent_id': c.parentId,
+            'image_base64': c.imageBase64,
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+        await batch.commit(noResult: true);
+      } catch (e) {
+        // Self-heal table schema if old SQLite database file is missing columns
+        await db.execute('DROP TABLE IF EXISTS cached_categories');
+        await db.execute('CREATE TABLE IF NOT EXISTS cached_categories (id INTEGER PRIMARY KEY, name TEXT, parent_id INTEGER, image_base64 TEXT)');
+        final batch = db.batch();
+        for (var c in categories) {
+          batch.insert('cached_categories', {
+            'id': c.id,
+            'name': c.name,
+            'parent_id': c.parentId,
+            'image_base64': c.imageBase64,
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+        await batch.commit(noResult: true);
+      }
+    }
+  }
+
+  Future<List<CategoryModel>> getCachedCategories() async {
+    if (kIsWeb) {
+      final list = await _webGetList('cached_categories');
+      return list.map((c) => CategoryModel.fromJson(Map<String, dynamic>.from(c))).toList();
+    } else {
+      final db = await instance.database;
+      try {
+        final maps = await db.query('cached_categories');
+        return maps.map((c) => CategoryModel.fromJson(c)).toList();
+      } catch (e) {
+        return [];
+      }
+    }
+  }
+
+  Future<void> cacheProducts(List<ProductModel> products) async {
+    if (kIsWeb) {
+      await _webSaveList('cached_products', products.map((p) => p.toJson()).toList());
+    } else {
+      final db = await instance.database;
+      try {
+        final batch = db.batch();
+        batch.delete('cached_products');
+        for (var p in products) {
+          batch.insert('cached_products', {
+            'id': p.id,
+            'json_data': jsonEncode(p.toJson()),
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+        await batch.commit(noResult: true);
+      } catch (e) {
+        await db.execute('DROP TABLE IF EXISTS cached_products');
+        await db.execute('CREATE TABLE IF NOT EXISTS cached_products (id INTEGER PRIMARY KEY, json_data TEXT)');
+        final batch = db.batch();
+        for (var p in products) {
+          batch.insert('cached_products', {
+            'id': p.id,
+            'json_data': jsonEncode(p.toJson()),
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+        await batch.commit(noResult: true);
+      }
+    }
+  }
+
+  Future<List<ProductModel>> getCachedProducts() async {
+    if (kIsWeb) {
+      final list = await _webGetList('cached_products');
+      return list.map((p) => ProductModel.fromJson(Map<String, dynamic>.from(p))).toList();
+    } else {
+      final db = await instance.database;
+      try {
+        final maps = await db.query('cached_products');
+        return maps.map((p) {
+          final rawJson = p['json_data'] as String;
+          return ProductModel.fromJson(jsonDecode(rawJson) as Map<String, dynamic>);
+        }).toList();
+      } catch (e) {
+        return [];
+      }
+    }
+  }
+
+  Future<void> cacheTables(List<DiningTableModel> tables) async {
+    if (kIsWeb) {
+      await _webSaveList('cached_tables', tables.map((t) => t.toJson()).toList());
+    } else {
+      final db = await instance.database;
+      try {
+        final batch = db.batch();
+        batch.delete('cached_tables');
+        for (var t in tables) {
+          batch.insert('cached_tables', {
+            'id': t.id,
+            'table_number': t.tableNumber,
+            'capacity': t.capacity,
+            'status': t.status,
+            'current_order_id': t.currentOrderId,
+            'steward_name': t.stewardName,
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+        await batch.commit(noResult: true);
+      } catch (e) {
+        await db.execute('DROP TABLE IF EXISTS cached_tables');
+        await db.execute('CREATE TABLE IF NOT EXISTS cached_tables (id INTEGER PRIMARY KEY, table_number TEXT, capacity INTEGER, status TEXT, current_order_id INTEGER, steward_name TEXT)');
+        final batch = db.batch();
+        for (var t in tables) {
+          batch.insert('cached_tables', {
+            'id': t.id,
+            'table_number': t.tableNumber,
+            'capacity': t.capacity,
+            'status': t.status,
+            'current_order_id': t.currentOrderId,
+            'steward_name': t.stewardName,
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+        await batch.commit(noResult: true);
+      }
+    }
+  }
+
+  Future<List<DiningTableModel>> getCachedTables() async {
+    if (kIsWeb) {
+      final list = await _webGetList('cached_tables');
+      return list.map((t) => DiningTableModel.fromJson(Map<String, dynamic>.from(t))).toList();
+    } else {
+      final db = await instance.database;
+      try {
+        final maps = await db.query('cached_tables');
+        return maps.map((t) => DiningTableModel.fromJson(t)).toList();
+      } catch (e) {
+        return [];
+      }
+    }
+  }
+
+  Future<void> cacheCustomers(List<CustomerModel> customers) async {
+    if (kIsWeb) {
+      await _webSaveList('cached_customers', customers.map((c) => c.toJson()).toList());
+    } else {
+      final db = await instance.database;
+      try {
+        final batch = db.batch();
+        batch.delete('cached_customers');
+        for (var c in customers) {
+          batch.insert('cached_customers', {
+            'id': c.id,
+            'name': c.name,
+            'phone': c.phone,
+            'birthday': c.birthday,
+            'credit_limit': c.creditLimit,
+            'outstanding_balance': c.outstandingBalance,
+            'favorite_items': c.favoriteItems,
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+        await batch.commit(noResult: true);
+      } catch (e) {
+        await db.execute('DROP TABLE IF EXISTS cached_customers');
+        await db.execute('CREATE TABLE IF NOT EXISTS cached_customers (id INTEGER PRIMARY KEY, name TEXT, phone TEXT, birthday TEXT, credit_limit REAL, outstanding_balance REAL, favorite_items TEXT)');
+        final batch = db.batch();
+        for (var c in customers) {
+          batch.insert('cached_customers', {
+            'id': c.id,
+            'name': c.name,
+            'phone': c.phone,
+            'birthday': c.birthday,
+            'credit_limit': c.creditLimit,
+            'outstanding_balance': c.outstandingBalance,
+            'favorite_items': c.favoriteItems,
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+        await batch.commit(noResult: true);
+      }
+    }
+  }
+
+  Future<List<CustomerModel>> getCachedCustomers() async {
+    if (kIsWeb) {
+      final list = await _webGetList('cached_customers');
+      return list.map((c) => CustomerModel.fromJson(Map<String, dynamic>.from(c))).toList();
+    } else {
+      final db = await instance.database;
+      try {
+        final maps = await db.query('cached_customers');
+        return maps.map((c) => CustomerModel.fromJson(c)).toList();
+      } catch (e) {
+        return [];
+      }
+    }
+  }
+
+  Future<void> cacheUsers(List<UserModel> users) async {
+    if (kIsWeb) {
+      await _webSaveList('cached_users', users.map((u) => u.toJson()).toList());
+    } else {
+      final db = await instance.database;
+      try {
+        final batch = db.batch();
+        batch.delete('cached_users');
+        for (var u in users) {
+          batch.insert('cached_users', {
+            'id': u.id,
+            'name': u.name,
+            'username': u.username,
+            'role': u.role,
+            'phone': u.phone,
+            'image_base64': u.imageBase64,
+            'status': u.status,
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+        await batch.commit(noResult: true);
+      } catch (e) {
+        await db.execute('DROP TABLE IF EXISTS cached_users');
+        await db.execute('CREATE TABLE IF NOT EXISTS cached_users (id INTEGER PRIMARY KEY, name TEXT, username TEXT, role TEXT, phone TEXT, image_base64 TEXT, status TEXT)');
+        final batch = db.batch();
+        for (var u in users) {
+          batch.insert('cached_users', {
+            'id': u.id,
+            'name': u.name,
+            'username': u.username,
+            'role': u.role,
+            'phone': u.phone,
+            'image_base64': u.imageBase64,
+            'status': u.status,
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+        await batch.commit(noResult: true);
+      }
+    }
+  }
+
+  Future<List<UserModel>> getCachedUsers() async {
+    if (kIsWeb) {
+      final list = await _webGetList('cached_users');
+      return list.map((u) => UserModel.fromJson(Map<String, dynamic>.from(u))).toList();
+    } else {
+      final db = await instance.database;
+      try {
+        final maps = await db.query('cached_users');
+        return maps.map((u) => UserModel.fromJson(u)).toList();
+      } catch (e) {
+        return [];
+      }
+    }
+  }
+
+  // ----------------------------------------------------
+  // SHIFTS MIRROR CACHE (Master Data — never auto-deleted)
+  // ----------------------------------------------------
+  Future<void> cacheShifts(List<ShiftModel> shifts) async {
+    if (kIsWeb) {
+      await _webSaveList('cached_shifts', shifts.map((s) => s.toJson()).toList());
+    } else {
+      final db = await instance.database;
+      try {
+        final batch = db.batch();
+        batch.delete('cached_shifts');
+        for (var s in shifts) {
+          batch.insert('cached_shifts', {
+            'id': s.id,
+            'user_id': s.userId,
+            'start_time': s.startTime,
+            'end_time': s.endTime,
+            'opening_balance': s.openingBalance,
+            'closing_balance': s.closingBalance,
+            'actual_closing_balance': s.actualClosingBalance,
+            'status': s.status,
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+        await batch.commit(noResult: true);
+      } catch (e) {
+        await db.execute('DROP TABLE IF EXISTS cached_shifts');
+        await db.execute('CREATE TABLE IF NOT EXISTS cached_shifts (id INTEGER PRIMARY KEY, user_id INTEGER, start_time TEXT, end_time TEXT, opening_balance REAL, closing_balance REAL, actual_closing_balance REAL, status TEXT)');
+        final batch = db.batch();
+        for (var s in shifts) {
+          batch.insert('cached_shifts', {
+            'id': s.id,
+            'user_id': s.userId,
+            'start_time': s.startTime,
+            'end_time': s.endTime,
+            'opening_balance': s.openingBalance,
+            'closing_balance': s.closingBalance,
+            'actual_closing_balance': s.actualClosingBalance,
+            'status': s.status,
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+        await batch.commit(noResult: true);
+      }
+    }
+  }
+
+  Future<List<ShiftModel>> getCachedShifts() async {
+    if (kIsWeb) {
+      final list = await _webGetList('cached_shifts');
+      return list.map((s) => ShiftModel.fromJson(Map<String, dynamic>.from(s))).toList();
+    } else {
+      final db = await instance.database;
+      try {
+        final maps = await db.query('cached_shifts', orderBy: 'start_time DESC');
+        return maps.map((s) => ShiftModel.fromJson(s)).toList();
+      } catch (e) {
+        return [];
+      }
+    }
+  }
+
+  // ----------------------------------------------------
+  // PRECISE SYNC STATUS HELPERS
+  // ----------------------------------------------------
+  /// Marks a specific offline order as synced by its order_number.
+  Future<void> markOrderSynced(String orderNumber) async {
+    if (kIsWeb) {
+      final orders = await _webGetList('offline_orders');
+      for (var o in orders) {
+        if (o['order_number'] == orderNumber) o['sync_status'] = 'synced';
+      }
+      await _webSaveList('offline_orders', orders);
+    } else {
+      final db = await instance.database;
+      await db.update('offline_orders', {'sync_status': 'synced'},
+          where: 'order_number = ?', whereArgs: [orderNumber]);
+    }
+  }
+
+  /// Marks a specific offline shift as synced by its id.
+  Future<void> markShiftSynced(int shiftId) async {
+    if (kIsWeb) {
+      final shifts = await _webGetList('offline_shifts');
+      for (var s in shifts) {
+        if (s['id'] == shiftId) s['sync_status'] = 'synced';
+      }
+      await _webSaveList('offline_shifts', shifts);
+    } else {
+      final db = await instance.database;
+      await db.update('offline_shifts', {'sync_status': 'synced'},
+          where: 'id = ?', whereArgs: [shiftId]);
     }
   }
 }

@@ -12,10 +12,22 @@ import 'screens/order_queue_screen.dart';
 import 'package:flutter/foundation.dart';
 import 'package:video_player_win/video_player_win_plugin.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'services/window_helper.dart';
+import 'services/sync_service.dart';
 
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize SQLite FFI database factory for desktop platforms (Windows, Linux, macOS)
+  if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.windows || defaultTargetPlatform == TargetPlatform.linux || defaultTargetPlatform == TargetPlatform.macOS)) {
+    try {
+      sqfliteFfiInit();
+      databaseFactory = databaseFactoryFfi;
+    } catch (e) {
+      print('sqfliteFfiInit error: $e');
+    }
+  }
 
   // Load app version from pubspec/binary config dynamically
   try {
@@ -37,6 +49,13 @@ void main(List<String> args) async {
   // Initialize services
   final api = APIService.instance;
   await api.init();
+
+  // Start bi-directional sync service:
+  // - Pulls master data (products, categories, users, tables, shifts) from server on startup
+  // - Pushes offline orders/shifts/expenses to server when network reconnects
+  // - Runs a periodic 30-second sync timer
+  // - Purges synced transactional data older than 2 days (never touches master data)
+  await SyncService.instance.init();
 
   // Initialize app-wide settings (company name, logo, theme color, branches)
   final appSettings = AppSettingsController();

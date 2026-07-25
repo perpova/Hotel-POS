@@ -154,17 +154,24 @@ class POSController extends ChangeNotifier {
   }
 
   void _startBackgroundAutoSyncTimer() {
-    Timer.periodic(const Duration(seconds: 5), (_) async {
+    Timer.periodic(const Duration(seconds: 10), (_) async {
       final wasOnline = isOnline;
       isOnline = await _api.checkOnline();
+      
       if (isOnline) {
+        // 1. Sync pending offline orders/shifts up to server
         final syncRes = await _api.syncOfflineData();
+        
+        // 2. Retention cleanup: purge synced records older than 2 days
+        await LocalDB.instance.purgeSyncedDataOlderThan2Days();
+
+        // 3. Mirror latest server data into local SQLite DB
         if (syncRes != null || !wasOnline) {
-          _fetchActiveOrders();
-          notifyListeners();
+          await reloadEnvironment();
         }
       } else if (wasOnline) {
-        notifyListeners();
+        // Just went offline - reload catalog from local SQLite mirror
+        await reloadEnvironment();
       }
     });
   }
@@ -542,7 +549,7 @@ class POSController extends ChangeNotifier {
     }
   }
 
-  // Load and refresh POS local environment
+  // Load and refresh POS local environment with full 2-Way Cache Mirroring
   Future<void> reloadEnvironment() async {
     isLoading = true;
     notifyListeners();
@@ -563,7 +570,8 @@ class POSController extends ChangeNotifier {
         products = await _api.getProducts();
         diningTables = await _api.getTables();
         customers = await _api.getCustomers();
-        waiters = await _api.getUsers(role: 'waiter');
+        final allUsers = await _api.getUsers();
+        waiters = allUsers.where((u) => u.role.toLowerCase() == 'waiter' || u.role.toLowerCase() == 'steward').toList();
         activeShift = await _api.getCurrentShift();
         offers = await _api.getOffers();
         happyHours = await _api.getHappyHours();
@@ -572,11 +580,22 @@ class POSController extends ChangeNotifier {
         await fetchDrawerLogs();
         await fetchPreOrders();
         await fetchNotifications();
+
+        // 2-Way Mirroring: Save fetched server catalog to local SQLite DB
+        await LocalDB.instance.cacheCategories(categories);
+        await LocalDB.instance.cacheProducts(products);
+        await LocalDB.instance.cacheTables(diningTables);
+        await LocalDB.instance.cacheCustomers(customers);
+        await LocalDB.instance.cacheUsers(allUsers);
       } else {
-        // Fallback: If completely offline in LAN-first mode,
-        // we can fetch last cached settings from SharedPreferences
-        // or local SQLite databases.
-        print('Offline mode. Using local caching elements.');
+        // Fallback: If offline, load catalog from persistent local SQLite DB
+        print('Offline mode. Mirroring items & categories from local database.');
+        categories = await LocalDB.instance.getCachedCategories();
+        products = await LocalDB.instance.getCachedProducts();
+        diningTables = await LocalDB.instance.getCachedTables();
+        customers = await LocalDB.instance.getCachedCustomers();
+        final cachedUsers = await LocalDB.instance.getCachedUsers();
+        waiters = cachedUsers.where((u) => u.role.toLowerCase() == 'waiter' || u.role.toLowerCase() == 'steward').toList();
       }
     } catch (e, stackTrace) {
       print('Environment load error: $e');

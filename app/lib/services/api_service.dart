@@ -81,18 +81,31 @@ class APIService {
     } catch (_) {}
   }
 
-  // Check network connectivity
+  // Check network connectivity & automatic localhost failover
   Future<bool> checkOnline() async {
+    // 1. Try configured primary _baseUrl
     try {
       final response = await http.get(Uri.parse('$_baseUrl/api/categories')).timeout(const Duration(seconds: 2));
       if (response.statusCode == 200) return true;
     } catch (_) {}
 
-    if (_baseUrl.contains('localhost') || _baseUrl.contains('127.0.0.1')) {
+    // 2. If Wi-Fi/cloud fails, try local desktop server on localhost:3000 / 127.0.0.1:3000
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
       await autoLaunchLocalServer();
       try {
         final res = await http.get(Uri.parse('http://localhost:3000/api/categories')).timeout(const Duration(seconds: 2));
-        return res.statusCode == 200;
+        if (res.statusCode == 200) {
+          await setBaseUrl('http://localhost:3000');
+          return true;
+        }
+      } catch (_) {}
+
+      try {
+        final res = await http.get(Uri.parse('http://127.0.0.1:3000/api/categories')).timeout(const Duration(seconds: 2));
+        if (res.statusCode == 200) {
+          await setBaseUrl('http://127.0.0.1:3000');
+          return true;
+        }
       } catch (_) {}
     }
 
@@ -1225,8 +1238,7 @@ class APIService {
 
       if (offlineOrders.isEmpty && offlineShifts.isEmpty && offlineExpenses.isEmpty &&
           offlineStockLogs.isEmpty && offlineAuditLogs.isEmpty) {
-        // Nothing to sync, just fetch latest server database
-        return null;
+        return null; // Nothing to push
       }
 
       final payload = {
@@ -1241,16 +1253,77 @@ class APIService {
         Uri.parse('$_baseUrl/api/sync'),
         headers: _getHeaders(),
         body: jsonEncode(payload),
-      );
+      ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
-        // Synchronization successful. Clear local cached edits.
-        await LocalDB.instance.clearSyncedData();
+        // Mark synced records and run purge of old synced data
+        await LocalDB.instance.markAllPendingAsSynced();
+        await LocalDB.instance.purgeSyncedDataOlderThan2Days();
         return jsonDecode(response.body);
       }
       return null;
     } catch (_) {
       return null;
+    }
+  }
+
+  // Fetches all master data from server and caches it locally.
+  // Returns true if successful, false if offline or error.
+  Future<bool> getMasterData() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$_baseUrl/api/master-data'),
+        headers: _getHeaders(),
+      ).timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+
+        // Cache categories
+        if (data['categories'] != null) {
+          final cats = (data['categories'] as List)
+              .map((c) => CategoryModel.fromJson(c as Map<String, dynamic>))
+              .toList();
+          await LocalDB.instance.cacheCategories(cats);
+        }
+
+        // Cache products
+        if (data['products'] != null) {
+          final prods = (data['products'] as List)
+              .map((p) => ProductModel.fromJson(p as Map<String, dynamic>))
+              .toList();
+          await LocalDB.instance.cacheProducts(prods);
+        }
+
+        // Cache users
+        if (data['users'] != null) {
+          final usrs = (data['users'] as List)
+              .map((u) => UserModel.fromJson(u as Map<String, dynamic>))
+              .toList();
+          await LocalDB.instance.cacheUsers(usrs);
+        }
+
+        // Cache dining tables
+        if (data['dining_tables'] != null) {
+          final tables = (data['dining_tables'] as List)
+              .map((t) => DiningTableModel.fromJson(t as Map<String, dynamic>))
+              .toList();
+          await LocalDB.instance.cacheTables(tables);
+        }
+
+        // Cache shifts
+        if (data['shifts'] != null) {
+          final shifts = (data['shifts'] as List)
+              .map((s) => ShiftModel.fromJson(s as Map<String, dynamic>))
+              .toList();
+          await LocalDB.instance.cacheShifts(shifts);
+        }
+
+        return true;
+      }
+      return false;
+    } catch (_) {
+      return false;
     }
   }
 
@@ -1469,6 +1542,14 @@ class APIService {
           try {
             final data = jsonDecode(message);
             _eventStreamController.add(data);
+            // When server reports a master data change, refresh local cache
+            final eventType = data['type']?.toString() ?? '';
+            if (eventType == 'database_synchronized' ||
+                eventType == 'happy_hour_updated' ||
+                eventType == 'stock_updated') {
+              // Trigger background master data refresh (non-blocking)
+              getMasterData().catchError((_) {});
+            }
           } catch (e) {
             print('Error decoding websocket message: $e');
           }

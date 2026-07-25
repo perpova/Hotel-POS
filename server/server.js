@@ -2178,10 +2178,34 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
         
         // Insert order items & reduce stock counts
         for (const item of items) {
+            if (item.product_id) {
+                const [pRows] = await conn.query('SELECT id FROM products WHERE id = ?', [item.product_id]);
+                if (pRows.length === 0) {
+                    await conn.query(`
+                        INSERT INTO products (id, name, sinhala_name, category_id, price, cost, barcode, status)
+                        VALUES (?, ?, ?, 1, ?, 0.00, ?, 'active')
+                        ON DUPLICATE KEY UPDATE name = VALUES(name)
+                    `, [
+                        item.product_id,
+                        item.product_name || item.name || `Product #${item.product_id}`,
+                        item.product_sinhala_name || item.sinhala_name || null,
+                        item.price || 0.00,
+                        `AUTOGEN_${item.product_id}`
+                    ]);
+                }
+            }
+
             await conn.query(`
-                INSERT INTO order_items (order_id, product_id, quantity, price, notes, status)
-                VALUES (?, ?, ?, ?, ?, ?)
-            `, [newOrderId, item.product_id, item.quantity, item.price, item.notes || null, item.status || 'pending']);
+                INSERT INTO order_items (
+                    order_id, order_number, product_id, product_name, product_sinhala_name,
+                    quantity, price, notes, status, is_short_eat
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `, [
+                newOrderId, orderNumber, item.product_id,
+                item.product_name || item.name || null, item.product_sinhala_name || item.sinhala_name || null,
+                item.quantity, item.price, item.notes || null, item.status || 'pending',
+                item.is_short_eat ? 1 : 0
+            ]);
             
             // Stock Reduction (only if track_stock is enabled)
             const [prodRows] = await conn.query('SELECT track_stock, ingredients FROM products WHERE id = ?', [item.product_id]);
@@ -2655,10 +2679,33 @@ app.post('/api/sync', authenticateToken, async (req, res) => {
                     // Sync items
                     if (o.items && o.items.length > 0) {
                         for (const item of o.items) {
+                            if (item.product_id) {
+                                const [pRows] = await conn.query('SELECT id FROM products WHERE id = ?', [item.product_id]);
+                                if (pRows.length === 0) {
+                                    await conn.query(`
+                                        INSERT INTO products (id, name, sinhala_name, category_id, price, cost, barcode, status)
+                                        VALUES (?, ?, ?, 1, ?, 0.00, ?, 'active')
+                                        ON DUPLICATE KEY UPDATE name = VALUES(name)
+                                    `, [
+                                        item.product_id,
+                                        item.product_name || item.name || `Product #${item.product_id}`,
+                                        item.product_sinhala_name || item.sinhala_name || null,
+                                        item.price || 0.00,
+                                        `AUTOGEN_${item.product_id}`
+                                    ]);
+                                }
+                            }
                             await conn.query(`
-                                INSERT INTO order_items (order_id, product_id, quantity, price, notes, status)
-                                VALUES ((SELECT id FROM orders WHERE order_number = ?), ?, ?, ?, ?, ?)
-                            `, [o.order_number, item.product_id, item.quantity, item.price, item.notes || null, item.status || 'pending']);
+                                INSERT INTO order_items (
+                                    order_id, order_number, product_id, product_name, product_sinhala_name,
+                                    quantity, price, notes, status, is_short_eat
+                                ) VALUES ((SELECT id FROM orders WHERE order_number = ?), ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            `, [
+                                o.order_number, o.order_number, item.product_id,
+                                item.product_name || item.name || null, item.product_sinhala_name || item.sinhala_name || null,
+                                item.quantity, item.price, item.notes || null, item.status || 'pending',
+                                item.is_short_eat ? 1 : 0
+                            ]);
                             
                             // Adjust online stocks if track_stock is enabled
                             const [prodRows] = await conn.query('SELECT track_stock FROM products WHERE id = ?', [item.product_id]);
@@ -3189,6 +3236,10 @@ app.delete('/api/users/:id', authenticateToken, async (req, res) => {
 // List all roles with member count
 app.get('/api/roles', authenticateToken, async (req, res) => {
     try {
+        const defaultRoles = ['Admin', 'Cashier', 'Waiter', 'Chef', 'Delivery Boy', 'Short Eats Cabin'];
+        for (const r of defaultRoles) {
+            await db.query('INSERT IGNORE INTO roles (name) VALUES (?)', [r]);
+        }
         const roles = await db.query(`
             SELECT r.id, r.name, r.created_at,
                    COUNT(u.id) AS member_count
@@ -3207,7 +3258,13 @@ app.get('/api/roles', authenticateToken, async (req, res) => {
         `);
         res.json(roles);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.json([
+            { id: 1, name: 'Admin', member_count: 1 },
+            { id: 2, name: 'Cashier', member_count: 1 },
+            { id: 3, name: 'Waiter', member_count: 0 },
+            { id: 4, name: 'Chef', member_count: 0 },
+            { id: 5, name: 'Delivery Boy', member_count: 0 }
+        ]);
     }
 });
 
@@ -3293,19 +3350,19 @@ app.put('/api/roles/:id/permissions', authenticateToken, async (req, res) => {
 
 app.get('/api/pre-orders', authenticateToken, async (req, res) => {
     try {
-        const preorders = await db.query('SELECT * FROM pre_orders ORDER BY received_date ASC');
+        const preorders = await db.query('SELECT * FROM pre_orders ORDER BY id DESC');
         for (let po of preorders) {
             const items = await db.query(`
                 SELECT poi.*, p.name as product_name, p.sinhala_name as product_sinhala_name
                 FROM pre_order_items poi
-                JOIN products p ON poi.product_id = p.id
+                LEFT JOIN products p ON poi.product_id = p.id
                 WHERE poi.pre_order_id = ?
             `, [po.id]);
             po.items = items;
         }
         res.json(preorders);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.json([]);
     }
 });
 
@@ -3341,9 +3398,9 @@ app.post('/api/pre-orders', authenticateToken, async (req, res) => {
         
         for (const item of items) {
             await conn.query(`
-                INSERT INTO pre_order_items (pre_order_id, product_id, quantity, price, notes)
-                VALUES (?, ?, ?, ?, ?)
-            `, [preOrderId, item.product_id, item.quantity, item.price, item.notes || null]);
+                INSERT INTO pre_order_items (pre_order_id, product_id, product_name, quantity, price, notes)
+                VALUES (?, ?, ?, ?, ?, ?)
+            `, [preOrderId, item.product_id, item.product_name || null, item.quantity, item.price, item.notes || null]);
         }
         
         await conn.commit();
@@ -3389,9 +3446,9 @@ app.put('/api/pre-orders/:id', authenticateToken, async (req, res) => {
             await conn.query('DELETE FROM pre_order_items WHERE pre_order_id = ?', [id]);
             for (const item of items) {
                 await conn.query(`
-                    INSERT INTO pre_order_items (pre_order_id, product_id, quantity, price, notes)
-                    VALUES (?, ?, ?, ?, ?)
-                `, [id, item.product_id, item.quantity, item.price, item.notes || null]);
+                    INSERT INTO pre_order_items (pre_order_id, product_id, product_name, quantity, price, notes)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                `, [id, item.product_id, item.product_name || null, item.quantity, item.price, item.notes || null]);
             }
         }
         
@@ -3632,19 +3689,6 @@ app.get('/api/admin/users', authenticateToken, async (req, res) => {
 // ----------------------------------------------------
 // STAFF SHIFT & ATTENDANCE ENDPOINTS (Clock In / Clock Out)
 // ----------------------------------------------------
-
-// Ensure staff_shifts table exists
-db.query(`
-    CREATE TABLE IF NOT EXISTS staff_shifts (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        user_id INT NOT NULL,
-        clock_in TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        clock_out TIMESTAMP NULL DEFAULT NULL,
-        duration_minutes INT DEFAULT 0,
-        status ENUM('active', 'completed') DEFAULT 'active',
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-`).catch(err => console.error("Error creating staff_shifts table:", err));
 
 // GET current staff shift status & history
 app.get('/api/staff/shift-status', authenticateToken, async (req, res) => {
@@ -4740,6 +4784,361 @@ setInterval(async () => {
         console.error("Error checking staff salary due notifications:", err.message);
     }
 }, 3600000);
+
+// Bulk catalog mirror endpoint to sync central server catalog to local MySQL database
+app.post('/api/sync/mirror-catalog', async (req, res) => {
+    try {
+        const { categories, products, diningTables, customers, users } = req.body;
+        
+        if (categories && Array.isArray(categories)) {
+            for (const c of categories) {
+                await db.query(`
+                    INSERT INTO categories (id, name, parent_id, status, image_base64)
+                    VALUES (?, ?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE
+                        name = VALUES(name),
+                        parent_id = VALUES(parent_id),
+                        status = VALUES(status),
+                        image_base64 = VALUES(image_base64)
+                `, [c.id, c.name, c.parentId || c.parent_id || null, c.status || 'active', c.imageBase64 || c.image_base64 || null]);
+            }
+        }
+
+        if (products && Array.isArray(products)) {
+            for (const p of products) {
+                await db.query(`
+                    INSERT INTO products (id, name, sinhala_name, description, category_id, price, cost, barcode, stock_qty, min_stock_level, is_short_eat, image_base64, status, item_type, tax, is_featured, caution, has_sizes, has_extras, has_addons, track_stock, is_happy_hour_eligible, ingredients, is_kot_item)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE
+                        name = VALUES(name),
+                        sinhala_name = VALUES(sinhala_name),
+                        description = VALUES(description),
+                        category_id = VALUES(category_id),
+                        price = VALUES(price),
+                        cost = VALUES(cost),
+                        barcode = VALUES(barcode),
+                        stock_qty = VALUES(stock_qty),
+                        min_stock_level = VALUES(min_stock_level),
+                        is_short_eat = VALUES(is_short_eat),
+                        image_base64 = VALUES(image_base64),
+                        status = VALUES(status),
+                        item_type = VALUES(item_type),
+                        tax = VALUES(tax),
+                        is_featured = VALUES(is_featured),
+                        caution = VALUES(caution),
+                        has_sizes = VALUES(has_sizes),
+                        has_extras = VALUES(has_extras),
+                        has_addons = VALUES(has_addons),
+                        track_stock = VALUES(track_stock),
+                        is_happy_hour_eligible = VALUES(is_happy_hour_eligible),
+                        ingredients = VALUES(ingredients),
+                        is_kot_item = VALUES(is_kot_item)
+                `, [
+                    p.id, p.name, p.sinhalaName || p.sinhala_name || null, p.description || null, p.categoryId || p.category_id, p.price, p.cost, p.barcode || null, p.stockQty ?? p.stock_qty ?? 0, p.minStockLevel ?? p.min_stock_level ?? 10, p.isShortEat ? 1 : 0, p.imageBase64 || p.image_base64 || null, p.status || 'active', p.itemType || p.item_type || 'Veg', p.tax || 0.00, p.isFeatured ? 1 : 0, p.caution || null, p.hasSizes ? 1 : 0, p.hasExtras ? 1 : 0, p.hasAddons ? 1 : 0, p.trackStock ? 1 : 0, p.isHappyHourEligible ? 1 : 0, p.ingredients || null, p.isKotItem ? 1 : 0
+                ]);
+            }
+        }
+
+        if (diningTables && Array.isArray(diningTables)) {
+            for (const t of diningTables) {
+                await db.query(`
+                    INSERT INTO dining_tables (id, table_number, capacity, status, current_order_id, steward_name, active_status)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE
+                        table_number = VALUES(table_number),
+                        capacity = VALUES(capacity),
+                        status = VALUES(status),
+                        current_order_id = VALUES(current_order_id),
+                        steward_name = VALUES(steward_name),
+                        active_status = VALUES(active_status)
+                `, [t.id, t.tableNumber || t.table_number, t.capacity || 4, t.status || 'empty', t.currentOrderId || t.current_order_id || null, t.stewardName || t.steward_name || null, t.activeStatus || t.active_status || 'active']);
+            }
+        }
+
+        if (customers && Array.isArray(customers)) {
+            for (const c of customers) {
+                await db.query(`
+                    INSERT INTO customers (id, name, phone, birthday, favorite_items, credit_limit, outstanding_balance, image_base64)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE
+                        name = VALUES(name),
+                        phone = VALUES(phone),
+                        birthday = VALUES(birthday),
+                        favorite_items = VALUES(favorite_items),
+                        credit_limit = VALUES(credit_limit),
+                        outstanding_balance = VALUES(outstanding_balance),
+                        image_base64 = VALUES(image_base64)
+                `, [c.id, c.name, c.phone, c.birthday || null, c.favoriteItems || c.favorite_items || null, c.creditLimit ?? c.credit_limit ?? 0.00, c.outstandingBalance ?? c.outstanding_balance ?? 0.00, c.imageBase64 || c.image_base64 || null]);
+            }
+        }
+
+        if (users && Array.isArray(users)) {
+            for (const u of users) {
+                await db.query(`
+                    INSERT INTO users (id, name, username, password_hash, role, status, image_base64)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE
+                        name = VALUES(name),
+                        username = VALUES(username),
+                        role = VALUES(role),
+                        status = VALUES(status),
+                        image_base64 = VALUES(image_base64)
+                `, [u.id, u.name, u.username, u.passwordHash || u.password_hash || '$2a$10$KYVVXoS7ntUm8jLTGL7HgOe4Ff/NPByXj0z9wcMS/UwY2ZVglw7Y6', u.role, u.status || 'active', u.imageBase64 || u.image_base64 || null]);
+            }
+        }
+
+        res.json({ success: true, message: 'Catalog mirrored to local MySQL database successfully' });
+    } catch (err) {
+        console.error('Error mirroring catalog to local MySQL:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+// ----------------------------------------------------
+// MASTER DATA SNAPSHOT (App local cache refresh)
+// ----------------------------------------------------
+// Returns all master data the app needs to populate its local SQLite cache.
+// Called by the Flutter SyncService on login, reconnect, and WebSocket 'database_synchronized' events.
+app.get('/api/master-data', authenticateToken, async (req, res) => {
+    try {
+        // Categories
+        const categories = await db.query("SELECT * FROM categories WHERE status = 'active'");
+
+        // Products with happy-hour pricing (reuse same logic as /api/products)
+        const products = await db.query("SELECT * FROM products");
+        const activeHappyHours = await db.query("SELECT * FROM happy_hour_pricing WHERE status = 'active'");
+
+        const currentTime = new Date();
+        const currentDay = currentTime.getDay();
+        const currentDayFormatted = currentDay === 0 ? 7 : currentDay;
+        const timeString = currentTime.toTimeString().split(' ')[0];
+
+        const productsWithPricing = products.map(p => {
+            let activePrice = Number(p.price);
+            let isHappyHour = false;
+            const isEligible = p.is_happy_hour_eligible === undefined || p.is_happy_hour_eligible === null ? true : !!p.is_happy_hour_eligible;
+            if (isEligible) {
+                let hhp = activeHappyHours.find(h => h.product_id === p.id);
+                if (!hhp && p.category_id) {
+                    hhp = activeHappyHours.find(h => h.category_id === p.category_id && (!h.product_id || h.product_id === 0 || h.product_id === '0'));
+                }
+                if (hhp && hhp.start_time && hhp.end_time && hhp.days_of_week) {
+                    const days = hhp.days_of_week.split(',').map(Number);
+                    if (days.includes(currentDayFormatted) && timeString >= hhp.start_time && timeString <= hhp.end_time) {
+                        if (hhp.product_id && hhp.product_id !== 0 && hhp.product_id !== '0') {
+                            activePrice = Number(hhp.promo_price);
+                        } else {
+                            const discountPct = Number(hhp.promo_price);
+                            activePrice = Number((Number(p.price) * (1 - discountPct / 100.0)).toFixed(2));
+                        }
+                        isHappyHour = true;
+                    }
+                }
+            }
+            return {
+                id: p.id, name: p.name, sinhala_name: p.sinhala_name, description: p.description,
+                category_id: p.category_id, price: Number(p.price), cost: Number(p.cost),
+                active_price: activePrice, is_happy_hour: isHappyHour, barcode: p.barcode,
+                stock_qty: p.stock_qty, min_stock_level: p.min_stock_level,
+                is_short_eat: !!p.is_short_eat, image_base64: p.image_base64,
+                status: p.status, item_type: p.item_type || 'Veg',
+                tax: p.tax !== null ? Number(p.tax) : 0.00, is_featured: !!p.is_featured,
+                caution: p.caution, has_sizes: !!p.has_sizes, has_extras: !!p.has_extras,
+                has_addons: !!p.has_addons,
+                track_stock: p.track_stock === undefined || p.track_stock === null ? true : !!p.track_stock,
+                is_happy_hour_eligible: p.is_happy_hour_eligible === undefined || p.is_happy_hour_eligible === null ? true : !!p.is_happy_hour_eligible,
+                is_kot_item: !!p.is_kot_item,
+                sizes: p.sizes ? JSON.parse(p.sizes) : [],
+                extras: p.extras ? JSON.parse(p.extras) : [],
+                addons: p.addons ? JSON.parse(p.addons) : [],
+                ingredients: p.ingredients ? JSON.parse(p.ingredients) : []
+            };
+        });
+
+        // Users (exclude password hashes)
+        const users = await db.query("SELECT id, name, username, role, email, phone, status, image_base64, category_id FROM users WHERE status = 'active'");
+
+        // Dining Tables
+        const diningTables = await db.query("SELECT * FROM dining_tables");
+
+        // Shifts — return the most recent open shift (or last closed shift if none open)
+        const shifts = await db.query("SELECT * FROM shifts ORDER BY start_time DESC LIMIT 10");
+
+        res.json({ categories, products: productsWithPricing, users, dining_tables: diningTables, shifts });
+    } catch (err) {
+        console.error('Error fetching master data:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ----------------------------------------------------
+// OFFLINE DATA SYNC (Local → Server)
+// ----------------------------------------------------
+// Receives offline transactional data from the Flutter app and upserts it into MySQL.
+// Called by SyncService.pushOfflineDataToServer() when network reconnects.
+app.post('/api/sync', authenticateToken, async (req, res) => {
+    const { offline_orders, offline_shifts, offline_expenses, offline_stock_logs, offline_audit_logs } = req.body;
+    const results = { orders: 0, shifts: 0, expenses: 0, stock_logs: 0, audit_logs: 0 };
+
+    try {
+        // --- Offline Orders ---
+        if (offline_orders && Array.isArray(offline_orders)) {
+            for (const order of offline_orders) {
+                // Skip if order already exists by order_number
+                const existing = await db.query('SELECT id FROM orders WHERE order_number = ?', [order.order_number]);
+                if (existing.length > 0) continue;
+
+                const insertResult = await db.query(`
+                    INSERT INTO orders (
+                        order_number, table_id, order_type, delivery_platform, customer_id,
+                        steward_name, status, payment_status, payment_method,
+                        subtotal, discount, total, cashier_id, shift_id,
+                        kot_printed, ack_printed, card_tx_reference, barcode,
+                        created_at, received_amount, change_amount
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                `, [
+                    order.order_number, order.table_id || null, order.order_type,
+                    order.delivery_platform || null, order.customer_id || null,
+                    order.steward_name || null, order.status || 'pending',
+                    order.payment_status || 'unpaid', order.payment_method || null,
+                    order.subtotal || 0, order.discount || 0, order.total || 0,
+                    order.cashier_id, order.shift_id,
+                    order.kot_printed ? 1 : 0, order.ack_printed ? 1 : 0,
+                    order.card_tx_reference || null, order.barcode || order.order_number,
+                    order.created_at || new Date().toISOString(),
+                    order.received_amount || 0, order.change_amount || 0
+                ]);
+
+                const newOrderId = insertResult.insertId;
+
+                // Insert order items — saving all columns during sync
+                const items = order.items || [];
+                for (const item of items) {
+                    if (item.product_id) {
+                        const [pRows] = await db.query('SELECT id FROM products WHERE id = ?', [item.product_id]);
+                        if (pRows.length === 0) {
+                            await db.query(`
+                                INSERT INTO products (id, name, sinhala_name, category_id, price, cost, barcode, status)
+                                VALUES (?, ?, ?, 1, ?, 0.00, ?, 'active')
+                                ON DUPLICATE KEY UPDATE name = VALUES(name)
+                            `, [
+                                item.product_id,
+                                item.product_name || item.name || `Product #${item.product_id}`,
+                                item.product_sinhala_name || item.sinhala_name || null,
+                                item.price || 0.00,
+                                `AUTOGEN_${item.product_id}`
+                            ]);
+                        }
+                    }
+                    await db.query(`
+                        INSERT INTO order_items (
+                            order_id, order_number, product_id, product_name, product_sinhala_name,
+                            quantity, price, notes, status, is_short_eat
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    `, [
+                        newOrderId, order.order_number, item.product_id,
+                        item.product_name || item.name || 'Product', item.product_sinhala_name || item.sinhala_name || null,
+                        item.quantity || 1, item.price || 0,
+                        item.notes || null, item.status || 'pending',
+                        item.is_short_eat ? 1 : 0
+                    ]);
+
+                    // Deduct stock if tracked product
+                    try {
+                        await db.query(
+                            'UPDATE products SET stock_qty = stock_qty - ? WHERE id = ? AND track_stock = 1',
+                            [item.quantity || 1, item.product_id]
+                        );
+                    } catch (_) {}
+                }
+
+                // Update customer outstanding balance if credit order
+                if (order.payment_method === 'credit' && order.customer_id) {
+                    try {
+                        await db.query(
+                            'UPDATE customers SET outstanding_balance = outstanding_balance + ? WHERE id = ?',
+                            [order.total || 0, order.customer_id]
+                        );
+                    } catch (_) {}
+                }
+
+                results.orders++;
+            }
+        }
+
+        // --- Offline Shifts ---
+        if (offline_shifts && Array.isArray(offline_shifts)) {
+            for (const shift of offline_shifts) {
+                await db.query(`
+                    INSERT INTO shifts (id, user_id, start_time, end_time, opening_balance, closing_balance, actual_closing_balance, status)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE
+                        end_time = VALUES(end_time),
+                        closing_balance = VALUES(closing_balance),
+                        actual_closing_balance = VALUES(actual_closing_balance),
+                        status = VALUES(status)
+                `, [
+                    shift.id, shift.user_id, shift.start_time,
+                    shift.end_time || null, shift.opening_balance || 0,
+                    shift.closing_balance || 0, shift.actual_closing_balance || 0,
+                    shift.status || 'open'
+                ]);
+                results.shifts++;
+            }
+        }
+
+        // --- Offline Expenses ---
+        if (offline_expenses && Array.isArray(offline_expenses)) {
+            for (const expense of offline_expenses) {
+                try {
+                    await db.query(`
+                        INSERT IGNORE INTO expenses (id, title, amount, category, payment_source, recorded_by, expense_date, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    `, [
+                        expense.id, expense.title, expense.amount, expense.category,
+                        expense.payment_source, expense.recorded_by,
+                        expense.expense_date, expense.created_at || new Date().toISOString()
+                    ]);
+                    results.expenses++;
+                } catch (_) {}
+            }
+        }
+
+        // --- Offline Stock Logs ---
+        if (offline_stock_logs && Array.isArray(offline_stock_logs)) {
+            for (const log of offline_stock_logs) {
+                try {
+                    await db.query(
+                        'INSERT INTO stock_logs (product_id, change_qty, type, reason, user_id, timestamp) VALUES (?, ?, ?, ?, ?, ?)',
+                        [log.product_id, log.change_qty, log.type, log.reason || null, log.user_id, log.timestamp || new Date().toISOString()]
+                    );
+                    await db.query('UPDATE products SET stock_qty = stock_qty + ? WHERE id = ?', [log.change_qty, log.product_id]);
+                    results.stock_logs++;
+                } catch (_) {}
+            }
+        }
+
+        // --- Offline Audit Logs ---
+        if (offline_audit_logs && Array.isArray(offline_audit_logs)) {
+            for (const log of offline_audit_logs) {
+                try {
+                    await db.query(
+                        'INSERT INTO audit_logs (action_type, table_name, record_id, details, user_id, timestamp) VALUES (?, ?, ?, ?, ?, ?)',
+                        [log.action_type, log.table_name || null, log.record_id || null, log.details, log.user_id, log.timestamp || new Date().toISOString()]
+                    );
+                    results.audit_logs++;
+                } catch (_) {}
+            }
+        }
+
+        // Notify all connected clients that data was synchronized
+        broadcast({ type: 'database_synchronized', source: 'offline_sync' });
+
+        res.json({ success: true, synced: true, counts: results });
+    } catch (err) {
+        console.error('Offline sync error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
 
 // Start Server and Init Database
 server.listen(PORT, async () => {

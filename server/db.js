@@ -109,20 +109,22 @@ async function initializeDatabase() {
         const dbPool = await getPool();
         // Check if users table exists
         const [tables] = await dbPool.query("SHOW TABLES LIKE 'users'");
+        const [prodTables] = await dbPool.query("SHOW TABLES LIKE 'products'");
         let needInit = false;
         
-        if (tables.length === 0) {
+        if (tables.length === 0 || prodTables.length === 0) {
             needInit = true;
         } else {
-            // Check if users table is empty
+            // Check if users or products table is empty
             const [rows] = await dbPool.query("SELECT COUNT(*) as count FROM users");
-            if (rows[0].count === 0) {
+            const [prodRows] = await dbPool.query("SELECT COUNT(*) as count FROM products");
+            if (rows[0].count === 0 || prodRows[0].count === 0) {
                 needInit = true;
             }
         }
 
         if (needInit) {
-            console.log('Database tables not found or empty. Initializing database schema from database.sql...');
+            console.log('Database tables not found or empty (users/products missing). Initializing schema & seed data from database.sql...');
             const sqlPath = path.join(__dirname, 'database.sql');
             if (fs.existsSync(sqlPath)) {
                 const sqlContent = fs.readFileSync(sqlPath, 'utf8');
@@ -493,6 +495,24 @@ async function initializeDatabase() {
                 console.log("Migration: Added change_amount to orders table.");
             } catch (_) {}
 
+            // Migration: Add order_number, product_name, product_sinhala_name, is_short_eat to order_items table
+            try {
+                await dbPool.query("ALTER TABLE order_items ADD COLUMN order_number VARCHAR(50) DEFAULT NULL");
+                console.log("Migration: Added order_number to order_items table.");
+            } catch (_) {}
+            try {
+                await dbPool.query("ALTER TABLE order_items ADD COLUMN product_name VARCHAR(255) DEFAULT NULL");
+                console.log("Migration: Added product_name to order_items table.");
+            } catch (_) {}
+            try {
+                await dbPool.query("ALTER TABLE order_items ADD COLUMN product_sinhala_name VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL");
+                console.log("Migration: Added product_sinhala_name to order_items table.");
+            } catch (_) {}
+            try {
+                await dbPool.query("ALTER TABLE order_items ADD COLUMN is_short_eat BOOLEAN DEFAULT FALSE");
+                console.log("Migration: Added is_short_eat to order_items table.");
+            } catch (_) {}
+
             // Migration: Create pre_orders, pre_order_items, and notifications tables
             try {
                 await dbPool.query(`
@@ -524,6 +544,7 @@ async function initializeDatabase() {
                         id INT AUTO_INCREMENT PRIMARY KEY,
                         pre_order_id INT NOT NULL,
                         product_id INT NOT NULL,
+                        product_name VARCHAR(255) NULL DEFAULT NULL,
                         quantity INT NOT NULL,
                         price DECIMAL(10,2) NOT NULL,
                         notes VARCHAR(255) DEFAULT NULL,
@@ -552,7 +573,26 @@ async function initializeDatabase() {
                 console.error("Migration: Creating notifications table failed:", err.message);
             }
 
-            // Migration: Add advance_payment and balance_amount to pre_orders
+            // Migration: Add advance_payment and balance_amount to pre_orders & self-heal pre_order_number
+            try {
+                await dbPool.query("ALTER TABLE pre_orders CHANGE COLUMN order_number pre_order_number VARCHAR(50) NOT NULL");
+                console.log("Migration: Renamed order_number to pre_order_number in pre_orders table.");
+            } catch (_) {}
+            try {
+                await dbPool.query("ALTER TABLE pre_orders ADD COLUMN pre_order_number VARCHAR(50) NULL");
+            } catch (_) {}
+            try {
+                await dbPool.query("ALTER TABLE pre_orders ADD COLUMN received_date DATETIME NULL");
+            } catch (_) {}
+            try {
+                await dbPool.query("ALTER TABLE pre_orders ADD COLUMN subtotal DECIMAL(10,2) DEFAULT 0.00");
+            } catch (_) {}
+            try {
+                await dbPool.query("ALTER TABLE pre_orders ADD COLUMN discount DECIMAL(10,2) DEFAULT 0.00");
+            } catch (_) {}
+            try {
+                await dbPool.query("ALTER TABLE pre_orders ADD COLUMN total DECIMAL(10,2) DEFAULT 0.00");
+            } catch (_) {}
             try {
                 await dbPool.query("ALTER TABLE pre_orders ADD COLUMN advance_payment DECIMAL(10,2) DEFAULT 0.00");
                 console.log("Migration: Added advance_payment to pre_orders table.");
@@ -560,6 +600,17 @@ async function initializeDatabase() {
             try {
                 await dbPool.query("ALTER TABLE pre_orders ADD COLUMN balance_amount DECIMAL(10,2) DEFAULT 0.00");
                 console.log("Migration: Added balance_amount to pre_orders table.");
+            } catch (_) {}
+            try {
+                await dbPool.query("ALTER TABLE pre_order_items ADD COLUMN notes VARCHAR(255) DEFAULT NULL");
+                console.log("Migration: Added notes column to pre_order_items table.");
+            } catch (_) {}
+            try {
+                await dbPool.query("ALTER TABLE pre_order_items ADD COLUMN product_name VARCHAR(255) NULL DEFAULT NULL");
+            } catch (_) {}
+            try {
+                await dbPool.query("ALTER TABLE pre_order_items MODIFY COLUMN product_name VARCHAR(255) NULL DEFAULT NULL");
+                console.log("Migration: Modified product_name column in pre_order_items table to allow NULL.");
             } catch (_) {}
 
             // Migration: Add advance_payment and balance_amount to orders
@@ -684,6 +735,23 @@ async function initializeDatabase() {
             try { await dbPool.query("ALTER TABLE staff_payrolls ADD COLUMN payment_method ENUM('cash', 'bank', 'drawer') DEFAULT 'cash'"); } catch (_) {}
             try { await dbPool.query("ALTER TABLE staff_payrolls ADD COLUMN created_by INT NULL"); } catch (_) {}
 
+            try {
+                await dbPool.query(`
+                    CREATE TABLE IF NOT EXISTS staff_shifts (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        user_id INT NOT NULL,
+                        clock_in DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        clock_out DATETIME DEFAULT NULL,
+                        duration_minutes INT DEFAULT 0,
+                        status ENUM('active', 'completed') DEFAULT 'active',
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+                `);
+                console.log("Migration: Created staff_shifts table.");
+            } catch (err) {
+                console.error("Migration: Creating staff_shifts table failed:", err.message);
+            }
             try { await dbPool.query("ALTER TABLE staff_shifts ADD COLUMN user_id INT NULL"); } catch (_) {}
             try { await dbPool.query("ALTER TABLE staff_shifts ADD COLUMN clock_in DATETIME NULL"); } catch (_) {}
             try { await dbPool.query("ALTER TABLE staff_shifts ADD COLUMN clock_out DATETIME DEFAULT NULL"); } catch (_) {}
