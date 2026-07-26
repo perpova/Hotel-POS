@@ -552,6 +552,236 @@ class _MainLayoutState extends State<MainLayout> {
     );
   }
 
+  void _showSyncDialog(BuildContext context, POSController posController) async {
+    await posController.refreshPendingSyncCounts();
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogCtx) {
+        return Consumer<POSController>(
+          builder: (ctx, pos, _) {
+            final pending = pos.pendingCountsBreakdown;
+            final totalPending = pos.pendingSyncCount;
+            final isOnline = pos.isOnline;
+            final isSyncing = pos.isManualSyncing;
+
+            return Dialog(
+              backgroundColor: AppTheme.cardLight,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              child: Container(
+                width: 480,
+                padding: const EdgeInsets.all(24),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Header
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: AppTheme.primary.withOpacity(0.1),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(Icons.sync_alt_rounded, color: AppTheme.primary, size: 24),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Local DB ↔ Server DB Sync',
+                                  style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+                                ),
+                                Text(
+                                  'Synchronize offline transactions from local SQLite database to remote server database.',
+                                  style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Divider(height: 1, color: AppTheme.borderLight),
+                      const SizedBox(height: 16),
+
+                      // Server Connection Status
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: isOnline ? AppTheme.accent.withOpacity(0.08) : AppTheme.warning.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: isOnline ? AppTheme.accent : AppTheme.warning, width: 1),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              isOnline ? Icons.cloud_done_rounded : Icons.cloud_off_rounded,
+                              color: isOnline ? AppTheme.accent : AppTheme.warning,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    isOnline ? 'Server Connection Online' : 'Server Connection Offline',
+                                    style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: isOnline ? AppTheme.accent : AppTheme.warning),
+                                  ),
+                                  Text(
+                                    APIService.instance.baseUrl,
+                                    style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: isOnline ? AppTheme.accent : AppTheme.warning,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                isOnline ? 'ONLINE' : 'OFFLINE',
+                                style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Breakdown Section Title
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('LOCAL PENDING UNCOUNTED DATA', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary, letterSpacing: 0.5)),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: totalPending > 0 ? AppTheme.warning.withOpacity(0.15) : AppTheme.accent.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              totalPending > 0 ? '$totalPending Pending' : 'All Synced ✓',
+                              style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: totalPending > 0 ? AppTheme.warning : AppTheme.accent),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Detail rows
+                      _buildSyncCountRow('Offline Orders', pending['orders'] ?? 0, Icons.receipt_long_outlined, totalCount: pending['orders_total'] ?? 0),
+                      _buildSyncCountRow('Offline Shifts & Cash Logs', pending['shifts'] ?? 0, Icons.monetization_on_outlined),
+                      _buildSyncCountRow('Offline Expenses', pending['expenses'] ?? 0, Icons.account_balance_wallet_outlined),
+                      _buildSyncCountRow('Offline Stock Logs', pending['stock_logs'] ?? 0, Icons.inventory_2_outlined),
+                      _buildSyncCountRow('Offline Audit Logs', pending['audit_logs'] ?? 0, Icons.assignment_outlined),
+
+                      if (pos.lastSyncTime != null) ...[
+                        const SizedBox(height: 12),
+                        Text(
+                          'Last synced: ${DateFormat('yyyy-MM-dd hh:mm:ss a').format(pos.lastSyncTime!)}',
+                          style: GoogleFonts.inter(fontSize: 11, fontStyle: FontStyle.italic, color: AppTheme.textLightSecondary),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                      const SizedBox(height: 24),
+
+                      // Sync Action Button
+                      ElevatedButton.icon(
+                        onPressed: (isSyncing || !isOnline)
+                            ? null
+                            : () async {
+                                final res = await pos.performManualSync();
+                                if (!ctx.mounted) return;
+                                ScaffoldMessenger.of(ctx).showSnackBar(
+                                  SnackBar(
+                                    content: Text(res['message'] ?? 'Sync operation complete.'),
+                                    backgroundColor: (res['success'] == true) ? AppTheme.accent : AppTheme.danger,
+                                  ),
+                                );
+                              },
+                        icon: isSyncing
+                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                            : const Icon(Icons.sync_rounded, size: 18),
+                        label: Text(
+                          isSyncing ? 'Synchronizing with Server...' : 'Sync Local DB to Server DB Now',
+                          style: GoogleFonts.inter(fontWeight: FontWeight.bold),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primary,
+                          foregroundColor: Colors.white,
+                          disabledBackgroundColor: AppTheme.primary.withOpacity(0.5),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextButton(
+                        onPressed: () => Navigator.pop(dialogCtx),
+                        child: Text('Close'.tr(dialogCtx), style: GoogleFonts.inter(color: AppTheme.textLightSecondary, fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildSyncCountRow(String label, int pendingCount, IconData icon, {int? totalCount}) {
+    final hasPending = pendingCount > 0;
+    String displayStr = pendingCount.toString();
+    if (totalCount != null && totalCount > 0) {
+      displayStr = '$totalCount Saved ($pendingCount Pending)';
+    } else {
+      displayStr = '$pendingCount Pending';
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppTheme.bgLight,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppTheme.borderLight),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 16, color: hasPending ? AppTheme.warning : AppTheme.accent),
+              const SizedBox(width: 10),
+              Text(label, style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightPrimary)),
+            ],
+          ),
+          Text(
+            displayStr,
+            style: GoogleFonts.inter(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: hasPending ? AppTheme.warning : AppTheme.accent,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
@@ -1053,67 +1283,87 @@ class _MainLayoutState extends State<MainLayout> {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 // Sync indicator
-                                GestureDetector(
-                                  onTap: () async {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(content: Text('Triggering sync...')),
-                                    );
-                                    await posController.reloadEnvironment();
-                                    if (mounted) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(
-                                          content: Text(
-                                            posController.isOnline
-                                                ? 'System Online. Data synchronized successfully.'
-                                                : 'System Offline. Offline data remains cached.'
+                                // Local DB -> Server DB Sync Button
+                                Consumer<POSController>(
+                                  builder: (ctx, pos, _) {
+                                    final pendingCount = pos.pendingSyncCount;
+                                    final isOnline = pos.isOnline;
+                                    final isSyncing = pos.isManualSyncing;
+
+                                    return GestureDetector(
+                                      onTap: () => _showSyncDialog(context, pos),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                        decoration: BoxDecoration(
+                                          color: isSyncing
+                                              ? AppTheme.primary.withOpacity(0.1)
+                                              : (pendingCount > 0
+                                                  ? AppTheme.warning.withOpacity(0.1)
+                                                  : (isOnline ? AppTheme.accent.withOpacity(0.08) : AppTheme.danger.withOpacity(0.08))),
+                                          borderRadius: BorderRadius.circular(20),
+                                          border: Border.all(
+                                            color: isSyncing
+                                                ? AppTheme.primary
+                                                : (pendingCount > 0
+                                                    ? AppTheme.warning
+                                                    : (isOnline ? AppTheme.accent : AppTheme.danger)),
+                                            width: 1.2,
                                           ),
-                                          backgroundColor: posController.isOnline ? AppTheme.accent : AppTheme.warning,
                                         ),
-                                      );
-                                    }
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                                    decoration: BoxDecoration(
-                                      color: posController.isOnline
-                                          ? AppTheme.accent.withOpacity(0.08)
-                                          : AppTheme.warning.withOpacity(0.08),
-                                      borderRadius: BorderRadius.circular(20),
-                                      border: Border.all(
-                                        color: posController.isOnline ? AppTheme.accent : AppTheme.warning,
-                                        width: 1,
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            if (isSyncing)
+                                              SizedBox(
+                                                width: 10,
+                                                height: 10,
+                                                child: CircularProgressIndicator(strokeWidth: 1.5, color: AppTheme.primary),
+                                              )
+                                            else
+                                              Container(
+                                                width: 7,
+                                                height: 7,
+                                                decoration: BoxDecoration(
+                                                  color: pendingCount > 0
+                                                      ? AppTheme.warning
+                                                      : (isOnline ? AppTheme.accent : AppTheme.danger),
+                                                  shape: BoxShape.circle,
+                                                ),
+                                              ),
+                                            const SizedBox(width: 6),
+                                            Text(
+                                              isSyncing
+                                                  ? 'Syncing...'
+                                                  : (pendingCount > 0
+                                                      ? 'Sync Local DB ($pendingCount)'
+                                                      : (isOnline ? 'Local DB Synced' : 'Sync Local DB (Offline)')),
+                                              style: GoogleFonts.inter(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.bold,
+                                                color: isSyncing
+                                                    ? AppTheme.primary
+                                                    : (pendingCount > 0
+                                                        ? AppTheme.warning
+                                                        : (isOnline ? AppTheme.accent : AppTheme.danger)),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 5),
+                                            Icon(
+                                              Icons.sync_alt_rounded,
+                                              size: 13,
+                                              color: isSyncing
+                                                  ? AppTheme.primary
+                                                  : (pendingCount > 0
+                                                      ? AppTheme.warning
+                                                      : (isOnline ? AppTheme.accent : AppTheme.danger)),
+                                            ),
+                                          ],
+                                        ),
                                       ),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Container(
-                                          width: 6,
-                                          height: 6,
-                                          decoration: BoxDecoration(
-                                            color: posController.isOnline ? AppTheme.accent : AppTheme.warning,
-                                            shape: BoxShape.circle,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 6),
-                                        Text(
-                                          posController.isOnline ? 'LAN Online' : 'Offline',
-                                          style: GoogleFonts.inter(
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.bold,
-                                            color: posController.isOnline ? AppTheme.accent : AppTheme.warning,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 4),
-                                        Icon(
-                                          Icons.sync,
-                                          size: 12,
-                                          color: posController.isOnline ? AppTheme.accent : AppTheme.warning,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
+                                    );
+                                  },
                                 ),
+
 
                                 const SizedBox(width: 12),
 

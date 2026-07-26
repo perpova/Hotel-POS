@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:hotel_pos/models/models.dart';
 import 'package:hotel_pos/services/api_service.dart';
 import 'package:hotel_pos/services/local_db.dart';
+import 'package:hotel_pos/services/sync_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class POSController extends ChangeNotifier {
@@ -31,6 +32,20 @@ class POSController extends ChangeNotifier {
   bool isOnline = false;
   bool isLoading = false;
   ShiftModel? activeShift;
+  
+  // Local DB & Server Sync States
+  int pendingSyncCount = 0;
+  Map<String, int> pendingCountsBreakdown = {
+    'orders': 0,
+    'shifts': 0,
+    'expenses': 0,
+    'stock_logs': 0,
+    'audit_logs': 0,
+    'total': 0,
+  };
+  bool isManualSyncing = false;
+  DateTime? lastSyncTime;
+
   
   // Active POS Transaction Cart States
   List<OrderItemModel> cart = [];
@@ -150,7 +165,68 @@ class POSController extends ChangeNotifier {
   POSController() {
     _initTts();
     loadKotSoundSettings();
+    refreshPendingSyncCounts();
     _startBackgroundAutoSyncTimer();
+  }
+
+  Future<void> refreshPendingSyncCounts() async {
+    try {
+      pendingCountsBreakdown = await LocalDB.instance.getPendingCounts();
+      pendingSyncCount = pendingCountsBreakdown['total'] ?? 0;
+      notifyListeners();
+    } catch (e) {
+      debugPrint('[POSController] refreshPendingSyncCounts error: $e');
+    }
+  }
+
+  Future<Map<String, dynamic>> performManualSync() async {
+    if (isManualSyncing) {
+      return {'success': false, 'message': 'Sync already in progress'};
+    }
+    isManualSyncing = true;
+    notifyListeners();
+
+    try {
+      isOnline = await _api.checkOnline();
+      if (!isOnline) {
+        await refreshPendingSyncCounts();
+        isManualSyncing = false;
+        notifyListeners();
+        return {
+          'success': false,
+          'message': 'System is currently offline. Cannot reach server database.',
+        };
+      }
+
+      // 1. Execute SQLite local DB sync
+      await SyncService.instance.forceSync();
+
+      // 2. Trigger Local MySQL Workbench DB to Remote Server DB sync
+      final dbToDbRes = await _api.triggerLocalToRemoteSync();
+
+      await reloadEnvironment();
+      await refreshPendingSyncCounts();
+      lastSyncTime = DateTime.now();
+
+      isManualSyncing = false;
+      notifyListeners();
+
+      final bool isSuccess = dbToDbRes['success'] == true;
+      final String message = dbToDbRes['message']?.toString() ??
+          'Local database synchronized with server database successfully.';
+      return {
+        'success': isSuccess,
+        'message': message,
+      };
+    } catch (e) {
+      debugPrint('[POSController] Manual sync error: $e');
+      isManualSyncing = false;
+      notifyListeners();
+      return {
+        'success': false,
+        'message': 'Sync error: $e',
+      };
+    }
   }
 
   void _startBackgroundAutoSyncTimer() {
@@ -159,6 +235,10 @@ class POSController extends ChangeNotifier {
       isOnline = await _api.checkOnline();
       
       if (isOnline) {
+        if (!wasOnline) {
+          debugPrint('[POSController] Connection restored! Triggering network reconnect sync.');
+          await SyncService.instance.onNetworkReconnected();
+        }
         // 1. Sync pending offline orders/shifts up to server
         final syncRes = await _api.syncOfflineData();
         
@@ -171,10 +251,14 @@ class POSController extends ChangeNotifier {
         }
       } else if (wasOnline) {
         // Just went offline - reload catalog from local SQLite mirror
+        debugPrint('[POSController] Connection lost. Switching to offline SQLite local cache.');
         await reloadEnvironment();
       }
+
+      await refreshPendingSyncCounts();
     });
   }
+
 
   void _initTts() async {
     try {
@@ -587,15 +671,32 @@ class POSController extends ChangeNotifier {
         await LocalDB.instance.cacheTables(diningTables);
         await LocalDB.instance.cacheCustomers(customers);
         await LocalDB.instance.cacheUsers(allUsers);
+        await LocalDB.instance.cacheIngredients(ingredients);
+        await LocalDB.instance.cacheHappyHours(happyHours);
+        await LocalDB.instance.cacheOffers(offers);
       } else {
-        // Fallback: If offline, load catalog from persistent local SQLite DB
+        // Fallback: If offline, load catalog & reference tables from persistent local SQLite DB
         print('Offline mode. Mirroring items & categories from local database.');
         categories = await LocalDB.instance.getCachedCategories();
         products = await LocalDB.instance.getCachedProducts();
         diningTables = await LocalDB.instance.getCachedTables();
         customers = await LocalDB.instance.getCachedCustomers();
+        ingredients = await LocalDB.instance.getCachedIngredients();
+        happyHours = await LocalDB.instance.getCachedHappyHours();
+        offers = await LocalDB.instance.getCachedOffers();
         final cachedUsers = await LocalDB.instance.getCachedUsers();
         waiters = cachedUsers.where((u) => u.role.toLowerCase() == 'waiter' || u.role.toLowerCase() == 'steward').toList();
+        final cachedShifts = await LocalDB.instance.getCachedShifts();
+        if (cachedShifts.isNotEmpty) {
+          ShiftModel? openShift;
+          for (var s in cachedShifts) {
+            if (s.status == 'open') {
+              openShift = s;
+              break;
+            }
+          }
+          activeShift = openShift ?? cachedShifts.first;
+        }
       }
     } catch (e, stackTrace) {
       print('Environment load error: $e');

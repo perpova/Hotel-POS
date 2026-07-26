@@ -125,6 +125,37 @@ async function checkLowStockNotification(productId) {
 // AUTHENTICATION ENDPOINTS
 // ----------------------------------------------------
 
+// ----------------------------------------------------
+// VPS LIVE LOG RECORDING & INSPECTION API
+// ----------------------------------------------------
+const recentServerLogs = [];
+function addServerLog(level, message) {
+    const timestamp = new Date().toISOString();
+    recentServerLogs.unshift({ timestamp, level, message });
+    if (recentServerLogs.length > 300) recentServerLogs.pop();
+}
+
+const originalConsoleLog = console.log;
+const originalConsoleError = console.error;
+console.log = function(...args) {
+    originalConsoleLog.apply(console, args);
+    addServerLog('INFO', args.map(a => (typeof a === 'object' ? JSON.stringify(a) : a)).join(' '));
+};
+console.error = function(...args) {
+    originalConsoleError.apply(console, args);
+    addServerLog('ERROR', args.map(a => (typeof a === 'object' ? JSON.stringify(a) : a)).join(' '));
+};
+
+// GET /api/logs — View live VPS server logs directly in browser or app
+app.get('/api/logs', (req, res) => {
+    res.json({
+        success: true,
+        server_time: new Date().toISOString(),
+        total_logs: recentServerLogs.length,
+        logs: recentServerLogs
+    });
+});
+
 app.get('/api/diagnostic', async (req, res) => {
     try {
         const tables = await db.query("SHOW TABLES");
@@ -196,7 +227,8 @@ app.get('/api/categories', async (req, res) => {
 
 // Create Product Category
 app.post('/api/categories', authenticateToken, async (req, res) => {
-    if (req.user.role !== 'admin' && req.user.role !== 'owner') {
+    const userRole = (req.user && req.user.role ? req.user.role : '').toLowerCase();
+    if (userRole !== 'admin' && userRole !== 'owner' && userRole !== 'system administrator' && userRole !== 'manager' && userRole !== 'cashier') {
         return res.status(403).json({ error: 'Unauthorized' });
     }
     const { name, image_base64 } = req.body;
@@ -506,8 +538,9 @@ app.post('/api/ingredients/:id/stock', authenticateToken, async (req, res) => {
 
 // Manual Product CRUD - Create Product
 app.post('/api/products', authenticateToken, async (req, res) => {
-    if (req.user.role !== 'admin' && req.user.role !== 'owner') {
-        return res.status(403).json({ error: 'Unauthorized' });
+    const userRole = (req.user && req.user.role ? req.user.role : '').toLowerCase();
+    if (userRole !== 'admin' && userRole !== 'owner' && userRole !== 'system administrator' && userRole !== 'manager' && userRole !== 'cashier') {
+        return res.status(403).json({ error: 'Unauthorized role: ' + (req.user ? req.user.role : 'none') });
     }
     const {
         name, sinhala_name, description, category_id, price, cost, barcode,
@@ -518,6 +551,17 @@ app.post('/api/products', authenticateToken, async (req, res) => {
     } = req.body;
     
     try {
+        let validCatId = category_id;
+        if (!validCatId || validCatId === 0 || validCatId === '0') {
+            const [firstCat] = await db.query("SELECT id FROM categories LIMIT 1");
+            validCatId = firstCat ? firstCat.id : null;
+        }
+
+        const sizesStr = typeof sizes === 'string' ? sizes : (sizes ? JSON.stringify(sizes) : null);
+        const extrasStr = typeof extras === 'string' ? extras : (extras ? JSON.stringify(extras) : null);
+        const addonsStr = typeof addons === 'string' ? addons : (addons ? JSON.stringify(addons) : null);
+        const ingredientsStr = typeof ingredients === 'string' ? ingredients : (ingredients ? JSON.stringify(ingredients) : null);
+
         const result = await db.query(`
             INSERT INTO products (
                 name, sinhala_name, description, category_id, price, cost, barcode,
@@ -527,16 +571,13 @@ app.post('/api/products', authenticateToken, async (req, res) => {
                 sizes, extras, addons, is_happy_hour_eligible, ingredients, is_kot_item
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [
-            name, sinhala_name || null, description || null, category_id, price, cost || 0.00, barcode || null,
+            name, sinhala_name || null, description || null, validCatId, price || 0.00, cost || 0.00, barcode || null,
             stock_qty || 0, min_stock_level || 10, is_short_eat ? 1 : 0, status || 'active', image_base64 || null,
             item_type || 'Veg', tax || 0.00, is_featured ? 1 : 0, caution || null,
             has_sizes ? 1 : 0, has_extras ? 1 : 0, has_addons ? 1 : 0, track_stock !== undefined ? (track_stock ? 1 : 0) : 1,
-            sizes ? JSON.stringify(sizes) : null,
-            extras ? JSON.stringify(extras) : null,
-            addons ? JSON.stringify(addons) : null,
+            sizesStr, extrasStr, addonsStr,
             is_happy_hour_eligible !== undefined ? (is_happy_hour_eligible ? 1 : 0) : 1,
-            ingredients ? JSON.stringify(ingredients) : null,
-            is_kot_item ? 1 : 0
+            ingredientsStr, is_kot_item ? 1 : 0
         ]);
         
         const newId = result.insertId;
@@ -545,16 +586,32 @@ app.post('/api/products', authenticateToken, async (req, res) => {
         await logAudit('edit_stock', 'products', newId, `Product ${name} created manually.`, req.user.id);
         broadcast({ type: 'database_synchronized' });
         
+        // Mirror newly created product to Remote Server if online
+        try {
+            const remoteUrl = process.env.REMOTE_SERVER_URL || 'https://pos0001.perpova.dev';
+            if (process.env.IS_REMOTE_SERVER !== 'true') {
+                const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
+                await fetch(`${remoteUrl}/api/sync/mirror-catalog`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ products: [product] }),
+                    timeout: 5000
+                });
+            }
+        } catch (_) {}
+
         res.json(product);
     } catch (err) {
+        console.error('Error creating product:', err.message);
         res.status(500).json({ error: err.message });
     }
 });
 
 // Manual Product CRUD - Update Product
 app.put('/api/products/:id', authenticateToken, async (req, res) => {
-    if (req.user.role !== 'admin' && req.user.role !== 'owner') {
-        return res.status(403).json({ error: 'Unauthorized' });
+    const userRole = (req.user && req.user.role ? req.user.role : '').toLowerCase();
+    if (userRole !== 'admin' && userRole !== 'owner' && userRole !== 'system administrator' && userRole !== 'manager' && userRole !== 'cashier') {
+        return res.status(403).json({ error: 'Unauthorized role: ' + (req.user ? req.user.role : 'none') });
     }
     const { id } = req.params;
     const {
@@ -566,6 +623,17 @@ app.put('/api/products/:id', authenticateToken, async (req, res) => {
     } = req.body;
     
     try {
+        let validCatId = category_id;
+        if (!validCatId || validCatId === 0 || validCatId === '0') {
+            const [firstCat] = await db.query("SELECT id FROM categories LIMIT 1");
+            validCatId = firstCat ? firstCat.id : null;
+        }
+
+        const sizesStr = typeof sizes === 'string' ? sizes : (sizes ? JSON.stringify(sizes) : null);
+        const extrasStr = typeof extras === 'string' ? extras : (extras ? JSON.stringify(extras) : null);
+        const addonsStr = typeof addons === 'string' ? addons : (addons ? JSON.stringify(addons) : null);
+        const ingredientsStr = typeof ingredients === 'string' ? ingredients : (ingredients ? JSON.stringify(ingredients) : null);
+
         await db.query(`
             UPDATE products SET
                 name = ?, sinhala_name = ?, description = ?, category_id = ?, price = ?, cost = ?, barcode = ?,
@@ -575,16 +643,13 @@ app.put('/api/products/:id', authenticateToken, async (req, res) => {
                 sizes = ?, extras = ?, addons = ?, is_happy_hour_eligible = ?, ingredients = ?, is_kot_item = ?
             WHERE id = ?
         `, [
-            name, sinhala_name || null, description || null, category_id, price, cost || 0.00, barcode || null,
+            name, sinhala_name || null, description || null, validCatId, price || 0.00, cost || 0.00, barcode || null,
             stock_qty || 0, min_stock_level || 10, is_short_eat ? 1 : 0, status || 'active', image_base64 || null,
             item_type || 'Veg', tax || 0.00, is_featured ? 1 : 0, caution || null,
             has_sizes ? 1 : 0, has_extras ? 1 : 0, has_addons ? 1 : 0, track_stock !== undefined ? (track_stock ? 1 : 0) : 1,
-            sizes ? JSON.stringify(sizes) : null,
-            extras ? JSON.stringify(extras) : null,
-            addons ? JSON.stringify(addons) : null,
+            sizesStr, extrasStr, addonsStr,
             is_happy_hour_eligible !== undefined ? (is_happy_hour_eligible ? 1 : 0) : 1,
-            ingredients ? JSON.stringify(ingredients) : null,
-            is_kot_item ? 1 : 0,
+            ingredientsStr, is_kot_item ? 1 : 0,
             id
         ]);
         
@@ -593,8 +658,23 @@ app.put('/api/products/:id', authenticateToken, async (req, res) => {
         await logAudit('edit_stock', 'products', id, `Product ${name} updated manually.`, req.user.id);
         broadcast({ type: 'database_synchronized' });
         
+        // Mirror updated product to Remote Server if online
+        try {
+            const remoteUrl = process.env.REMOTE_SERVER_URL || 'https://pos0001.perpova.dev';
+            if (process.env.IS_REMOTE_SERVER !== 'true') {
+                const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
+                await fetch(`${remoteUrl}/api/sync/mirror-catalog`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ products: [product] }),
+                    timeout: 5000
+                });
+            }
+        } catch (_) {}
+
         res.json(product);
     } catch (err) {
+        console.error('Error updating product:', err.message);
         res.status(500).json({ error: err.message });
     }
 });
@@ -2635,6 +2715,12 @@ app.post('/api/sync', authenticateToken, async (req, res) => {
     const dbPool = await db.getPool();
     const conn = await dbPool.getConnection();
     
+    const syncedOrders = [];
+    const syncedShifts = [];
+    const syncedExpenses = [];
+    const syncedStockLogs = [];
+    const syncedAuditLogs = [];
+
     try {
         await conn.beginTransaction();
         
@@ -2646,14 +2732,15 @@ app.post('/api/sync', authenticateToken, async (req, res) => {
                 if (existing.length === 0) {
                     await conn.query(
                         'INSERT INTO shifts (id, user_id, start_time, end_time, opening_balance, closing_balance, actual_closing_balance, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-                        [s.id, s.user_id, s.start_time, s.end_time, s.opening_balance, s.closing_balance, s.actual_closing_balance, s.status]
+                        [s.id, s.user_id, formatMySqlDateTime(s.start_time), formatMySqlDateTime(s.end_time), s.opening_balance, s.closing_balance, s.actual_closing_balance, s.status]
                     );
                 } else {
                     await conn.query(
                         'UPDATE shifts SET end_time = ?, closing_balance = ?, actual_closing_balance = ?, status = ? WHERE id = ?',
-                        [s.end_time, s.closing_balance, s.actual_closing_balance, s.status, s.id]
+                        [formatMySqlDateTime(s.end_time), s.closing_balance, s.actual_closing_balance, s.status, s.id]
                     );
                 }
+                syncedShifts.push(s.id);
             }
         }
         
@@ -2667,13 +2754,15 @@ app.post('/api/sync', authenticateToken, async (req, res) => {
                         INSERT INTO orders (
                             order_number, table_id, order_type, delivery_platform, customer_id, steward_name,
                             status, payment_status, payment_method, subtotal, discount, total, cashier_id,
-                            shift_id, kot_printed, ack_printed, card_tx_reference, barcode, created_at, sync_status
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced')
+                            shift_id, kot_printed, ack_printed, card_tx_reference, barcode, created_at, sync_status,
+                            received_amount, change_amount
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced', ?, ?)
                     `, [
-                        o.order_number, o.table_id || null, o.order_type, o.delivery_platform || null, o.customer_id || null,
-                        o.steward_name || null, o.status, o.payment_status, o.payment_method || null,
-                        o.subtotal, o.discount, o.total, o.cashier_id, o.shift_id, o.kot_printed || false,
-                        o.ack_printed || false, o.card_tx_reference || null, o.barcode, o.created_at
+                        o.order_number, o.table_id || null, o.order_type || 'takeaway', o.delivery_platform || null, o.customer_id || null,
+                        o.steward_name || null, o.status || 'pending', o.payment_status || 'unpaid', o.payment_method || null,
+                        o.subtotal || 0, o.discount || 0, o.total || 0, o.cashier_id || 1, o.shift_id || 1, o.kot_printed || false,
+                        o.ack_printed || false, o.card_tx_reference || null, o.barcode || o.order_number, formatMySqlDateTime(o.created_at),
+                        o.received_amount || 0, o.change_amount || 0
                     ]);
                     
                     // Sync items
@@ -2703,7 +2792,7 @@ app.post('/api/sync', authenticateToken, async (req, res) => {
                             `, [
                                 o.order_number, o.order_number, item.product_id,
                                 item.product_name || item.name || null, item.product_sinhala_name || item.sinhala_name || null,
-                                item.quantity, item.price, item.notes || null, item.status || 'pending',
+                                item.quantity || 1, item.price || 0, item.notes || null, item.status || 'pending',
                                 item.is_short_eat ? 1 : 0
                             ]);
                             
@@ -2711,11 +2800,12 @@ app.post('/api/sync', authenticateToken, async (req, res) => {
                             const [prodRows] = await conn.query('SELECT track_stock FROM products WHERE id = ?', [item.product_id]);
                             const trackStock = prodRows[0] ? prodRows[0].track_stock : 1;
                             if (trackStock) {
-                                await conn.query('UPDATE products SET stock_qty = stock_qty - ? WHERE id = ?', [item.quantity, item.product_id]);
+                                await conn.query('UPDATE products SET stock_qty = stock_qty - ? WHERE id = ?', [item.quantity || 1, item.product_id]);
                             }
                         }
                     }
                 }
+                syncedOrders.push(o.order_number);
             }
         }
         
@@ -2726,9 +2816,10 @@ app.post('/api/sync', authenticateToken, async (req, res) => {
                 if (existing.length === 0) {
                     await conn.query(
                         'INSERT INTO expenses (id, title, amount, category, payment_source, recorded_by, expense_date, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-                        [e.id, e.title, e.amount, e.category, e.payment_source, e.recorded_by, e.expense_date, e.created_at]
+                        [e.id, e.title, e.amount, e.category, e.payment_source, e.recorded_by, formatMySqlDate(e.expense_date), formatMySqlDateTime(e.created_at)]
                     );
                 }
+                syncedExpenses.push(e.id);
             }
         }
         
@@ -2737,8 +2828,9 @@ app.post('/api/sync', authenticateToken, async (req, res) => {
             for (const sl of offline_stock_logs) {
                 await conn.query(
                     'INSERT INTO stock_logs (product_id, change_qty, type, reason, user_id, timestamp) VALUES (?, ?, ?, ?, ?, ?)',
-                    [sl.product_id, sl.change_qty, sl.type, sl.reason, sl.user_id, sl.timestamp]
+                    [sl.product_id, sl.change_qty, sl.type, sl.reason, sl.user_id, formatMySqlDateTime(sl.timestamp)]
                 );
+                syncedStockLogs.push(sl.id);
             }
         }
         
@@ -2747,8 +2839,9 @@ app.post('/api/sync', authenticateToken, async (req, res) => {
             for (const al of offline_audit_logs) {
                 await conn.query(
                     'INSERT INTO audit_logs (action_type, table_name, record_id, details, user_id, timestamp) VALUES (?, ?, ?, ?, ?, ?)',
-                    [al.action_type, al.table_name, al.record_id, al.details, al.user_id, al.timestamp]
+                    [al.action_type, al.table_name, al.record_id, al.details, al.user_id, formatMySqlDateTime(al.timestamp)]
                 );
+                syncedAuditLogs.push(al.id);
             }
         }
         
@@ -2774,6 +2867,12 @@ app.post('/api/sync', authenticateToken, async (req, res) => {
         
         res.json({
             success: true,
+            synced: true,
+            synced_orders: syncedOrders,
+            synced_shifts: syncedShifts,
+            synced_expenses: syncedExpenses,
+            synced_stock_logs: syncedStockLogs,
+            synced_audit_logs: syncedAuditLogs,
             categories,
             products,
             diningTables,
@@ -4785,125 +4884,340 @@ setInterval(async () => {
     }
 }, 3600000);
 
+// Order Purging Endpoint — automatically deletes orders & order_items from Local MySQL DB after sync to Remote MySQL DB
+app.post('/api/orders/purge-synced', async (req, res) => {
+    const { order_numbers } = req.body;
+    if (!order_numbers || !Array.isArray(order_numbers) || order_numbers.length === 0) {
+        return res.json({ success: true, count: 0 });
+    }
+    try {
+        const placeholders = order_numbers.map(() => '?').join(',');
+        await db.query(`DELETE FROM order_items WHERE order_number IN (${placeholders})`, order_numbers);
+        const result = await db.query(`DELETE FROM orders WHERE order_number IN (${placeholders})`, order_numbers);
+        console.log(`[OrderPurge] Successfully purged ${result.affectedRows || order_numbers.length} synced orders from Local MySQL DB.`);
+        res.json({ success: true, count: result.affectedRows || order_numbers.length });
+    } catch (err) {
+        console.error('Error purging synced orders from local DB:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+function formatMySqlDate(dateVal) {
+    if (!dateVal) return null;
+    if (typeof dateVal === 'string') {
+        if (dateVal.includes('T')) {
+            return dateVal.split('T')[0];
+        }
+        return dateVal.substring(0, 10);
+    }
+    try {
+        const d = new Date(dateVal);
+        if (isNaN(d.getTime())) return null;
+        return d.toISOString().split('T')[0];
+    } catch (_) {
+        return null;
+    }
+}
+
+function formatMySqlDateTime(dateVal) {
+    if (!dateVal) {
+        const d = new Date();
+        const pad = (n) => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    }
+    
+    try {
+        const d = new Date(dateVal);
+        if (!isNaN(d.getTime())) {
+            const pad = (n) => String(n).padStart(2, '0');
+            return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+        }
+    } catch (_) {}
+
+    if (typeof dateVal === 'string') {
+        let s = dateVal.replace('T', ' ').replace('Z', '');
+        if (s.includes('.')) s = s.split('.')[0];
+        if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(s)) return s;
+    }
+
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+}
+
 // Bulk catalog mirror endpoint to sync central server catalog to local MySQL database
 app.post('/api/sync/mirror-catalog', async (req, res) => {
     try {
-        const { categories, products, diningTables, customers, users } = req.body;
-        
+        const {
+            categories, products, diningTables, customers, users,
+            ingredients, happyHours, offers, roles, rolePermissions,
+            preOrders, preOrderItems, suppliers, globalSettings
+        } = req.body;
+
         if (categories && Array.isArray(categories)) {
             for (const c of categories) {
-                await db.query(`
-                    INSERT INTO categories (id, name, parent_id, status, image_base64)
-                    VALUES (?, ?, ?, ?, ?)
-                    ON DUPLICATE KEY UPDATE
-                        name = VALUES(name),
-                        parent_id = VALUES(parent_id),
-                        status = VALUES(status),
-                        image_base64 = VALUES(image_base64)
-                `, [c.id, c.name, c.parentId || c.parent_id || null, c.status || 'active', c.imageBase64 || c.image_base64 || null]);
+                try {
+                    await db.query(`
+                        INSERT INTO categories (id, name, parent_id, status, image_base64)
+                        VALUES (?, ?, ?, ?, ?)
+                        ON DUPLICATE KEY UPDATE
+                            name = VALUES(name),
+                            parent_id = VALUES(parent_id),
+                            status = VALUES(status),
+                            image_base64 = VALUES(image_base64)
+                    `, [c.id, c.name, c.parentId || c.parent_id || null, c.status || 'active', c.imageBase64 || c.image_base64 || null]);
+                } catch (cErr) {
+                    console.error('Error mirroring category:', cErr.message);
+                }
             }
         }
 
         if (products && Array.isArray(products)) {
+            const [firstCatRow] = await db.query("SELECT id FROM categories LIMIT 1");
+            const fallbackCatId = firstCatRow ? firstCatRow.id : null;
+
             for (const p of products) {
-                await db.query(`
-                    INSERT INTO products (id, name, sinhala_name, description, category_id, price, cost, barcode, stock_qty, min_stock_level, is_short_eat, image_base64, status, item_type, tax, is_featured, caution, has_sizes, has_extras, has_addons, track_stock, is_happy_hour_eligible, ingredients, is_kot_item)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ON DUPLICATE KEY UPDATE
-                        name = VALUES(name),
-                        sinhala_name = VALUES(sinhala_name),
-                        description = VALUES(description),
-                        category_id = VALUES(category_id),
-                        price = VALUES(price),
-                        cost = VALUES(cost),
-                        barcode = VALUES(barcode),
-                        stock_qty = VALUES(stock_qty),
-                        min_stock_level = VALUES(min_stock_level),
-                        is_short_eat = VALUES(is_short_eat),
-                        image_base64 = VALUES(image_base64),
-                        status = VALUES(status),
-                        item_type = VALUES(item_type),
-                        tax = VALUES(tax),
-                        is_featured = VALUES(is_featured),
-                        caution = VALUES(caution),
-                        has_sizes = VALUES(has_sizes),
-                        has_extras = VALUES(has_extras),
-                        has_addons = VALUES(has_addons),
-                        track_stock = VALUES(track_stock),
-                        is_happy_hour_eligible = VALUES(is_happy_hour_eligible),
-                        ingredients = VALUES(ingredients),
-                        is_kot_item = VALUES(is_kot_item)
-                `, [
-                    p.id, p.name, p.sinhalaName || p.sinhala_name || null, p.description || null, p.categoryId || p.category_id, p.price, p.cost, p.barcode || null, p.stockQty ?? p.stock_qty ?? 0, p.minStockLevel ?? p.min_stock_level ?? 10, p.isShortEat ? 1 : 0, p.imageBase64 || p.image_base64 || null, p.status || 'active', p.itemType || p.item_type || 'Veg', p.tax || 0.00, p.isFeatured ? 1 : 0, p.caution || null, p.hasSizes ? 1 : 0, p.hasExtras ? 1 : 0, p.hasAddons ? 1 : 0, p.trackStock ? 1 : 0, p.isHappyHourEligible ? 1 : 0, p.ingredients || null, p.isKotItem ? 1 : 0
-                ]);
+                try {
+                    let catId = p.categoryId || p.category_id;
+                    if (!catId || catId === 0 || catId === '0') {
+                        catId = fallbackCatId;
+                    }
+
+                    await db.query(`
+                        INSERT INTO products (id, name, sinhala_name, description, category_id, price, cost, barcode, stock_qty, min_stock_level, is_short_eat, image_base64, status, item_type, tax, is_featured, caution, has_sizes, has_extras, has_addons, track_stock, is_happy_hour_eligible, ingredients, is_kot_item)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON DUPLICATE KEY UPDATE
+                            name = VALUES(name),
+                            sinhala_name = VALUES(sinhala_name),
+                            description = VALUES(description),
+                            category_id = VALUES(category_id),
+                            price = VALUES(price),
+                            cost = VALUES(cost),
+                            barcode = VALUES(barcode),
+                            stock_qty = VALUES(stock_qty),
+                            min_stock_level = VALUES(min_stock_level),
+                            is_short_eat = VALUES(is_short_eat),
+                            image_base64 = VALUES(image_base64),
+                            status = VALUES(status),
+                            item_type = VALUES(item_type),
+                            tax = VALUES(tax),
+                            is_featured = VALUES(is_featured),
+                            caution = VALUES(caution),
+                            has_sizes = VALUES(has_sizes),
+                            has_extras = VALUES(has_extras),
+                            has_addons = VALUES(has_addons),
+                            track_stock = VALUES(track_stock),
+                            is_happy_hour_eligible = VALUES(is_happy_hour_eligible),
+                            ingredients = VALUES(ingredients),
+                            is_kot_item = VALUES(is_kot_item)
+                    `, [
+                        p.id || null, p.name, p.sinhalaName || p.sinhala_name || null, p.description || null, catId, p.price, p.cost || 0.00, p.barcode || null, p.stockQty ?? p.stock_qty ?? 0, p.minStockLevel ?? p.min_stock_level ?? 10, (p.isShortEat || p.is_short_eat) ? 1 : 0, p.imageBase64 || p.image_base64 || null, p.status || 'active', p.itemType || p.item_type || 'Veg', p.tax || 0.00, (p.isFeatured || p.is_featured) ? 1 : 0, p.caution || null, (p.hasSizes || p.has_sizes) ? 1 : 0, (p.hasExtras || p.has_extras) ? 1 : 0, (p.hasAddons || p.has_addons) ? 1 : 0, (p.trackStock ?? p.track_stock ?? 1) ? 1 : 0, (p.isHappyHourEligible ?? p.is_happy_hour_eligible ?? 1) ? 1 : 0, p.ingredients ? (typeof p.ingredients === 'string' ? p.ingredients : JSON.stringify(p.ingredients)) : null, (p.isKotItem || p.is_kot_item) ? 1 : 0
+                    ]);
+                } catch (pErr) {
+                    console.error('Error mirroring product:', pErr.message);
+                }
             }
         }
 
         if (diningTables && Array.isArray(diningTables)) {
             for (const t of diningTables) {
-                await db.query(`
-                    INSERT INTO dining_tables (id, table_number, capacity, status, current_order_id, steward_name, active_status)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                    ON DUPLICATE KEY UPDATE
-                        table_number = VALUES(table_number),
-                        capacity = VALUES(capacity),
-                        status = VALUES(status),
-                        current_order_id = VALUES(current_order_id),
-                        steward_name = VALUES(steward_name),
-                        active_status = VALUES(active_status)
-                `, [t.id, t.tableNumber || t.table_number, t.capacity || 4, t.status || 'empty', t.currentOrderId || t.current_order_id || null, t.stewardName || t.steward_name || null, t.activeStatus || t.active_status || 'active']);
+                try {
+                    await db.query(`
+                        INSERT INTO dining_tables (id, table_number, capacity, status, current_order_id, steward_name, active_status)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        ON DUPLICATE KEY UPDATE
+                            table_number = VALUES(table_number),
+                            capacity = VALUES(capacity),
+                            status = VALUES(status),
+                            current_order_id = VALUES(current_order_id),
+                            steward_name = VALUES(steward_name),
+                            active_status = VALUES(active_status)
+                    `, [t.id, t.tableNumber || t.table_number, t.capacity || 4, t.status || 'empty', t.currentOrderId || t.current_order_id || null, t.stewardName || t.steward_name || null, t.activeStatus || t.active_status || 'active']);
+                } catch (tErr) {
+                    console.error('Error mirroring dining table:', tErr.message);
+                }
             }
         }
 
         if (customers && Array.isArray(customers)) {
             for (const c of customers) {
-                await db.query(`
-                    INSERT INTO customers (id, name, phone, birthday, favorite_items, credit_limit, outstanding_balance, image_base64)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    ON DUPLICATE KEY UPDATE
-                        name = VALUES(name),
-                        phone = VALUES(phone),
-                        birthday = VALUES(birthday),
-                        favorite_items = VALUES(favorite_items),
-                        credit_limit = VALUES(credit_limit),
-                        outstanding_balance = VALUES(outstanding_balance),
-                        image_base64 = VALUES(image_base64)
-                `, [c.id, c.name, c.phone, c.birthday || null, c.favoriteItems || c.favorite_items || null, c.creditLimit ?? c.credit_limit ?? 0.00, c.outstandingBalance ?? c.outstanding_balance ?? 0.00, c.imageBase64 || c.image_base64 || null]);
+                try {
+                    const birthdayVal = formatMySqlDate(c.birthday);
+                    await db.query(`
+                        INSERT INTO customers (id, name, phone, birthday, favorite_items, credit_limit, outstanding_balance, image_base64)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        ON DUPLICATE KEY UPDATE
+                            name = VALUES(name),
+                            phone = VALUES(phone),
+                            birthday = VALUES(birthday),
+                            favorite_items = VALUES(favorite_items),
+                            credit_limit = VALUES(credit_limit),
+                            outstanding_balance = VALUES(outstanding_balance),
+                            image_base64 = VALUES(image_base64)
+                    `, [c.id, c.name, c.phone, birthdayVal, c.favoriteItems || c.favorite_items || null, c.creditLimit ?? c.credit_limit ?? 0.00, c.outstandingBalance ?? c.outstanding_balance ?? 0.00, c.imageBase64 || c.image_base64 || null]);
+                } catch (custErr) {
+                    console.error('Error mirroring customer:', custErr.message);
+                }
             }
         }
 
         if (users && Array.isArray(users)) {
             for (const u of users) {
-                await db.query(`
-                    INSERT INTO users (id, name, username, password_hash, role, status, image_base64)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                    ON DUPLICATE KEY UPDATE
-                        name = VALUES(name),
-                        username = VALUES(username),
-                        role = VALUES(role),
-                        status = VALUES(status),
-                        image_base64 = VALUES(image_base64)
-                `, [u.id, u.name, u.username, u.passwordHash || u.password_hash || '$2a$10$KYVVXoS7ntUm8jLTGL7HgOe4Ff/NPByXj0z9wcMS/UwY2ZVglw7Y6', u.role, u.status || 'active', u.imageBase64 || u.image_base64 || null]);
+                try {
+                    await db.query(`
+                        INSERT INTO users (id, name, username, password_hash, role, status, image_base64)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        ON DUPLICATE KEY UPDATE
+                            name = VALUES(name),
+                            username = VALUES(username),
+                            role = VALUES(role),
+                            status = VALUES(status),
+                            image_base64 = VALUES(image_base64)
+                    `, [u.id, u.name, u.username, u.passwordHash || u.password_hash || '$2a$10$KYVVXoS7ntUm8jLTGL7HgOe4Ff/NPByXj0z9wcMS/UwY2ZVglw7Y6', u.role, u.status || 'active', u.imageBase64 || u.image_base64 || null]);
+                } catch (uErr) {
+                    console.error('Error mirroring user:', uErr.message);
+                }
             }
         }
 
-        res.json({ success: true, message: 'Catalog mirrored to local MySQL database successfully' });
+        if (ingredients && Array.isArray(ingredients)) {
+            for (const i of ingredients) {
+                try {
+                    await db.query(`
+                        INSERT INTO ingredients (id, name, stock_qty, unit, min_stock_level)
+                        VALUES (?, ?, ?, ?, ?)
+                        ON DUPLICATE KEY UPDATE
+                            name = VALUES(name),
+                            stock_qty = VALUES(stock_qty),
+                            unit = VALUES(unit),
+                            min_stock_level = VALUES(min_stock_level)
+                    `, [i.id, i.name, i.stock_qty ?? i.stockQty ?? 0.0, i.unit || 'kg', i.min_stock_level ?? i.minStockLevel ?? 0.0]);
+                } catch (iErr) {
+                    console.error('Error mirroring ingredient:', iErr.message);
+                }
+            }
+        }
+
+        if (happyHours && Array.isArray(happyHours)) {
+            for (const h of happyHours) {
+                try {
+                    await db.query(`
+                        INSERT INTO happy_hour_pricing (id, product_id, promo_price, start_time, end_time, days_of_week, name, category_id, status)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON DUPLICATE KEY UPDATE
+                            promo_price = VALUES(promo_price),
+                            start_time = VALUES(start_time),
+                            end_time = VALUES(end_time),
+                            days_of_week = VALUES(days_of_week),
+                            status = VALUES(status)
+                    `, [h.id, h.product_id || null, h.promo_price, h.start_time, h.end_time, h.days_of_week, h.name || null, h.category_id || null, h.status || 'active']);
+                } catch (hErr) {
+                    console.error('Error mirroring happy hour:', hErr.message);
+                }
+            }
+        }
+
+        if (offers && Array.isArray(offers)) {
+            for (const o of offers) {
+                try {
+                    await db.query(`
+                        INSERT INTO offers (id, title, name, description, discount_percentage, code, start_date, end_date, image_base64, status)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON DUPLICATE KEY UPDATE
+                            title = VALUES(title),
+                            name = VALUES(name),
+                            description = VALUES(description),
+                            discount_percentage = VALUES(discount_percentage),
+                            code = VALUES(code),
+                            start_date = VALUES(start_date),
+                            end_date = VALUES(end_date),
+                            status = VALUES(status)
+                    `, [o.id, o.title || null, o.name || null, o.description || null, o.discount_percentage ?? o.discountPercentage ?? 0.00, o.code || null, formatMySqlDate(o.start_date ?? o.startDate), formatMySqlDate(o.end_date ?? o.endDate), o.image_base64 || null, o.status || 'active']);
+                } catch (oErr) {
+                    console.error('Error mirroring offer:', oErr.message);
+                }
+            }
+        }
+
+        if (roles && Array.isArray(roles)) {
+            for (const r of roles) {
+                try {
+                    await db.query(`
+                        INSERT INTO roles (id, name) VALUES (?, ?)
+                        ON DUPLICATE KEY UPDATE name = VALUES(name)
+                    `, [r.id, r.name]);
+                } catch (rErr) {
+                    console.error('Error mirroring role:', rErr.message);
+                }
+            }
+        }
+
+        if (rolePermissions && Array.isArray(rolePermissions)) {
+            for (const rp of rolePermissions) {
+                try {
+                    await db.query(`
+                        INSERT INTO role_permissions (id, role_id, page, can_view, can_create, can_update, can_delete)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        ON DUPLICATE KEY UPDATE
+                            can_view = VALUES(can_view),
+                            can_create = VALUES(can_create),
+                            can_update = VALUES(can_update),
+                            can_delete = VALUES(can_delete)
+                    `, [rp.id, rp.role_id || rp.roleId, rp.page, rp.can_view ? 1 : 0, rp.can_create ? 1 : 0, rp.can_update ? 1 : 0, rp.can_delete ? 1 : 0]);
+                } catch (rpErr) {
+                    console.error('Error mirroring role permission:', rpErr.message);
+                }
+            }
+        }
+
+        if (suppliers && Array.isArray(suppliers)) {
+            for (const s of suppliers) {
+                try {
+                    await db.query(`
+                        INSERT INTO suppliers (id, name, company, phone, email, address, outstanding_balance, delivery_cycle)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        ON DUPLICATE KEY UPDATE
+                            name = VALUES(name),
+                            company = VALUES(company),
+                            phone = VALUES(phone),
+                            email = VALUES(email),
+                            address = VALUES(address),
+                            outstanding_balance = VALUES(outstanding_balance),
+                            delivery_cycle = VALUES(delivery_cycle)
+                    `, [s.id, s.name, s.company || null, s.phone || null, s.email || null, s.address || null, s.outstanding_balance ?? s.outstandingBalance ?? 0.00, s.delivery_cycle || s.deliveryCycle || 'Weekly']);
+                } catch (sErr) {
+                    console.error('Error mirroring supplier:', sErr.message);
+                }
+            }
+        }
+
+        if (globalSettings && Array.isArray(globalSettings)) {
+            for (const gs of globalSettings) {
+                try {
+                    await db.query(`
+                        INSERT INTO global_settings (setting_key, setting_value)
+                        VALUES (?, ?)
+                        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+                    `, [gs.setting_key || gs.settingKey, gs.setting_value || gs.settingValue]);
+                } catch (gsErr) {
+                    console.error('Error mirroring global setting:', gsErr.message);
+                }
+            }
+        }
+
+        res.json({ success: true, message: 'All persistent tables mirrored to Local MySQL database successfully' });
     } catch (err) {
         console.error('Error mirroring catalog to local MySQL:', err.message);
         res.status(500).json({ error: err.message });
     }
 });
+
 // ----------------------------------------------------
-// MASTER DATA SNAPSHOT (App local cache refresh)
+// MASTER DATA SNAPSHOT (All persistent MySQL tables)
 // ----------------------------------------------------
-// Returns all master data the app needs to populate its local SQLite cache.
-// Called by the Flutter SyncService on login, reconnect, and WebSocket 'database_synchronized' events.
 app.get('/api/master-data', authenticateToken, async (req, res) => {
     try {
-        // Categories
         const categories = await db.query("SELECT * FROM categories WHERE status = 'active'");
-
-        // Products with happy-hour pricing (reuse same logic as /api/products)
         const products = await db.query("SELECT * FROM products");
         const activeHappyHours = await db.query("SELECT * FROM happy_hour_pricing WHERE status = 'active'");
 
@@ -4954,191 +5268,211 @@ app.get('/api/master-data', authenticateToken, async (req, res) => {
             };
         });
 
-        // Users (exclude password hashes)
         const users = await db.query("SELECT id, name, username, role, email, phone, status, image_base64, category_id FROM users WHERE status = 'active'");
-
-        // Dining Tables
         const diningTables = await db.query("SELECT * FROM dining_tables");
-
-        // Shifts — return the most recent open shift (or last closed shift if none open)
         const shifts = await db.query("SELECT * FROM shifts ORDER BY start_time DESC LIMIT 10");
+        const customers = await db.query("SELECT * FROM customers");
+        const ingredients = await db.query("SELECT * FROM ingredients");
+        const happyHours = await db.query("SELECT * FROM happy_hour_pricing");
+        const offers = await db.query("SELECT * FROM offers");
+        const roles = await db.query("SELECT * FROM roles");
+        const rolePermissions = await db.query("SELECT * FROM role_permissions");
+        const preOrders = await db.query("SELECT * FROM pre_orders ORDER BY created_at DESC LIMIT 50");
+        const suppliers = await db.query("SELECT * FROM suppliers");
+        const globalSettings = await db.query("SELECT * FROM global_settings");
 
-        res.json({ categories, products: productsWithPricing, users, dining_tables: diningTables, shifts });
+        res.json({
+            categories,
+            products: productsWithPricing,
+            users,
+            dining_tables: diningTables,
+            shifts,
+            customers,
+            ingredients,
+            happy_hours: happyHours,
+            offers,
+            roles,
+            role_permissions: rolePermissions,
+            pre_orders: preOrders,
+            suppliers,
+            global_settings: globalSettings
+        });
     } catch (err) {
         console.error('Error fetching master data:', err.message);
         res.status(500).json({ error: err.message });
     }
 });
 
+
+
 // ----------------------------------------------------
-// OFFLINE DATA SYNC (Local → Server)
+// AUTOMATIC MYSQL DB-TO-DB BACKGROUND SYNC & PURGE
 // ----------------------------------------------------
-// Receives offline transactional data from the Flutter app and upserts it into MySQL.
-// Called by SyncService.pushOfflineDataToServer() when network reconnects.
-app.post('/api/sync', authenticateToken, async (req, res) => {
-    const { offline_orders, offline_shifts, offline_expenses, offline_stock_logs, offline_audit_logs } = req.body;
-    const results = { orders: 0, shifts: 0, expenses: 0, stock_logs: 0, audit_logs: 0 };
+const https = require('https');
+const httpModule = require('http');
+const { URL } = require('url');
 
-    try {
-        // --- Offline Orders ---
-        if (offline_orders && Array.isArray(offline_orders)) {
-            for (const order of offline_orders) {
-                // Skip if order already exists by order_number
-                const existing = await db.query('SELECT id FROM orders WHERE order_number = ?', [order.order_number]);
-                if (existing.length > 0) continue;
-
-                const insertResult = await db.query(`
-                    INSERT INTO orders (
-                        order_number, table_id, order_type, delivery_platform, customer_id,
-                        steward_name, status, payment_status, payment_method,
-                        subtotal, discount, total, cashier_id, shift_id,
-                        kot_printed, ack_printed, card_tx_reference, barcode,
-                        created_at, received_amount, change_amount
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                `, [
-                    order.order_number, order.table_id || null, order.order_type,
-                    order.delivery_platform || null, order.customer_id || null,
-                    order.steward_name || null, order.status || 'pending',
-                    order.payment_status || 'unpaid', order.payment_method || null,
-                    order.subtotal || 0, order.discount || 0, order.total || 0,
-                    order.cashier_id, order.shift_id,
-                    order.kot_printed ? 1 : 0, order.ack_printed ? 1 : 0,
-                    order.card_tx_reference || null, order.barcode || order.order_number,
-                    order.created_at || new Date().toISOString(),
-                    order.received_amount || 0, order.change_amount || 0
-                ]);
-
-                const newOrderId = insertResult.insertId;
-
-                // Insert order items — saving all columns during sync
-                const items = order.items || [];
-                for (const item of items) {
-                    if (item.product_id) {
-                        const [pRows] = await db.query('SELECT id FROM products WHERE id = ?', [item.product_id]);
-                        if (pRows.length === 0) {
-                            await db.query(`
-                                INSERT INTO products (id, name, sinhala_name, category_id, price, cost, barcode, status)
-                                VALUES (?, ?, ?, 1, ?, 0.00, ?, 'active')
-                                ON DUPLICATE KEY UPDATE name = VALUES(name)
-                            `, [
-                                item.product_id,
-                                item.product_name || item.name || `Product #${item.product_id}`,
-                                item.product_sinhala_name || item.sinhala_name || null,
-                                item.price || 0.00,
-                                `AUTOGEN_${item.product_id}`
-                            ]);
-                        }
+function makeSyncRequest(urlStr, method, data, token) {
+    return new Promise((resolve, reject) => {
+        try {
+            const parsedUrl = new URL(urlStr);
+            const isHttps = parsedUrl.protocol === 'https:';
+            const lib = isHttps ? https : httpModule;
+            const payload = data ? JSON.stringify(data) : null;
+            const options = {
+                hostname: parsedUrl.hostname,
+                port: parsedUrl.port || (isHttps ? 443 : 80),
+                path: parsedUrl.pathname + parsedUrl.search,
+                method: method,
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                },
+                timeout: 10000
+            };
+            if (payload) {
+                options.headers['Content-Length'] = Buffer.byteLength(payload);
+            }
+            const req = lib.request(options, (res) => {
+                let body = '';
+                res.setEncoding('utf8');
+                res.on('data', chunk => body += chunk);
+                res.on('end', () => {
+                    if (res.statusCode >= 200 && res.statusCode < 300) {
+                        try { resolve(JSON.parse(body)); } catch (_) { resolve(body); }
+                    } else {
+                        reject(new Error(`HTTP ${res.statusCode}: ${body}`));
                     }
-                    await db.query(`
-                        INSERT INTO order_items (
-                            order_id, order_number, product_id, product_name, product_sinhala_name,
-                            quantity, price, notes, status, is_short_eat
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    `, [
-                        newOrderId, order.order_number, item.product_id,
-                        item.product_name || item.name || 'Product', item.product_sinhala_name || item.sinhala_name || null,
-                        item.quantity || 1, item.price || 0,
-                        item.notes || null, item.status || 'pending',
-                        item.is_short_eat ? 1 : 0
-                    ]);
+                });
+            });
+            req.on('error', err => reject(err));
+            req.on('timeout', () => { req.destroy(); reject(new Error('Request timed out')); });
+            if (payload) req.write(payload);
+            req.end();
+        } catch (e) {
+            reject(e);
+        }
+    });
+}
 
-                    // Deduct stock if tracked product
-                    try {
-                        await db.query(
-                            'UPDATE products SET stock_qty = stock_qty - ? WHERE id = ? AND track_stock = 1',
-                            [item.quantity || 1, item.product_id]
-                        );
-                    } catch (_) {}
-                }
+async function performDbToDbSync() {
+    const remoteUrl = process.env.REMOTE_SERVER_URL || 'https://pos0001.perpova.dev';
+    if (process.env.IS_REMOTE_SERVER === 'true') {
+        return { success: true, synced_orders_count: 0, message: 'Running as remote server — no DB sync required' };
+    }
 
-                // Update customer outstanding balance if credit order
-                if (order.payment_method === 'credit' && order.customer_id) {
-                    try {
-                        await db.query(
-                            'UPDATE customers SET outstanding_balance = outstanding_balance + ? WHERE id = ?',
-                            [order.total || 0, order.customer_id]
-                        );
-                    } catch (_) {}
-                }
+    // Generate valid system admin token for authenticated server-to-server endpoints
+    const systemToken = jwt.sign({ id: 1, username: 'system_autosync', role: 'admin' }, JWT_SECRET, { expiresIn: '1h' });
 
-                results.orders++;
-            }
+    let syncedOrdersCount = 0;
+    // 1. Sync pending local MySQL Workbench orders to Remote Server DB
+    const localOrders = await db.query('SELECT * FROM orders');
+    if (localOrders.length > 0) {
+        const ordersWithItems = [];
+        for (const order of localOrders) {
+            const items = await db.query('SELECT * FROM order_items WHERE order_id = ? OR order_number = ?', [order.id, order.order_number]);
+            ordersWithItems.push({
+                ...order,
+                items
+            });
         }
 
-        // --- Offline Shifts ---
-        if (offline_shifts && Array.isArray(offline_shifts)) {
-            for (const shift of offline_shifts) {
-                await db.query(`
-                    INSERT INTO shifts (id, user_id, start_time, end_time, opening_balance, closing_balance, actual_closing_balance, status)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    ON DUPLICATE KEY UPDATE
-                        end_time = VALUES(end_time),
-                        closing_balance = VALUES(closing_balance),
-                        actual_closing_balance = VALUES(actual_closing_balance),
-                        status = VALUES(status)
-                `, [
-                    shift.id, shift.user_id, shift.start_time,
-                    shift.end_time || null, shift.opening_balance || 0,
-                    shift.closing_balance || 0, shift.actual_closing_balance || 0,
-                    shift.status || 'open'
-                ]);
-                results.shifts++;
+        try {
+            const syncResult = await makeSyncRequest(`${remoteUrl}/api/sync`, 'POST', { offline_orders: ordersWithItems }, systemToken);
+            if (syncResult && syncResult.synced_orders && Array.isArray(syncResult.synced_orders) && syncResult.synced_orders.length > 0) {
+                syncedOrdersCount = syncResult.synced_orders.length;
+                const placeholders = syncResult.synced_orders.map(() => '?').join(',');
+                await db.query(`DELETE FROM order_items WHERE order_number IN (${placeholders})`, syncResult.synced_orders);
+                await db.query(`DELETE FROM orders WHERE order_number IN (${placeholders})`, syncResult.synced_orders);
+                console.log(`[AutoSync] Successfully pushed ${syncedOrdersCount} local orders to Remote Server & purged from Local MySQL Workbench DB ✓`);
+                broadcast({ type: 'database_synchronized', source: 'db_to_db_sync' });
             }
+        } catch (orderSyncErr) {
+            console.error('[AutoSync] Order sync error to remote server:', orderSyncErr.message);
+            throw orderSyncErr;
         }
+    }
 
-        // --- Offline Expenses ---
-        if (offline_expenses && Array.isArray(offline_expenses)) {
-            for (const expense of offline_expenses) {
-                try {
-                    await db.query(`
-                        INSERT IGNORE INTO expenses (id, title, amount, category, payment_source, recorded_by, expense_date, created_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    `, [
-                        expense.id, expense.title, expense.amount, expense.category,
-                        expense.payment_source, expense.recorded_by,
-                        expense.expense_date, expense.created_at || new Date().toISOString()
-                    ]);
-                    results.expenses++;
-                } catch (_) {}
-            }
-        }
+    // 2. Sync local master catalog to Remote Server DB
+    const localProducts = await db.query('SELECT * FROM products');
+    const localCategories = await db.query('SELECT * FROM categories');
+    const localCustomers = await db.query('SELECT * FROM customers');
+    const localUsers = await db.query("SELECT id, name, username, role, email, phone, status, image_base64, category_id FROM users");
+    const localIngredients = await db.query('SELECT * FROM ingredients');
+    const localHappyHours = await db.query('SELECT * FROM happy_hour_pricing');
+    const localOffers = await db.query('SELECT * FROM offers');
+    const localDiningTables = await db.query('SELECT * FROM dining_tables');
+    const localRoles = await db.query('SELECT * FROM roles');
+    const localRolePermissions = await db.query('SELECT * FROM role_permissions');
+    const localSuppliers = await db.query('SELECT * FROM suppliers');
+    const localGlobalSettings = await db.query('SELECT * FROM global_settings');
 
-        // --- Offline Stock Logs ---
-        if (offline_stock_logs && Array.isArray(offline_stock_logs)) {
-            for (const log of offline_stock_logs) {
-                try {
-                    await db.query(
-                        'INSERT INTO stock_logs (product_id, change_qty, type, reason, user_id, timestamp) VALUES (?, ?, ?, ?, ?, ?)',
-                        [log.product_id, log.change_qty, log.type, log.reason || null, log.user_id, log.timestamp || new Date().toISOString()]
-                    );
-                    await db.query('UPDATE products SET stock_qty = stock_qty + ? WHERE id = ?', [log.change_qty, log.product_id]);
-                    results.stock_logs++;
-                } catch (_) {}
-            }
-        }
+    if (localProducts.length > 0 || localCategories.length > 0) {
+        try {
+            await makeSyncRequest(`${remoteUrl}/api/sync/mirror-catalog`, 'POST', {
+                categories: localCategories,
+                products: localProducts,
+                customers: localCustomers,
+                users: localUsers,
+                ingredients: localIngredients,
+                happyHours: localHappyHours,
+                offers: localOffers,
+                diningTables: localDiningTables,
+                roles: localRoles,
+                rolePermissions: localRolePermissions,
+                suppliers: localSuppliers,
+                globalSettings: localGlobalSettings
+            }, systemToken);
+        } catch (_) {}
+    }
 
-        // --- Offline Audit Logs ---
-        if (offline_audit_logs && Array.isArray(offline_audit_logs)) {
-            for (const log of offline_audit_logs) {
-                try {
-                    await db.query(
-                        'INSERT INTO audit_logs (action_type, table_name, record_id, details, user_id, timestamp) VALUES (?, ?, ?, ?, ?, ?)',
-                        [log.action_type, log.table_name || null, log.record_id || null, log.details, log.user_id, log.timestamp || new Date().toISOString()]
-                    );
-                    results.audit_logs++;
-                } catch (_) {}
-            }
-        }
+    return {
+        success: true,
+        synced_orders_count: syncedOrdersCount,
+        message: syncedOrdersCount > 0
+            ? `Successfully pushed ${syncedOrdersCount} orders from Local MySQL Workbench DB to Remote Server DB!`
+            : `Local MySQL Workbench database is fully synchronized with Remote Server DB.`
+    };
+}
 
-        // Notify all connected clients that data was synchronized
-        broadcast({ type: 'database_synchronized', source: 'offline_sync' });
+// GET Local MySQL DB Sync Status
+app.get('/api/sync/status', async (req, res) => {
+    try {
+        const orderRows = await db.query('SELECT COUNT(*) as cnt FROM orders');
+        const localOrdersCount = orderRows[0]?.cnt || 0;
+        const remoteUrl = process.env.REMOTE_SERVER_URL || 'https://pos0001.perpova.dev';
 
-        res.json({ success: true, synced: true, counts: results });
+        res.json({
+            local_orders_count: localOrdersCount,
+            remote_url: remoteUrl,
+            is_remote_server: process.env.IS_REMOTE_SERVER === 'true'
+        });
     } catch (err) {
-        console.error('Offline sync error:', err.message);
         res.status(500).json({ error: err.message });
     }
 });
+
+// POST Trigger Manual Local DB to Remote Server DB Sync
+app.post('/api/sync/trigger-db-to-db', async (req, res) => {
+    try {
+        const result = await performDbToDbSync();
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+let isBackgroundDBSyncing = false;
+setInterval(async () => {
+    if (isBackgroundDBSyncing) return;
+    isBackgroundDBSyncing = true;
+    try {
+        await performDbToDbSync();
+    } catch (_) {
+    } finally {
+        isBackgroundDBSyncing = false;
+    }
+}, 10000);
 
 // Start Server and Init Database
 server.listen(PORT, async () => {

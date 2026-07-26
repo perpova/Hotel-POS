@@ -9,6 +9,13 @@ DateTime parseServerDateTime(dynamic dateInput) {
   if (dateStr.isEmpty) return DateTime.now();
 
   try {
+    if (dateStr.endsWith('Z') || dateStr.contains('+') || dateStr.contains('T')) {
+      final parsedIso = DateTime.tryParse(dateStr);
+      if (parsedIso != null) {
+        return parsedIso.toLocal();
+      }
+    }
+
     String s = dateStr.replaceAll('T', ' ');
     if (s.contains('+')) s = s.split('+').first.trim();
     if (s.contains('Z')) s = s.replaceAll('Z', '').trim();
@@ -30,7 +37,9 @@ DateTime parseServerDateTime(dynamic dateInput) {
     }
   } catch (_) {}
 
-  return DateTime.tryParse(dateStr) ?? DateTime.now();
+  final tryDt = DateTime.tryParse(dateStr);
+  if (tryDt != null) return tryDt.toLocal();
+  return DateTime.now();
 }
 
 /// Formats a server date string into a standard display string (e.g., "07:07 PM, 24-07-2026")

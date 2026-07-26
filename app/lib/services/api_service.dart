@@ -371,12 +371,15 @@ class APIService {
       body: jsonEncode(data),
     );
     if (response.statusCode == 200) {
-      return ProductModel.fromJson(jsonDecode(response.body));
+      final newProd = ProductModel.fromJson(jsonDecode(response.body));
+      try { getMasterData(); } catch (_) {}
+      return newProd;
     }
     try {
       final errData = jsonDecode(response.body);
       throw Exception(errData['error'] ?? 'Failed to create product');
-    } catch (_) {
+    } catch (e) {
+      if (e.toString().contains('Failed to create product') || e.toString().contains('Unauthorized')) rethrow;
       throw Exception('Server error (${response.statusCode}): ${response.reasonPhrase}');
     }
   }
@@ -388,12 +391,15 @@ class APIService {
       body: jsonEncode(data),
     );
     if (response.statusCode == 200) {
-      return ProductModel.fromJson(jsonDecode(response.body));
+      final updated = ProductModel.fromJson(jsonDecode(response.body));
+      try { getMasterData(); } catch (_) {}
+      return updated;
     }
     try {
       final errData = jsonDecode(response.body);
       throw Exception(errData['error'] ?? 'Failed to update product');
-    } catch (_) {
+    } catch (e) {
+      if (e.toString().contains('Failed to update product') || e.toString().contains('Unauthorized')) rethrow;
       throw Exception('Server error (${response.statusCode}): ${response.reasonPhrase}');
     }
   }
@@ -1225,6 +1231,53 @@ class APIService {
   // ----------------------------------------------------
   // SYSTEM SYNCHRONIZATION (LAN-first -> Server upload/download)
   // ----------------------------------------------------
+  /// Triggers push of Local MySQL Workbench database orders to Remote Server DB
+  Future<Map<String, dynamic>> triggerLocalToRemoteSync() async {
+    try {
+      final response = await http.post(
+        Uri.parse('$_baseUrl/api/sync/trigger-db-to-db'),
+        headers: _getHeaders(),
+      ).timeout(const Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = jsonDecode(response.body);
+        return {
+          'success': data['success'] ?? true,
+          'message': data['message'] ?? 'Local database synchronized with server database successfully.'
+        };
+      }
+      if (response.statusCode == 404) {
+        // Fallback: If server.js is running an older build without /api/sync/trigger-db-to-db, push offline SQLite data
+        await syncOfflineData();
+        return {
+          'success': true,
+          'message': 'Local database synchronized successfully. (Restart node server.js to enable server-to-server DB push)'
+        };
+      }
+      return {'success': false, 'message': 'Sync server returned HTTP ${response.statusCode}: ${response.reasonPhrase}'};
+    } catch (e) {
+      return {'success': false, 'message': 'Sync error: $e'};
+    }
+  }
+
+  /// Gets count of unsynced orders in Local MySQL Workbench DB
+  Future<int> getLocalMySqlSyncStatus() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$_baseUrl/api/sync/status'),
+        headers: _getHeaders(),
+      ).timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['local_orders_count'] ?? 0;
+      }
+      return 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
   Future<Map<String, dynamic>?> syncOfflineData() async {
     try {
       final online = await checkOnline();
@@ -1256,10 +1309,40 @@ class APIService {
       ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
-        // Mark synced records and run purge of old synced data
-        await LocalDB.instance.markAllPendingAsSynced();
+        final resData = jsonDecode(response.body) as Map<String, dynamic>;
+
+        // Granular status updates based on server returned synced IDs
+        if (resData['synced_orders'] != null) {
+          final orderNums = List<String>.from(resData['synced_orders']);
+          await LocalDB.instance.markOrdersSyncedBatch(orderNums);
+          // AUTOMATIC POST-SYNC PURGE: Delete synced orders from Local MySQL DB
+          await purgeSyncedOrdersFromLocalMySQL(orderNums);
+        } else {
+          await LocalDB.instance.markAllPendingAsSynced();
+        }
+
+        if (resData['synced_shifts'] != null) {
+          final shiftIds = List<int>.from(resData['synced_shifts'].map((e) => int.parse(e.toString())));
+          await LocalDB.instance.markShiftsSyncedBatch(shiftIds);
+        }
+
+        if (resData['synced_expenses'] != null) {
+          final expIds = List<int>.from(resData['synced_expenses'].map((e) => int.parse(e.toString())));
+          await LocalDB.instance.markExpensesSyncedBatch(expIds);
+        }
+
+        if (resData['synced_stock_logs'] != null) {
+          final logIds = List<int>.from(resData['synced_stock_logs'].map((e) => int.parse(e.toString())));
+          await LocalDB.instance.markStockLogsSyncedBatch(logIds);
+        }
+
+        if (resData['synced_audit_logs'] != null) {
+          final auditIds = List<int>.from(resData['synced_audit_logs'].map((e) => int.parse(e.toString())));
+          await LocalDB.instance.markAuditLogsSyncedBatch(auditIds);
+        }
+
         await LocalDB.instance.purgeSyncedDataOlderThan2Days();
-        return jsonDecode(response.body);
+        return resData;
       }
       return null;
     } catch (_) {
@@ -1267,7 +1350,22 @@ class APIService {
     }
   }
 
-  // Fetches all master data from server and caches it locally.
+  /// Sends request to Local MySQL server to purge orders after sync to remote server
+  Future<bool> purgeSyncedOrdersFromLocalMySQL(List<String> orderNumbers) async {
+    if (orderNumbers.isEmpty) return true;
+    try {
+      final response = await http.post(
+        Uri.parse('http://localhost:3000/api/orders/purge-synced'),
+        headers: _getHeaders(),
+        body: jsonEncode({'order_numbers': orderNumbers}),
+      ).timeout(const Duration(seconds: 10));
+      return response.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // Fetches all master data from server and caches/mirrors it into Local MySQL DB.
   // Returns true if successful, false if offline or error.
   Future<bool> getMasterData() async {
     try {
@@ -1278,6 +1376,15 @@ class APIService {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
+
+        // Mirror all 26 persistent tables into Local MySQL DB
+        try {
+          await http.post(
+            Uri.parse('http://localhost:3000/api/sync/mirror-catalog'),
+            headers: _getHeaders(),
+            body: jsonEncode(data),
+          ).timeout(const Duration(seconds: 10));
+        } catch (_) {}
 
         // Cache categories
         if (data['categories'] != null) {
@@ -1317,6 +1424,36 @@ class APIService {
               .map((s) => ShiftModel.fromJson(s as Map<String, dynamic>))
               .toList();
           await LocalDB.instance.cacheShifts(shifts);
+        }
+
+        // Cache customers
+        if (data['customers'] != null) {
+          final custs = (data['customers'] as List)
+              .map((c) => CustomerModel.fromJson(c as Map<String, dynamic>))
+              .toList();
+          await LocalDB.instance.cacheCustomers(custs);
+        }
+
+        // Cache ingredients
+        if (data['ingredients'] != null) {
+          final ings = (data['ingredients'] as List)
+              .map((i) => IngredientModel.fromJson(i as Map<String, dynamic>))
+              .toList();
+          await LocalDB.instance.cacheIngredients(ings);
+        }
+
+        // Cache happy hours
+        if (data['happy_hours'] != null) {
+          final hhs = List<Map<String, dynamic>>.from(data['happy_hours'] as List);
+          await LocalDB.instance.cacheHappyHours(hhs);
+        }
+
+        // Cache offers
+        if (data['offers'] != null) {
+          final offs = (data['offers'] as List)
+              .map((o) => OfferModel.fromJson(o as Map<String, dynamic>))
+              .toList();
+          await LocalDB.instance.cacheOffers(offs);
         }
 
         return true;

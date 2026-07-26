@@ -359,9 +359,139 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
         ]),
+        const SizedBox(height: 32),
+        Divider(color: AppTheme.dividerColor),
+        const SizedBox(height: 20),
+
+        // Local DB Data to Server DB Sync Section
+        Text('Local Database to Server DB Sync', style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
+        const SizedBox(height: 8),
+        Text('Manually push all offline transaction records stored in local SQLite DB to the central server DB, and pull updated catalog data.',
+            style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
+        const SizedBox(height: 20),
+
+        Consumer<POSController>(
+          builder: (ctx, pos, _) {
+            final pending = pos.pendingCountsBreakdown;
+            final totalPending = pos.pendingSyncCount;
+            final isSyncing = pos.isManualSyncing;
+            final isOnline = pos.isOnline;
+
+            return Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: AppTheme.bgLight,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppTheme.borderLight),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.storage_rounded, color: AppTheme.primary, size: 20),
+                          const SizedBox(width: 10),
+                          Text('Database Synchronization Status', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
+                        ],
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: totalPending > 0 ? AppTheme.warning.withOpacity(0.15) : AppTheme.accent.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          totalPending > 0 ? '$totalPending Pending Items' : 'All Data Synced ✓',
+                          style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: totalPending > 0 ? AppTheme.warning : AppTheme.accent),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(child: _buildSettingSyncTile('Offline Orders', '${pending['orders_total'] ?? 0} saved (${pending['orders'] ?? 0} pending)', Icons.receipt_long_outlined)),
+                      const SizedBox(width: 12),
+                      Expanded(child: _buildSettingSyncTile('Offline Shifts', '${pending['shifts'] ?? 0} pending', Icons.monetization_on_outlined)),
+                      const SizedBox(width: 12),
+                      Expanded(child: _buildSettingSyncTile('Offline Expenses', '${pending['expenses'] ?? 0} pending', Icons.account_balance_wallet_outlined)),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(child: _buildSettingSyncTile('Stock Logs', '${pending['stock_logs'] ?? 0} pending', Icons.inventory_2_outlined)),
+                      const SizedBox(width: 12),
+                      Expanded(child: _buildSettingSyncTile('Audit Logs', '${pending['audit_logs'] ?? 0} pending', Icons.assignment_outlined)),
+                      const SizedBox(width: 12),
+                      Expanded(child: _buildSettingSyncTile('Server Connection', isOnline ? 'Online' : 'Offline', isOnline ? Icons.cloud_done_rounded : Icons.cloud_off_rounded, isSuccess: isOnline)),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  ElevatedButton.icon(
+                    onPressed: (isSyncing || !isOnline)
+                        ? null
+                        : () async {
+                            final res = await pos.performManualSync();
+                            if (!mounted) return;
+                            _snack(
+                              res['message'] ?? 'Sync completed.',
+                              isError: res['success'] != true,
+                            );
+                          },
+                    icon: isSyncing
+                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : const Icon(Icons.sync_alt_rounded, size: 18),
+                    label: Text(
+                      isSyncing ? 'Syncing Local DB to Server DB...' : 'Sync Local DB Data to Server DB Now',
+                      style: GoogleFonts.inter(fontWeight: FontWeight.bold),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF1E293B),
+                      foregroundColor: Colors.white,
+                      disabledBackgroundColor: const Color(0xFF1E293B).withOpacity(0.5),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
       ]),
     );
   }
+
+  Widget _buildSettingSyncTile(String title, String subtitle, IconData icon, {bool? isSuccess}) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.cardLight,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppTheme.borderLight),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: isSuccess == true ? AppTheme.accent : (subtitle.contains('0 pending') ? AppTheme.textLightSecondary : AppTheme.warning)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textLightPrimary), overflow: TextOverflow.ellipsis),
+                Text(subtitle, style: GoogleFonts.inter(fontSize: 10, color: AppTheme.textLightSecondary), overflow: TextOverflow.ellipsis),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
 
   // ── Shared ────────────────────────────────────────────────────────────────
   Widget _field(String label, TextEditingController ctrl,

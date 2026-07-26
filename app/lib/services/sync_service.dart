@@ -82,8 +82,11 @@ class SyncService {
     _isSyncing = true;
     try {
       debugPrint('[SyncService] Network reconnected — starting sync');
-      await pushOfflineDataToServer();
-      await refreshMasterDataFromServer();
+      final pushRes = await pushOfflineDataToServer();
+      final masterRes = await refreshMasterDataFromServer();
+      if (pushRes != null || masterRes) {
+        APIService.instance.sendWebSocketMessage({'type': 'database_synchronized', 'source': 'reconnect'});
+      }
     } catch (e) {
       debugPrint('[SyncService] Reconnect sync error: $e');
     } finally {

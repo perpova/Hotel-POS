@@ -1,11 +1,12 @@
 import 'dart:convert';
-import 'dart:io' show Platform;
+import 'dart:io' show Platform, Directory;
 import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart' as p;
 import 'package:hotel_pos/models/models.dart';
+import 'api_service.dart';
 
 class LocalDB {
   static final LocalDB instance = LocalDB._init();
@@ -33,11 +34,18 @@ class LocalDB {
 
   Future<Database> _initDB(String filePath) async {
     final dbPath = await getDatabasesPath();
+    try {
+      final dbDir = Directory(dbPath);
+      if (!dbDir.existsSync()) {
+        dbDir.createSync(recursive: true);
+      }
+    } catch (_) {}
+
     final path = p.join(dbPath, filePath);
 
     return await openDatabase(
       path,
-      version: 3,
+      version: 4,
       onCreate: _createDB,
       onUpgrade: _onUpgradeDB,
     );
@@ -56,6 +64,11 @@ class LocalDB {
       await db.execute('CREATE TABLE IF NOT EXISTS cached_tables (id INTEGER PRIMARY KEY, table_number TEXT, capacity INTEGER, status TEXT, current_order_id INTEGER, steward_name TEXT)');
       await db.execute('CREATE TABLE IF NOT EXISTS cached_customers (id INTEGER PRIMARY KEY, name TEXT, phone TEXT, birthday TEXT, credit_limit REAL, outstanding_balance REAL, favorite_items TEXT)');
       await db.execute('CREATE TABLE IF NOT EXISTS cached_users (id INTEGER PRIMARY KEY, name TEXT, username TEXT, role TEXT, phone TEXT, image_base64 TEXT, status TEXT)');
+    }
+    if (oldVersion < 4) {
+      await db.execute('CREATE TABLE IF NOT EXISTS cached_ingredients (id INTEGER PRIMARY KEY, name TEXT, stock_qty REAL, unit TEXT, min_stock_level REAL)');
+      await db.execute('CREATE TABLE IF NOT EXISTS cached_happy_hours (id INTEGER PRIMARY KEY, json_data TEXT)');
+      await db.execute('CREATE TABLE IF NOT EXISTS cached_offers (id INTEGER PRIMARY KEY, json_data TEXT)');
     }
   }
 
@@ -177,6 +190,9 @@ class LocalDB {
     await db.execute('CREATE TABLE IF NOT EXISTS cached_customers (id INTEGER PRIMARY KEY, name TEXT, phone TEXT, birthday TEXT, credit_limit REAL, outstanding_balance REAL, favorite_items TEXT)');
     await db.execute('CREATE TABLE IF NOT EXISTS cached_users (id INTEGER PRIMARY KEY, name TEXT, username TEXT, role TEXT, phone TEXT, image_base64 TEXT, status TEXT)');
     await db.execute('CREATE TABLE IF NOT EXISTS cached_shifts (id INTEGER PRIMARY KEY, user_id INTEGER, start_time TEXT, end_time TEXT, opening_balance REAL, closing_balance REAL, actual_closing_balance REAL, status TEXT)');
+    await db.execute('CREATE TABLE IF NOT EXISTS cached_ingredients (id INTEGER PRIMARY KEY, name TEXT, stock_qty REAL, unit TEXT, min_stock_level REAL)');
+    await db.execute('CREATE TABLE IF NOT EXISTS cached_happy_hours (id INTEGER PRIMARY KEY, json_data TEXT)');
+    await db.execute('CREATE TABLE IF NOT EXISTS cached_offers (id INTEGER PRIMARY KEY, json_data TEXT)');
   }
 
   // ----------------------------------------------------
@@ -908,4 +924,381 @@ class LocalDB {
           where: 'id = ?', whereArgs: [shiftId]);
     }
   }
+
+  // ----------------------------------------------------
+  // INGREDIENTS, HAPPY HOURS, OFFERS LOCAL MIRROR CACHE
+  // ----------------------------------------------------
+  Future<void> cacheIngredients(List<IngredientModel> ingredients) async {
+    if (kIsWeb) {
+      await _webSaveList('cached_ingredients', ingredients.map((i) => i.toJson()).toList());
+    } else {
+      final db = await instance.database;
+      try {
+        final batch = db.batch();
+        batch.delete('cached_ingredients');
+        for (var i in ingredients) {
+          batch.insert('cached_ingredients', {
+            'id': i.id,
+            'name': i.name,
+            'stock_qty': i.stockQty,
+            'unit': i.unit,
+            'min_stock_level': i.minStockLevel,
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+        await batch.commit(noResult: true);
+      } catch (e) {
+        await db.execute('CREATE TABLE IF NOT EXISTS cached_ingredients (id INTEGER PRIMARY KEY, name TEXT, stock_qty REAL, unit TEXT, min_stock_level REAL)');
+      }
+    }
+  }
+
+  Future<List<IngredientModel>> getCachedIngredients() async {
+    if (kIsWeb) {
+      final list = await _webGetList('cached_ingredients');
+      return list.map((i) => IngredientModel.fromJson(Map<String, dynamic>.from(i))).toList();
+    } else {
+      final db = await instance.database;
+      try {
+        final maps = await db.query('cached_ingredients');
+        return maps.map((i) => IngredientModel.fromJson(i)).toList();
+      } catch (e) {
+        return [];
+      }
+    }
+  }
+
+  Future<void> cacheHappyHours(List<Map<String, dynamic>> happyHours) async {
+    if (kIsWeb) {
+      await _webSaveList('cached_happy_hours', happyHours);
+    } else {
+      final db = await instance.database;
+      try {
+        final batch = db.batch();
+        batch.delete('cached_happy_hours');
+        for (var h in happyHours) {
+          batch.insert('cached_happy_hours', {
+            'id': h['id'],
+            'json_data': jsonEncode(h),
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+        await batch.commit(noResult: true);
+      } catch (e) {
+        await db.execute('CREATE TABLE IF NOT EXISTS cached_happy_hours (id INTEGER PRIMARY KEY, json_data TEXT)');
+      }
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getCachedHappyHours() async {
+    if (kIsWeb) {
+      return await _webGetList('cached_happy_hours');
+    } else {
+      final db = await instance.database;
+      try {
+        final maps = await db.query('cached_happy_hours');
+        return maps.map((h) => jsonDecode(h['json_data'] as String) as Map<String, dynamic>).toList();
+      } catch (e) {
+        return [];
+      }
+    }
+  }
+
+  Future<void> cacheOffers(List<OfferModel> offers) async {
+    if (kIsWeb) {
+      await _webSaveList('cached_offers', offers.map((o) => o.toJson()).toList());
+    } else {
+      final db = await instance.database;
+      try {
+        final batch = db.batch();
+        batch.delete('cached_offers');
+        for (var o in offers) {
+          batch.insert('cached_offers', {
+            'id': o.id,
+            'json_data': jsonEncode(o.toJson()),
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+        await batch.commit(noResult: true);
+      } catch (e) {
+        await db.execute('CREATE TABLE IF NOT EXISTS cached_offers (id INTEGER PRIMARY KEY, json_data TEXT)');
+      }
+    }
+  }
+
+  Future<List<OfferModel>> getCachedOffers() async {
+    if (kIsWeb) {
+      final list = await _webGetList('cached_offers');
+      return list.map((o) => OfferModel.fromJson(Map<String, dynamic>.from(o))).toList();
+    } else {
+      final db = await instance.database;
+      try {
+        final maps = await db.query('cached_offers');
+        return maps.map((o) => OfferModel.fromJson(jsonDecode(o['json_data'] as String))).toList();
+      } catch (e) {
+        return [];
+      }
+    }
+  }
+
+  // Batch mark synced helpers
+  Future<void> markOrdersSyncedBatch(List<String> orderNumbers) async {
+    if (orderNumbers.isEmpty) return;
+    for (var num in orderNumbers) {
+      await markOrderSynced(num);
+    }
+  }
+
+  Future<void> markShiftsSyncedBatch(List<int> shiftIds) async {
+    if (shiftIds.isEmpty) return;
+    for (var id in shiftIds) {
+      await markShiftSynced(id);
+    }
+  }
+
+  Future<void> markExpensesSyncedBatch(List<int> expenseIds) async {
+    if (expenseIds.isEmpty) return;
+    if (kIsWeb) {
+      final expenses = await _webGetList('offline_expenses');
+      for (var e in expenses) {
+        if (expenseIds.contains(e['id'])) e['sync_status'] = 'synced';
+      }
+      await _webSaveList('offline_expenses', expenses);
+    } else {
+      final db = await instance.database;
+      final batch = db.batch();
+      for (var id in expenseIds) {
+        batch.update('offline_expenses', {'sync_status': 'synced'}, where: 'id = ?', whereArgs: [id]);
+      }
+      await batch.commit(noResult: true);
+    }
+  }
+
+  Future<void> markStockLogsSyncedBatch(List<int> ids) async {
+    if (ids.isEmpty) return;
+    if (kIsWeb) {
+      final logs = await _webGetList('offline_stock_logs');
+      for (var l in logs) {
+        if (ids.contains(l['id'])) l['sync_status'] = 'synced';
+      }
+      await _webSaveList('offline_stock_logs', logs);
+    } else {
+      final db = await instance.database;
+      final batch = db.batch();
+      for (var id in ids) {
+        batch.update('offline_stock_logs', {'sync_status': 'synced'}, where: 'id = ?', whereArgs: [id]);
+      }
+      await batch.commit(noResult: true);
+    }
+  }
+
+  Future<void> markAuditLogsSyncedBatch(List<int> ids) async {
+    if (ids.isEmpty) return;
+    if (kIsWeb) {
+      final logs = await _webGetList('offline_audit_logs');
+      for (var l in logs) {
+        if (ids.contains(l['id'])) l['sync_status'] = 'synced';
+      }
+      await _webSaveList('offline_audit_logs', logs);
+    } else {
+      final db = await instance.database;
+      final batch = db.batch();
+      for (var id in ids) {
+        batch.update('offline_audit_logs', {'sync_status': 'synced'}, where: 'id = ?', whereArgs: [id]);
+      }
+      await batch.commit(noResult: true);
+    }
+  }
+
+  /// Fetches all orders saved in Local DB (both pending and synced)
+  Future<List<OrderModel>> getAllOrders() async {
+    try {
+      if (kIsWeb) {
+        final orders = await _webGetList('offline_orders');
+        final items = await _webGetList('offline_order_items');
+        return orders.map((o) {
+          final oNum = o['order_number'];
+          final orderItems = items
+              .where((i) => i['order_number'] == oNum)
+              .map((i) => OrderItemModel.fromJson(i))
+              .toList();
+          o['items'] = orderItems.map((i) => i.toJson()).toList();
+          return OrderModel.fromJson(o);
+        }).toList();
+      } else {
+        final db = await instance.database;
+        final orderMaps = await db.query('offline_orders', orderBy: 'id DESC');
+        
+        List<OrderModel> orders = [];
+        for (var map in orderMaps) {
+          final orderNumber = map['order_number'] as String;
+          final itemMaps = await db.query('offline_order_items', where: 'order_number = ?', whereArgs: [orderNumber]);
+          
+          List<OrderItemModel> items = itemMaps.map((i) => OrderItemModel(
+            productId: i['product_id'] as int,
+            productName: i['product_name'] as String,
+            productSinhalaName: i['product_sinhala_name'] as String?,
+            quantity: i['quantity'] as int,
+            price: toDouble(i['price']),
+            notes: i['notes'] as String?,
+            status: i['status'] as String,
+            isShortEat: i['is_short_eat'] == 1,
+          )).toList();
+
+          orders.add(OrderModel(
+            id: map['id'] as int?,
+            orderNumber: orderNumber,
+            tableId: map['table_id'] as int?,
+            orderType: map['order_type'] as String,
+            deliveryPlatform: map['delivery_platform'] as String?,
+            customerId: map['customer_id'] as int?,
+            stewardName: map['steward_name'] as String?,
+            status: map['status'] as String,
+            paymentStatus: map['payment_status'] as String,
+            paymentMethod: map['payment_method'] as String?,
+            subtotal: toDouble(map['subtotal']),
+            discount: toDouble(map['discount']),
+            total: toDouble(map['total']),
+            cashierId: map['cashier_id'] as int,
+            shiftId: map['shift_id'] as int,
+            kotPrinted: map['kot_printed'] == 1,
+            ackPrinted: map['ack_printed'] == 1,
+            cardTxReference: map['card_tx_reference'] as String?,
+            barcode: map['barcode'] as String,
+            createdAt: map['created_at'] as String,
+            receivedAmount: toDouble(map['received_amount'] ?? 0.0),
+            changeAmount: toDouble(map['change_amount'] ?? 0.0),
+            items: items,
+          ));
+        }
+        return orders;
+      }
+    } catch (e) {
+      print('getAllOrders exception: $e');
+      return [];
+    }
+  }
+
+  /// Caches a batch of orders into local SQLite DB
+  Future<void> cacheOrders(List<OrderModel> orders) async {
+    try {
+      if (orders.isEmpty) return;
+      if (kIsWeb) {
+        final existingOrders = await _webGetList('offline_orders');
+        final existingItems = await _webGetList('offline_order_items');
+        
+        for (var order in orders) {
+          final idx = existingOrders.indexWhere((o) => o['order_number'] == order.orderNumber);
+          final oJson = order.toJson();
+          oJson['sync_status'] = 'synced';
+          if (idx != -1) {
+            existingOrders[idx] = oJson;
+          } else {
+            existingOrders.add(oJson);
+          }
+
+          for (var item in order.items) {
+            final itemJson = item.toJson();
+            itemJson['order_number'] = order.orderNumber;
+            final iIdx = existingItems.indexWhere((i) => i['order_number'] == order.orderNumber && i['product_id'] == item.productId);
+            if (iIdx != -1) {
+              existingItems[iIdx] = itemJson;
+            } else {
+              existingItems.add(itemJson);
+            }
+          }
+        }
+        await _webSaveList('offline_orders', existingOrders);
+        await _webSaveList('offline_order_items', existingItems);
+      } else {
+        final db = await instance.database;
+        final batch = db.batch();
+        for (var order in orders) {
+          batch.insert('offline_orders', {
+            'id': order.id,
+            'order_number': order.orderNumber,
+            'table_id': order.tableId,
+            'order_type': order.orderType,
+            'delivery_platform': order.deliveryPlatform,
+            'customer_id': order.customerId,
+            'steward_name': order.stewardName,
+            'status': order.status,
+            'payment_status': order.paymentStatus,
+            'payment_method': order.paymentMethod,
+            'subtotal': order.subtotal,
+            'discount': order.discount,
+            'total': order.total,
+            'cashier_id': order.cashierId,
+            'shift_id': order.shiftId,
+            'kot_printed': order.kotPrinted ? 1 : 0,
+            'ack_printed': order.ackPrinted ? 1 : 0,
+            'card_tx_reference': order.cardTxReference,
+            'barcode': order.barcode,
+            'created_at': order.createdAt,
+            'sync_status': 'synced',
+            'received_amount': order.receivedAmount,
+            'change_amount': order.changeAmount
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
+
+          for (var item in order.items) {
+            batch.insert('offline_order_items', {
+              'order_number': order.orderNumber,
+              'product_id': item.productId,
+              'product_name': item.productName,
+              'product_sinhala_name': item.productSinhalaName,
+              'quantity': item.quantity,
+              'price': item.price,
+              'notes': item.notes,
+              'status': item.status,
+              'is_short_eat': item.isShortEat ? 1 : 0
+            }, conflictAlgorithm: ConflictAlgorithm.replace);
+          }
+        }
+        await batch.commit(noResult: true);
+      }
+    } catch (e) {
+      print('cacheOrders exception: $e');
+    }
+  }
+
+  /// Calculates breakdown of all pending offline records in Local DB and Local MySQL DB
+  Future<Map<String, int>> getPendingCounts() async {
+    try {
+      final allOrders = await getAllOrders();
+      final unsyncedOrders = await getUnsyncedOrders();
+      final unsyncedShifts = await getUnsyncedShifts();
+      final unsyncedExpenses = await getUnsyncedExpenses();
+      final unsyncedStockLogs = await getUnsyncedStockLogs();
+      final unsyncedAudits = await getUnsyncedAudits();
+
+      // Query Local MySQL Workbench DB unsynced orders count
+      final int localMySqlOrdersCount = await APIService.instance.getLocalMySqlSyncStatus();
+
+      final int ordersTotal = allOrders.length;
+      final int ordersPending = unsyncedOrders.length + localMySqlOrdersCount;
+      final int shiftsPending = unsyncedShifts.length;
+      final int expensesPending = unsyncedExpenses.length;
+      final int stockLogsPending = unsyncedStockLogs.length;
+      final int auditLogsPending = unsyncedAudits.length;
+      final int totalPending = ordersPending + shiftsPending + expensesPending + stockLogsPending + auditLogsPending;
+
+      return {
+        'orders': ordersPending,
+        'orders_total': (ordersTotal + localMySqlOrdersCount).toInt(),
+        'shifts': shiftsPending,
+        'expenses': expensesPending,
+        'stock_logs': stockLogsPending,
+        'audit_logs': auditLogsPending,
+        'total': totalPending,
+      };
+    } catch (_) {
+      return {
+        'orders': 0,
+        'orders_total': 0,
+        'shifts': 0,
+        'expenses': 0,
+        'stock_logs': 0,
+        'audit_logs': 0,
+        'total': 0,
+      };
+    }
+  }
 }
+

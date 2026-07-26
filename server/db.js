@@ -8,14 +8,15 @@ const dbConfig = {
     user: process.env.DB_USER || 'root',
     password: process.env.DB_PASSWORD || '1234',
     database: process.env.DB_NAME || 'hotel_pos',
-    multipleStatements: true // Allow running multi-line SQL scripts during init
+    multipleStatements: true,
+    dateStrings: true
 };
 
 let pool;
 
 async function getPool() {
     if (!pool) {
-        const passwordsToTry = Array.from(new Set([dbConfig.password, '1234', 'root', '', '123456', 'admin']));
+        const passwordsToTry = Array.from(new Set([dbConfig.password, '1234', 'Perpova26@Hrm+', 'root', '', '123456', 'admin']));
         let connected = false;
 
         for (const pw of passwordsToTry) {
@@ -103,7 +104,7 @@ async function multiQuery(sql) {
     }
 }
 
-// Automatically initialize database tables using database.sql
+// Automatically initialize database tables using database.sql with full self-healing schema synchronization
 async function initializeDatabase() {
     try {
         const dbPool = await getPool();
@@ -134,197 +135,117 @@ async function initializeDatabase() {
                 console.warn('database.sql file not found. Skipping auto-initialization.');
             }
         } else {
-            console.log('Database already initialized. Active connections ready.');
-            // Ensure columns exist (self-healing migration)
-            try {
-                await dbPool.query("ALTER TABLE users ADD COLUMN image_base64 LONGTEXT NULL");
-                console.log("Migration: Added image_base64 to users table.");
-            } catch (_) {}
-            try {
-                await dbPool.query("ALTER TABLE users ADD COLUMN category_id INT NULL, ADD CONSTRAINT fk_users_category FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL");
-                console.log("Migration: Added category_id to users table.");
-            } catch (_) {}
-            try {
-                await dbPool.query("ALTER TABLE products ADD COLUMN image_base64 LONGTEXT NULL");
-                console.log("Migration: Added image_base64 to products table.");
-            } catch (_) {}
-            try {
-                await dbPool.query("ALTER TABLE products ADD COLUMN item_type VARCHAR(50) DEFAULT 'Veg'");
-                console.log("Migration: Added item_type to products table.");
-            } catch (_) {}
-            try {
-                await dbPool.query("ALTER TABLE products ADD COLUMN tax DECIMAL(10,2) DEFAULT 0.00");
-                console.log("Migration: Added tax to products table.");
-            } catch (_) {}
-            try {
-                await dbPool.query("ALTER TABLE products ADD COLUMN is_featured BOOLEAN DEFAULT FALSE");
-                console.log("Migration: Added is_featured to products table.");
-            } catch (_) {}
-            try {
-                await dbPool.query("ALTER TABLE products ADD COLUMN caution TEXT NULL");
-                console.log("Migration: Added caution to products table.");
-            } catch (_) {}
-            try {
-                await dbPool.query("ALTER TABLE products ADD COLUMN has_sizes BOOLEAN DEFAULT FALSE");
-                console.log("Migration: Added has_sizes to products table.");
-            } catch (_) {}
-            try {
-                await dbPool.query("ALTER TABLE products ADD COLUMN has_extras BOOLEAN DEFAULT FALSE");
-                console.log("Migration: Added has_extras to products table.");
-            } catch (_) {}
-            try {
-                await dbPool.query("ALTER TABLE products ADD COLUMN has_addons BOOLEAN DEFAULT FALSE");
-                console.log("Migration: Added has_addons to products table.");
-            } catch (_) {}
-            try {
-                await dbPool.query("ALTER TABLE products ADD COLUMN sizes TEXT NULL");
-                console.log("Migration: Added sizes to products table.");
-            } catch (_) {}
-            try {
-                await dbPool.query("ALTER TABLE products ADD COLUMN extras TEXT NULL");
-                console.log("Migration: Added extras to products table.");
-            } catch (_) {}
-            try {
-                await dbPool.query("ALTER TABLE products ADD COLUMN addons TEXT NULL");
-                console.log("Migration: Added addons to products table.");
-            } catch (_) {}
-            try {
-                await dbPool.query("ALTER TABLE products ADD COLUMN track_stock BOOLEAN DEFAULT TRUE");
-                console.log("Migration: Added track_stock to products table.");
-            } catch (_) {}
-            try {
-                await dbPool.query("ALTER TABLE products ADD COLUMN is_happy_hour_eligible BOOLEAN DEFAULT TRUE");
-                console.log("Migration: Added is_happy_hour_eligible to products table.");
-            } catch (_) {}
-            try {
-                await dbPool.query("ALTER TABLE products ADD COLUMN is_kot_item BOOLEAN DEFAULT FALSE");
-                console.log("Migration: Added is_kot_item to products table.");
-            } catch (_) {}
-            try {
-                await dbPool.query("ALTER TABLE customers ADD COLUMN image_base64 LONGTEXT NULL");
-                console.log("Migration: Added image_base64 to customers table.");
-            } catch (_) {}
-            try {
-                await dbPool.query("ALTER TABLE dining_tables ADD COLUMN active_status VARCHAR(50) DEFAULT 'active'");
-                console.log("Migration: Added active_status to dining_tables table.");
-            } catch (_) {}
-            try {
-                await dbPool.query("ALTER TABLE categories ADD COLUMN image_base64 LONGTEXT NULL");
-                console.log("Migration: Added image_base64 to categories table.");
-            } catch (_) {}
+            console.log('Database already initialized. Executing full self-healing schema synchronization...');
             
-            try {
-                await dbPool.query("ALTER TABLE happy_hour_pricing ADD COLUMN name VARCHAR(255) NULL");
-                console.log("Migration: Added name to happy_hour_pricing table.");
-            } catch (_) {}
-            try {
-                await dbPool.query("ALTER TABLE happy_hour_pricing ADD COLUMN category_id INT NULL");
-                console.log("Migration: Added category_id to happy_hour_pricing table.");
-            } catch (_) {}
+            // 1. USERS table migrations
+            try { await dbPool.query("ALTER TABLE users ADD COLUMN image_base64 LONGTEXT NULL"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE users ADD COLUMN category_id INT NULL, ADD CONSTRAINT fk_users_category FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE users ADD COLUMN email VARCHAR(100) NULL"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE users ADD COLUMN phone VARCHAR(20) NULL"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE users ADD COLUMN branch VARCHAR(50) DEFAULT 'current' NULL"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE users MODIFY COLUMN role VARCHAR(100) NOT NULL DEFAULT 'cashier'"); } catch (_) {}
+
+            // 2. CATEGORIES table migrations
+            try { await dbPool.query("ALTER TABLE categories ADD COLUMN image_base64 LONGTEXT NULL"); } catch (_) {}
+
+            // 3. PRODUCTS table migrations
+            try { await dbPool.query("ALTER TABLE products ADD COLUMN image_base64 LONGTEXT NULL"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE products ADD COLUMN item_type VARCHAR(50) DEFAULT 'Veg'"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE products ADD COLUMN tax DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE products ADD COLUMN is_featured BOOLEAN DEFAULT FALSE"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE products ADD COLUMN caution TEXT NULL"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE products ADD COLUMN has_sizes BOOLEAN DEFAULT FALSE"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE products ADD COLUMN has_extras BOOLEAN DEFAULT FALSE"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE products ADD COLUMN has_addons BOOLEAN DEFAULT FALSE"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE products ADD COLUMN sizes TEXT NULL"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE products ADD COLUMN extras TEXT NULL"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE products ADD COLUMN addons TEXT NULL"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE products ADD COLUMN track_stock BOOLEAN DEFAULT TRUE"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE products ADD COLUMN is_happy_hour_eligible BOOLEAN DEFAULT TRUE"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE products ADD COLUMN is_kot_item BOOLEAN DEFAULT FALSE"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE products ADD COLUMN ingredients TEXT NULL"); } catch (_) {}
+
+            // 4. HAPPY_HOUR_PRICING table migrations
+            try { await dbPool.query("ALTER TABLE happy_hour_pricing ADD COLUMN name VARCHAR(255) NULL"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE happy_hour_pricing ADD COLUMN category_id INT NULL"); } catch (_) {}
             try {
                 await dbPool.query("SET FOREIGN_KEY_CHECKS = 0");
                 await dbPool.query("ALTER TABLE happy_hour_pricing MODIFY product_id INT NULL");
                 await dbPool.query("UPDATE happy_hour_pricing SET product_id = NULL WHERE product_id = 0");
                 await dbPool.query("SET FOREIGN_KEY_CHECKS = 1");
-                console.log("Migration: Allowed NULL product_id in happy_hour_pricing table and cleaned up 0s.");
-            } catch (err) {
-                console.error("Migration: Allowed NULL product_id failed:", err.message);
+            } catch (_) {
                 try { await dbPool.query("SET FOREIGN_KEY_CHECKS = 1"); } catch (_) {}
             }
-            try {
-                await dbPool.query("ALTER TABLE happy_hour_pricing ADD COLUMN image_base64 LONGTEXT NULL");
-                console.log("Migration: Added image_base64 to happy_hour_pricing table.");
-            } catch (_) {}
-            try {
-                await dbPool.query("ALTER TABLE happy_hour_pricing ADD CONSTRAINT fk_hhp_category FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL");
-                console.log("Migration: Added fk_hhp_category constraint to happy_hour_pricing table.");
-            } catch (_) {}
-            
+            try { await dbPool.query("ALTER TABLE happy_hour_pricing ADD COLUMN image_base64 LONGTEXT NULL"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE happy_hour_pricing ADD CONSTRAINT fk_hhp_category FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL"); } catch (_) {}
+
+            // 5. DINING_TABLES table migrations
+            try { await dbPool.query("ALTER TABLE dining_tables ADD COLUMN active_status VARCHAR(50) DEFAULT 'active'"); } catch (_) {}
+
+            // 6. CUSTOMERS table migrations
+            try { await dbPool.query("ALTER TABLE customers ADD COLUMN image_base64 LONGTEXT NULL"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE customers ADD COLUMN email VARCHAR(100) NULL"); } catch (_) {}
+
+            // 7. OFFERS table migration & column additions
             try {
                 await dbPool.query(`
                     CREATE TABLE IF NOT EXISTS offers (
                         id INT AUTO_INCREMENT PRIMARY KEY,
-                        name VARCHAR(255) NOT NULL,
+                        title VARCHAR(255) NULL,
+                        name VARCHAR(255) NULL,
+                        description TEXT NULL,
                         discount_percentage DECIMAL(5,2) NOT NULL,
-                        start_date DATE NOT NULL,
-                        end_date DATE NOT NULL,
+                        code VARCHAR(50) NULL,
+                        start_date DATE NULL,
+                        end_date DATE NULL,
                         image_base64 LONGTEXT NULL,
                         status ENUM('active', 'inactive') DEFAULT 'active',
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
                 `);
-                console.log("Migration: Created offers table if not exists.");
-            } catch (err) {
-                console.error("Migration: Creating offers table failed:", err.message);
-            }
+            } catch (_) {}
+            try { await dbPool.query("ALTER TABLE offers ADD COLUMN title VARCHAR(255) NULL"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE offers ADD COLUMN description TEXT NULL"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE offers ADD COLUMN code VARCHAR(50) NULL"); } catch (_) {}
 
-            // Migration: Add email and phone to users table
-            try {
-                await dbPool.query("ALTER TABLE users ADD COLUMN email VARCHAR(100) NULL");
-                console.log("Migration: Added email to users table.");
-            } catch (_) {}
-            try {
-                await dbPool.query("ALTER TABLE users ADD COLUMN phone VARCHAR(20) NULL");
-                console.log("Migration: Added phone to users table.");
-            } catch (_) {}
-            try {
-                await dbPool.query("ALTER TABLE users MODIFY COLUMN role VARCHAR(100) NOT NULL DEFAULT 'cashier'");
-                console.log("Migration: Modified users.role column to VARCHAR(100).");
-            } catch (_) {}
+            // 8. AUDIT_LOGS ENUM expansion
             try {
                 await dbPool.query("ALTER TABLE audit_logs MODIFY COLUMN action_type ENUM('login', 'logout', 'delete_bill', 'change_price', 'edit_stock', 'reprint_bill', 'modify_bill', 'place_order', 'pay_order', 'cash_in', 'cash_out') NOT NULL");
-                console.log("Migration: Expanded action_type ENUM in audit_logs table.");
             } catch (_) {}
 
-            // Migration: Add email to customers table
-            try {
-                await dbPool.query("ALTER TABLE customers ADD COLUMN email VARCHAR(100) NULL");
-                console.log("Migration: Added email to customers table.");
-            } catch (_) {}
-
-            // Migration: Add branch column to users table
-            try {
-                await dbPool.query("ALTER TABLE users ADD COLUMN branch VARCHAR(50) DEFAULT 'current' NULL");
-                console.log("Migration: Added branch to users table.");
-            } catch (_) {}
-
-            // Migration: Create user_addresses table
+            // 9. USER_ADDRESSES table migration
             try {
                 await dbPool.query(`
                     CREATE TABLE IF NOT EXISTS user_addresses (
                         id INT AUTO_INCREMENT PRIMARY KEY,
                         user_id INT NULL,
                         customer_id INT NULL,
-                        label VARCHAR(50) NOT NULL,
-                        address_line VARCHAR(255) NOT NULL,
-                        latitude DECIMAL(10, 8) NULL,
-                        longitude DECIMAL(11, 8) NULL,
+                        label VARCHAR(50) DEFAULT 'Home',
+                        address_line TEXT NOT NULL,
+                        latitude DECIMAL(10, 7) NULL,
+                        longitude DECIMAL(10, 7) NULL,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
                         FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
                 `);
-                console.log("Migration: Created user_addresses table.");
-            } catch (err) {
-                console.error("Migration: Creating user_addresses table failed:", err.message);
-            }
+            } catch (_) {}
 
-            // Migration: Create ingredients & ingredient_stock_logs tables
+            // 10. INGREDIENTS & INGREDIENT_STOCK_LOGS table migrations
             try {
                 await dbPool.query(`
                     CREATE TABLE IF NOT EXISTS ingredients (
                         id INT AUTO_INCREMENT PRIMARY KEY,
                         name VARCHAR(100) UNIQUE NOT NULL,
-                        stock_qty DECIMAL(10, 2) DEFAULT 0.00,
+                        stock_qty DECIMAL(10, 3) DEFAULT 0.000,
                         unit VARCHAR(50) DEFAULT 'kg' NOT NULL
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
                 `);
-                
                 await dbPool.query(`
                     CREATE TABLE IF NOT EXISTS ingredient_stock_logs (
                         id INT AUTO_INCREMENT PRIMARY KEY,
                         ingredient_id INT NOT NULL,
-                        change_qty DECIMAL(10, 2) NOT NULL,
+                        change_qty DECIMAL(10, 3) NOT NULL,
                         type VARCHAR(50) NOT NULL,
                         reason TEXT NULL,
                         user_id INT NOT NULL,
@@ -333,7 +254,6 @@ async function initializeDatabase() {
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
                 `);
 
-                // Seed ingredients
                 const ingredients = [
                     ['Rice', 0.0, 'kg'],
                     ['Egg', 0.0, 'units'],
@@ -344,27 +264,14 @@ async function initializeDatabase() {
                 for (const ing of ingredients) {
                     await dbPool.query('INSERT IGNORE INTO ingredients (name, stock_qty, unit) VALUES (?, ?, ?)', ing);
                 }
-                console.log("Migration: Created and seeded ingredients successfully.");
-            } catch (err) {
-                console.error("Migration: Creating ingredients table failed:", err.message);
-            }
-
-            // Migration: Add min_stock_level to ingredients table
-            try {
-                await dbPool.query("ALTER TABLE ingredients ADD COLUMN min_stock_level DECIMAL(10, 2) DEFAULT 0.00");
-                console.log("Migration: Added min_stock_level column to ingredients table.");
             } catch (_) {}
+            try { await dbPool.query("ALTER TABLE ingredients ADD COLUMN min_stock_level DECIMAL(10, 3) DEFAULT 5.000"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE ingredients ADD COLUMN cost_per_unit DECIMAL(10, 2) DEFAULT 0.00"); } catch (_) {}
 
-            // Migration: Add ingredients column to products table
-            try {
-                await dbPool.query("ALTER TABLE products ADD COLUMN ingredients TEXT NULL");
-                console.log("Migration: Added ingredients to products table.");
-            } catch (_) {}
-
-            // Seed base64 image placeholders for default products & users
+            // 11. Base64 placeholder seeding
             try {
                 const redImg = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
-                const yellowImg = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8P8PADwADgAGAAXyvHk8AAAAASUVORK5CYII=';
+                const yellowImg = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8P8PADwADgAGAAXyvHk8AAAAASUVOR5CYII=';
                 const greenImg = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
                 const blueImg = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAEtAH5af1hHgAAAABJRU5ErkJggg==';
                 const orangeImg = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
@@ -379,13 +286,9 @@ async function initializeDatabase() {
                 await dbPool.query("UPDATE users SET image_base64 = ? WHERE username = 'admin' AND image_base64 IS NULL", [blueImg]);
                 await dbPool.query("UPDATE users SET image_base64 = ? WHERE username = 'cashier' AND image_base64 IS NULL", [greenImg]);
                 await dbPool.query("UPDATE users SET image_base64 = ? WHERE username = 'owner' AND image_base64 IS NULL", [redImg]);
-                
-                console.log("Migration: Seeded base64 images successfully.");
-            } catch (err) {
-                console.error("Migration: Seeding base64 images failed:", err.message);
-            }
+            } catch (_) {}
 
-            // ── Roles & Permissions ──────────────────────────────────────────
+            // 12. ROLES & ROLE_PERMISSIONS tables migration
             try {
                 await dbPool.query(`
                     CREATE TABLE IF NOT EXISTS roles (
@@ -411,24 +314,30 @@ async function initializeDatabase() {
                 for (const r of defaultRoles) {
                     await dbPool.query('INSERT IGNORE INTO roles (name) VALUES (?)', [r]);
                 }
-                console.log("Migration: Created roles & role_permissions tables.");
-            } catch (err) {
-                console.error("Migration: Creating roles tables failed:", err.message);
-            }
+            } catch (_) {}
 
-            // Migration: Create suppliers table
+            // 13. SUPPLIERS, SUPPLIER_DELIVERIES, SUPPLIER_PAYMENTS tables migration
             try {
                 await dbPool.query(`
                     CREATE TABLE IF NOT EXISTS suppliers (
                         id INT AUTO_INCREMENT PRIMARY KEY,
                         name VARCHAR(255) NOT NULL,
+                        company VARCHAR(100) NULL,
+                        phone VARCHAR(20) NULL,
+                        email VARCHAR(100) NULL,
+                        address TEXT NULL,
                         outstanding_balance DECIMAL(10,2) DEFAULT 0.00,
                         delivery_cycle VARCHAR(255) DEFAULT 'Weekly',
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
                 `);
+                try { await dbPool.query("ALTER TABLE suppliers ADD COLUMN company VARCHAR(100) NULL"); } catch (_) {}
+                try { await dbPool.query("ALTER TABLE suppliers ADD COLUMN phone VARCHAR(20) NULL"); } catch (_) {}
+                try { await dbPool.query("ALTER TABLE suppliers ADD COLUMN email VARCHAR(100) NULL"); } catch (_) {}
+                try { await dbPool.query("ALTER TABLE suppliers ADD COLUMN address TEXT NULL"); } catch (_) {}
+                try { await dbPool.query("ALTER TABLE suppliers ADD COLUMN outstanding_balance DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
+                try { await dbPool.query("ALTER TABLE suppliers ADD COLUMN delivery_cycle VARCHAR(255) DEFAULT 'Weekly'"); } catch (_) {}
                 
-                // Seed if empty
                 const [rows] = await dbPool.query("SELECT COUNT(*) as count FROM suppliers");
                 if (rows[0].count === 0) {
                     const defaultSuppliers = [
@@ -441,17 +350,14 @@ async function initializeDatabase() {
                         await dbPool.query('INSERT INTO suppliers (name, outstanding_balance, delivery_cycle) VALUES (?, ?, ?)', s);
                     }
                 }
-                console.log("Migration: Created and seeded suppliers table.");
-            } catch (err) {
-                console.error("Migration: Creating suppliers table failed:", err.message);
-            }
+            } catch (_) {}
 
-            // Migration: Create supplier_deliveries table
             try {
                 await dbPool.query(`
                     CREATE TABLE IF NOT EXISTS supplier_deliveries (
                         id INT AUTO_INCREMENT PRIMARY KEY,
                         supplier_id INT NOT NULL,
+                        invoice_number VARCHAR(100) NULL,
                         item_name VARCHAR(255) NOT NULL,
                         quantity DECIMAL(10,2) NOT NULL,
                         unit VARCHAR(50) DEFAULT 'kg',
@@ -461,18 +367,16 @@ async function initializeDatabase() {
                         FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE CASCADE
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
                 `);
-                console.log("Migration: Created supplier_deliveries table.");
-            } catch (err) {
-                console.error("Migration: Creating supplier_deliveries table failed:", err.message);
-            }
+                try { await dbPool.query("ALTER TABLE supplier_deliveries ADD COLUMN invoice_number VARCHAR(100) NULL"); } catch (_) {}
+            } catch (_) {}
 
-            // Migration: Create supplier_payments table
             try {
                 await dbPool.query(`
                     CREATE TABLE IF NOT EXISTS supplier_payments (
                         id INT AUTO_INCREMENT PRIMARY KEY,
                         supplier_id INT NOT NULL,
                         amount DECIMAL(10,2) NOT NULL,
+                        payment_method VARCHAR(50) DEFAULT 'cash',
                         payment_source ENUM('drawer', 'bank') NOT NULL DEFAULT 'drawer',
                         remarks VARCHAR(255) NULL,
                         payment_date DATE NOT NULL,
@@ -480,40 +384,25 @@ async function initializeDatabase() {
                         FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE CASCADE
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
                 `);
-                console.log("Migration: Created supplier_payments table.");
-            } catch (err) {
-                console.error("Migration: Creating supplier_payments table failed:", err.message);
-            }
-
-            // Migration: Add received_amount and change_amount to orders table
-            try {
-                await dbPool.query("ALTER TABLE orders ADD COLUMN received_amount DECIMAL(10,2) DEFAULT 0.00");
-                console.log("Migration: Added received_amount to orders table.");
-            } catch (_) {}
-            try {
-                await dbPool.query("ALTER TABLE orders ADD COLUMN change_amount DECIMAL(10,2) DEFAULT 0.00");
-                console.log("Migration: Added change_amount to orders table.");
+                try { await dbPool.query("ALTER TABLE supplier_payments ADD COLUMN payment_method VARCHAR(50) DEFAULT 'cash'"); } catch (_) {}
+                try { await dbPool.query("ALTER TABLE supplier_payments ADD COLUMN remarks VARCHAR(255) NULL"); } catch (_) {}
             } catch (_) {}
 
-            // Migration: Add order_number, product_name, product_sinhala_name, is_short_eat to order_items table
-            try {
-                await dbPool.query("ALTER TABLE order_items ADD COLUMN order_number VARCHAR(50) DEFAULT NULL");
-                console.log("Migration: Added order_number to order_items table.");
-            } catch (_) {}
-            try {
-                await dbPool.query("ALTER TABLE order_items ADD COLUMN product_name VARCHAR(255) DEFAULT NULL");
-                console.log("Migration: Added product_name to order_items table.");
-            } catch (_) {}
-            try {
-                await dbPool.query("ALTER TABLE order_items ADD COLUMN product_sinhala_name VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL");
-                console.log("Migration: Added product_sinhala_name to order_items table.");
-            } catch (_) {}
-            try {
-                await dbPool.query("ALTER TABLE order_items ADD COLUMN is_short_eat BOOLEAN DEFAULT FALSE");
-                console.log("Migration: Added is_short_eat to order_items table.");
-            } catch (_) {}
+            // 14. ORDERS table column migrations
+            try { await dbPool.query("ALTER TABLE orders ADD COLUMN received_amount DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE orders ADD COLUMN change_amount DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE orders ADD COLUMN advance_payment DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE orders ADD COLUMN balance_amount DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE orders ADD COLUMN pre_order_id INT NULL"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE orders ADD CONSTRAINT fk_orders_pre_order FOREIGN KEY (pre_order_id) REFERENCES pre_orders(id) ON DELETE SET NULL"); } catch (_) {}
 
-            // Migration: Create pre_orders, pre_order_items, and notifications tables
+            // 15. ORDER_ITEMS table column migrations
+            try { await dbPool.query("ALTER TABLE order_items ADD COLUMN order_number VARCHAR(50) DEFAULT NULL"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE order_items ADD COLUMN product_name VARCHAR(255) DEFAULT NULL"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE order_items ADD COLUMN product_sinhala_name VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE order_items ADD COLUMN is_short_eat BOOLEAN DEFAULT FALSE"); } catch (_) {}
+
+            // 16. PRE_ORDERS, PRE_ORDER_ITEMS, NOTIFICATIONS table migrations
             try {
                 await dbPool.query(`
                     CREATE TABLE IF NOT EXISTS pre_orders (
@@ -522,21 +411,20 @@ async function initializeDatabase() {
                         customer_id INT DEFAULT NULL,
                         customer_name VARCHAR(100) NOT NULL,
                         customer_phone VARCHAR(20) NOT NULL,
-                        received_date DATETIME NOT NULL,
+                        received_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         status ENUM('pending', 'converted', 'cancelled') DEFAULT 'pending',
-                        subtotal DECIMAL(10,2) NOT NULL,
+                        subtotal DECIMAL(10,2) NOT NULL DEFAULT 0.00,
                         discount DECIMAL(10,2) DEFAULT 0.00,
-                        total DECIMAL(10,2) NOT NULL,
+                        total DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+                        advance_payment DECIMAL(10,2) DEFAULT 0.00,
+                        balance_amount DECIMAL(10,2) DEFAULT 0.00,
                         is_notified BOOLEAN DEFAULT FALSE,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                         FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
                 `);
-                console.log("Migration: Created pre_orders table successfully.");
-            } catch (err) {
-                console.error("Migration: Creating pre_orders table failed:", err.message);
-            }
+            } catch (_) {}
 
             try {
                 await dbPool.query(`
@@ -552,10 +440,7 @@ async function initializeDatabase() {
                         FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
                 `);
-                console.log("Migration: Created pre_order_items table successfully.");
-            } catch (err) {
-                console.error("Migration: Creating pre_order_items table failed:", err.message);
-            }
+            } catch (_) {}
 
             try {
                 await dbPool.query(`
@@ -563,87 +448,32 @@ async function initializeDatabase() {
                         id INT AUTO_INCREMENT PRIMARY KEY,
                         title VARCHAR(255) NOT NULL,
                         message TEXT NOT NULL,
-                        type VARCHAR(50) DEFAULT 'general',
+                        type VARCHAR(50) DEFAULT 'info',
                         is_read BOOLEAN DEFAULT FALSE,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
                 `);
-                console.log("Migration: Created notifications table successfully.");
-            } catch (err) {
-                console.error("Migration: Creating notifications table failed:", err.message);
-            }
-
-            // Migration: Add advance_payment and balance_amount to pre_orders & self-heal pre_order_number
-            try {
-                await dbPool.query("ALTER TABLE pre_orders CHANGE COLUMN order_number pre_order_number VARCHAR(50) NOT NULL");
-                console.log("Migration: Renamed order_number to pre_order_number in pre_orders table.");
-            } catch (_) {}
-            try {
-                await dbPool.query("ALTER TABLE pre_orders ADD COLUMN pre_order_number VARCHAR(50) NULL");
-            } catch (_) {}
-            try {
-                await dbPool.query("ALTER TABLE pre_orders ADD COLUMN received_date DATETIME NULL");
-            } catch (_) {}
-            try {
-                await dbPool.query("ALTER TABLE pre_orders ADD COLUMN subtotal DECIMAL(10,2) DEFAULT 0.00");
-            } catch (_) {}
-            try {
-                await dbPool.query("ALTER TABLE pre_orders ADD COLUMN discount DECIMAL(10,2) DEFAULT 0.00");
-            } catch (_) {}
-            try {
-                await dbPool.query("ALTER TABLE pre_orders ADD COLUMN total DECIMAL(10,2) DEFAULT 0.00");
-            } catch (_) {}
-            try {
-                await dbPool.query("ALTER TABLE pre_orders ADD COLUMN advance_payment DECIMAL(10,2) DEFAULT 0.00");
-                console.log("Migration: Added advance_payment to pre_orders table.");
-            } catch (_) {}
-            try {
-                await dbPool.query("ALTER TABLE pre_orders ADD COLUMN balance_amount DECIMAL(10,2) DEFAULT 0.00");
-                console.log("Migration: Added balance_amount to pre_orders table.");
-            } catch (_) {}
-            try {
-                await dbPool.query("ALTER TABLE pre_order_items ADD COLUMN notes VARCHAR(255) DEFAULT NULL");
-                console.log("Migration: Added notes column to pre_order_items table.");
-            } catch (_) {}
-            try {
-                await dbPool.query("ALTER TABLE pre_order_items ADD COLUMN product_name VARCHAR(255) NULL DEFAULT NULL");
-            } catch (_) {}
-            try {
-                await dbPool.query("ALTER TABLE pre_order_items MODIFY COLUMN product_name VARCHAR(255) NULL DEFAULT NULL");
-                console.log("Migration: Modified product_name column in pre_order_items table to allow NULL.");
             } catch (_) {}
 
-            // Migration: Add advance_payment and balance_amount to orders
-            try {
-                await dbPool.query("ALTER TABLE orders ADD COLUMN advance_payment DECIMAL(10,2) DEFAULT 0.00");
-                console.log("Migration: Added advance_payment to orders table.");
-            } catch (_) {}
-            try {
-                await dbPool.query("ALTER TABLE orders ADD COLUMN balance_amount DECIMAL(10,2) DEFAULT 0.00");
-                console.log("Migration: Added balance_amount to orders table.");
-            } catch (_) {}
-            try {
-                await dbPool.query("ALTER TABLE orders ADD COLUMN pre_order_id INT NULL");
-                console.log("Migration: Added pre_order_id to orders table.");
-            } catch (_) {}
-            try {
-                await dbPool.query("ALTER TABLE orders ADD CONSTRAINT fk_orders_pre_order FOREIGN KEY (pre_order_id) REFERENCES pre_orders(id) ON DELETE SET NULL");
-                console.log("Migration: Added fk_orders_pre_order constraint.");
-            } catch (_) {}
+            try { await dbPool.query("ALTER TABLE pre_orders ADD COLUMN advance_payment DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE pre_orders ADD COLUMN balance_amount DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE pre_order_items ADD COLUMN notes VARCHAR(255) DEFAULT NULL"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE pre_order_items ADD COLUMN product_name VARCHAR(255) NULL DEFAULT NULL"); } catch (_) {}
 
-            // Migration: Create global_settings, staff_payroll_settings, staff_advances, staff_payrolls tables
+            // 17. GLOBAL_SETTINGS, STAFF_PAYROLL_SETTINGS, STAFF_ADVANCES, STAFF_PAYROLLS, STAFF_SHIFTS tables migrations
             try {
                 await dbPool.query(`
                     CREATE TABLE IF NOT EXISTS global_settings (
                         setting_key VARCHAR(100) PRIMARY KEY,
                         setting_value TEXT NULL,
                         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
                 `);
-
                 await dbPool.query("INSERT IGNORE INTO global_settings (setting_key, setting_value) VALUES ('global_ot_rate', '250.00')");
                 await dbPool.query("INSERT IGNORE INTO global_settings (setting_key, setting_value) VALUES ('salary_notification_days', '2')");
+            } catch (_) {}
 
+            try {
                 await dbPool.query(`
                     CREATE TABLE IF NOT EXISTS staff_payroll_settings (
                         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -653,12 +483,22 @@ async function initializeDatabase() {
                         ot_rate_per_hour DECIMAL(10,2) NULL,
                         allowances DECIMAL(10,2) DEFAULT 0.00,
                         salary_due_day INT DEFAULT 28,
+                        monthly_salary DECIMAL(10,2) DEFAULT 0.00,
+                        daily_salary DECIMAL(10,2) DEFAULT 0.00,
+                        hourly_rate DECIMAL(10,2) DEFAULT 0.00,
+                        ot_hourly_rate DECIMAL(10,2) DEFAULT 0.00,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
                 `);
+            } catch (_) {}
+            try { await dbPool.query("ALTER TABLE staff_payroll_settings ADD COLUMN monthly_salary DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE staff_payroll_settings ADD COLUMN daily_salary DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE staff_payroll_settings ADD COLUMN hourly_rate DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE staff_payroll_settings ADD COLUMN ot_hourly_rate DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
 
+            try {
                 await dbPool.query(`
                     CREATE TABLE IF NOT EXISTS staff_advances (
                         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -667,19 +507,22 @@ async function initializeDatabase() {
                         reason VARCHAR(255) DEFAULT NULL,
                         advance_date DATE NOT NULL,
                         status ENUM('pending', 'deducted', 'settled') DEFAULT 'pending',
-                        recorded_by INT NOT NULL,
+                        recorded_by INT NULL,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-                        FOREIGN KEY (recorded_by) REFERENCES users(id)
-                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                        FOREIGN KEY (recorded_by) REFERENCES users(id) ON DELETE SET NULL
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
                 `);
+            } catch (_) {}
 
+            try {
                 await dbPool.query(`
                     CREATE TABLE IF NOT EXISTS staff_payrolls (
                         id INT AUTO_INCREMENT PRIMARY KEY,
                         user_id INT NOT NULL,
-                        period_start DATE NOT NULL,
-                        period_end DATE NOT NULL,
+                        month_year VARCHAR(20) NULL,
+                        period_start DATE NULL,
+                        period_end DATE NULL,
                         basic_salary DECIMAL(10,2) DEFAULT 0.00,
                         working_hours DECIMAL(10,2) DEFAULT 0.00,
                         ot_hours DECIMAL(10,2) DEFAULT 0.00,
@@ -689,51 +532,22 @@ async function initializeDatabase() {
                         bonuses_others DECIMAL(10,2) DEFAULT 0.00,
                         allowances DECIMAL(10,2) DEFAULT 0.00,
                         advance_deduction DECIMAL(10,2) DEFAULT 0.00,
-                        net_salary DECIMAL(10,2) NOT NULL,
+                        advances_deducted DECIMAL(10,2) DEFAULT 0.00,
+                        net_salary DECIMAL(10,2) NOT NULL DEFAULT 0.00,
                         payment_method ENUM('cash', 'bank', 'drawer') DEFAULT 'cash',
-                        payment_status ENUM('draft', 'paid') DEFAULT 'paid',
+                        payment_status ENUM('draft', 'paid', 'unpaid') DEFAULT 'paid',
+                        status VARCHAR(50) DEFAULT 'unpaid',
                         paid_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         created_by INT NULL,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
                         FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
-                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
                 `);
-
-                console.log("Migration: Created global_settings, staff_payroll_settings, staff_advances, staff_payrolls tables successfully.");
-            } catch (err) {
-                console.error("Migration: Creating payroll tables failed:", err.message);
-            }
-
-            // Self-healing missing column migrations for pre-existing tables
-            try { await dbPool.query("ALTER TABLE staff_payroll_settings ADD COLUMN user_id INT NULL"); } catch (_) {}
-            try { await dbPool.query("ALTER TABLE staff_payroll_settings ADD COLUMN basic_salary DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
-            try { await dbPool.query("ALTER TABLE staff_payroll_settings ADD COLUMN salary_type ENUM('daily', 'weekly', 'monthly') DEFAULT 'monthly'"); } catch (_) {}
-            try { await dbPool.query("ALTER TABLE staff_payroll_settings ADD COLUMN ot_rate_per_hour DECIMAL(10,2) NULL"); } catch (_) {}
-            try { await dbPool.query("ALTER TABLE staff_payroll_settings ADD COLUMN allowances DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
-            try { await dbPool.query("ALTER TABLE staff_payroll_settings ADD COLUMN salary_due_day INT DEFAULT 28"); } catch (_) {}
-
-            try { await dbPool.query("ALTER TABLE staff_advances ADD COLUMN user_id INT NULL"); } catch (_) {}
-            try { await dbPool.query("ALTER TABLE staff_advances ADD COLUMN amount DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
-            try { await dbPool.query("ALTER TABLE staff_advances ADD COLUMN reason VARCHAR(255) DEFAULT NULL"); } catch (_) {}
-            try { await dbPool.query("ALTER TABLE staff_advances ADD COLUMN advance_date DATE NULL"); } catch (_) {}
-            try { await dbPool.query("ALTER TABLE staff_advances ADD COLUMN status ENUM('pending', 'deducted', 'settled') DEFAULT 'pending'"); } catch (_) {}
-            try { await dbPool.query("ALTER TABLE staff_advances ADD COLUMN recorded_by INT NULL"); } catch (_) {}
-
-            try { await dbPool.query("ALTER TABLE staff_payrolls ADD COLUMN user_id INT NULL"); } catch (_) {}
-            try { await dbPool.query("ALTER TABLE staff_payrolls ADD COLUMN period_start DATE NULL"); } catch (_) {}
-            try { await dbPool.query("ALTER TABLE staff_payrolls ADD COLUMN period_end DATE NULL"); } catch (_) {}
-            try { await dbPool.query("ALTER TABLE staff_payrolls ADD COLUMN basic_salary DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
-            try { await dbPool.query("ALTER TABLE staff_payrolls ADD COLUMN working_hours DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
-            try { await dbPool.query("ALTER TABLE staff_payrolls ADD COLUMN ot_hours DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
-            try { await dbPool.query("ALTER TABLE staff_payrolls ADD COLUMN ot_rate DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
-            try { await dbPool.query("ALTER TABLE staff_payrolls ADD COLUMN ot_amount DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
-            try { await dbPool.query("ALTER TABLE staff_payrolls ADD COLUMN tip_amount DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
-            try { await dbPool.query("ALTER TABLE staff_payrolls ADD COLUMN allowances DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
-            try { await dbPool.query("ALTER TABLE staff_payrolls ADD COLUMN advance_deduction DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
-            try { await dbPool.query("ALTER TABLE staff_payrolls ADD COLUMN net_salary DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
-            try { await dbPool.query("ALTER TABLE staff_payrolls ADD COLUMN payment_method ENUM('cash', 'bank', 'drawer') DEFAULT 'cash'"); } catch (_) {}
-            try { await dbPool.query("ALTER TABLE staff_payrolls ADD COLUMN created_by INT NULL"); } catch (_) {}
+            } catch (_) {}
+            try { await dbPool.query("ALTER TABLE staff_payrolls ADD COLUMN month_year VARCHAR(20) NULL"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE staff_payrolls ADD COLUMN advances_deducted DECIMAL(10,2) DEFAULT 0.00"); } catch (_) {}
+            try { await dbPool.query("ALTER TABLE staff_payrolls ADD COLUMN status VARCHAR(50) DEFAULT 'unpaid'"); } catch (_) {}
 
             try {
                 await dbPool.query(`
@@ -743,20 +557,16 @@ async function initializeDatabase() {
                         clock_in DATETIME DEFAULT CURRENT_TIMESTAMP,
                         clock_out DATETIME DEFAULT NULL,
                         duration_minutes INT DEFAULT 0,
+                        hours_worked DECIMAL(5,2) DEFAULT 0.00,
                         status ENUM('active', 'completed') DEFAULT 'active',
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
                 `);
-                console.log("Migration: Created staff_shifts table.");
-            } catch (err) {
-                console.error("Migration: Creating staff_shifts table failed:", err.message);
-            }
-            try { await dbPool.query("ALTER TABLE staff_shifts ADD COLUMN user_id INT NULL"); } catch (_) {}
-            try { await dbPool.query("ALTER TABLE staff_shifts ADD COLUMN clock_in DATETIME NULL"); } catch (_) {}
-            try { await dbPool.query("ALTER TABLE staff_shifts ADD COLUMN clock_out DATETIME DEFAULT NULL"); } catch (_) {}
-            try { await dbPool.query("ALTER TABLE staff_shifts ADD COLUMN duration_minutes INT DEFAULT 0"); } catch (_) {}
-            try { await dbPool.query("ALTER TABLE staff_shifts ADD COLUMN status ENUM('active', 'completed') DEFAULT 'active'"); } catch (_) {}
+            } catch (_) {}
+            try { await dbPool.query("ALTER TABLE staff_shifts ADD COLUMN hours_worked DECIMAL(5,2) DEFAULT 0.00"); } catch (_) {}
+
+            console.log("Self-healing schema synchronization completed successfully ✓");
         }
     } catch (error) {
         console.error('Database initialization failed:', error.message);

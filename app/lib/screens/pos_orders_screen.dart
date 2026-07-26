@@ -65,8 +65,12 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
       List<OrderModel> ords = [];
       if (online) {
         ords = await api.getOrders();
+        // Mirror/cache fetched server orders into local SQLite DB
+        try {
+          await LocalDB.instance.cacheOrders(ords);
+        } catch (_) {}
       } else {
-        ords = await LocalDB.instance.getUnsyncedOrders();
+        ords = await LocalDB.instance.getAllOrders();
       }
       if (mounted) {
         setState(() {

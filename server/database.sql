@@ -1,5 +1,5 @@
 -- Restaurant POS System Database Schema
--- Optimized for LAN-first Local + VPS Sync
+-- Optimized for LAN-first Local + VPS Sync (Includes all Admin, Staff & POS System Tables)
 
 CREATE DATABASE IF NOT EXISTS hotel_pos;
 USE hotel_pos;
@@ -10,9 +10,13 @@ CREATE TABLE IF NOT EXISTS users (
     name VARCHAR(100) NOT NULL,
     username VARCHAR(50) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
-    role VARCHAR(100) NOT NULL,
+    role VARCHAR(100) NOT NULL DEFAULT 'cashier',
     status ENUM('active', 'inactive') DEFAULT 'active',
     image_base64 LONGTEXT NULL,
+    email VARCHAR(100) NULL,
+    phone VARCHAR(20) NULL,
+    branch VARCHAR(50) DEFAULT 'current' NULL,
+    category_id INT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -48,6 +52,9 @@ CREATE TABLE IF NOT EXISTS products (
     has_sizes BOOLEAN DEFAULT FALSE,
     has_extras BOOLEAN DEFAULT FALSE,
     has_addons BOOLEAN DEFAULT FALSE,
+    sizes TEXT NULL,
+    extras TEXT NULL,
+    addons TEXT NULL,
     track_stock BOOLEAN DEFAULT TRUE,
     is_happy_hour_eligible BOOLEAN DEFAULT TRUE,
     ingredients TEXT NULL,
@@ -59,13 +66,15 @@ CREATE TABLE IF NOT EXISTS products (
 -- 4. Happy Hour Pricing (Promotions & Time-based pricing)
 CREATE TABLE IF NOT EXISTS happy_hour_pricing (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    product_id INT NOT NULL,
+    product_id INT NULL,
+    category_id INT NULL,
+    name VARCHAR(255) NULL,
     promo_price DECIMAL(10,2) NOT NULL,
     start_time TIME NOT NULL,
     end_time TIME NOT NULL,
     days_of_week VARCHAR(50) DEFAULT '1,2,3,4,5,6,7', -- Comma-separated days (1=Mon, 7=Sun)
     status ENUM('active', 'inactive') DEFAULT 'active',
-    category_id INT NULL,
+    image_base64 LONGTEXT NULL,
     FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
     FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -87,6 +96,7 @@ CREATE TABLE IF NOT EXISTS customers (
     name VARCHAR(100) NOT NULL,
     phone VARCHAR(20) UNIQUE NOT NULL,
     birthday DATE DEFAULT NULL,
+    email VARCHAR(100) NULL,
     favorite_items VARCHAR(255) DEFAULT NULL,
     credit_limit DECIMAL(10,2) DEFAULT 0.00,
     outstanding_balance DECIMAL(10,2) DEFAULT 0.00,
@@ -118,7 +128,27 @@ CREATE TABLE IF NOT EXISTS cash_drawer_logs (
     FOREIGN KEY (shift_id) REFERENCES shifts(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 9. Orders (Supports Dine-In, Takeaway, Delivery, and Credit settlements)
+-- 9. Pre Orders
+CREATE TABLE IF NOT EXISTS pre_orders (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    pre_order_number VARCHAR(50) UNIQUE NOT NULL,
+    customer_id INT DEFAULT NULL,
+    customer_name VARCHAR(100) NOT NULL,
+    customer_phone VARCHAR(20) NOT NULL,
+    received_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    status ENUM('pending', 'converted', 'cancelled') DEFAULT 'pending',
+    subtotal DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    discount DECIMAL(10,2) DEFAULT 0.00,
+    total DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    advance_payment DECIMAL(10,2) DEFAULT 0.00,
+    balance_amount DECIMAL(10,2) DEFAULT 0.00,
+    is_notified BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 10. Orders (Supports Dine-In, Takeaway, Delivery, Pre-orders and Credit settlements)
 CREATE TABLE IF NOT EXISTS orders (
     id INT AUTO_INCREMENT PRIMARY KEY,
     order_number VARCHAR(50) UNIQUE NOT NULL,
@@ -139,16 +169,22 @@ CREATE TABLE IF NOT EXISTS orders (
     ack_printed BOOLEAN DEFAULT FALSE,
     card_tx_reference VARCHAR(100) DEFAULT NULL,
     barcode VARCHAR(100) UNIQUE DEFAULT NULL,
+    received_amount DECIMAL(10,2) DEFAULT 0.00,
+    change_amount DECIMAL(10,2) DEFAULT 0.00,
+    advance_payment DECIMAL(10,2) DEFAULT 0.00,
+    balance_amount DECIMAL(10,2) DEFAULT 0.00,
+    pre_order_id INT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     sync_status ENUM('synced', 'pending') DEFAULT 'synced',
     FOREIGN KEY (table_id) REFERENCES dining_tables(id),
     FOREIGN KEY (customer_id) REFERENCES customers(id),
     FOREIGN KEY (cashier_id) REFERENCES users(id),
-    FOREIGN KEY (shift_id) REFERENCES shifts(id)
+    FOREIGN KEY (shift_id) REFERENCES shifts(id),
+    FOREIGN KEY (pre_order_id) REFERENCES pre_orders(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 10. Order Items
+-- 11. Order Items
 CREATE TABLE IF NOT EXISTS order_items (
     id INT AUTO_INCREMENT PRIMARY KEY,
     order_id INT NOT NULL,
@@ -165,7 +201,7 @@ CREATE TABLE IF NOT EXISTS order_items (
     FOREIGN KEY (product_id) REFERENCES products(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 11. Credit settlements (Nearby shop owners & weekly settle)
+-- 12. Credit settlements (Nearby shop owners & weekly settle)
 CREATE TABLE IF NOT EXISTS credit_settlements (
     id INT AUTO_INCREMENT PRIMARY KEY,
     customer_id INT NOT NULL,
@@ -177,7 +213,7 @@ CREATE TABLE IF NOT EXISTS credit_settlements (
     FOREIGN KEY (recorded_by) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 12. Stock Entering & Logs (Wastage, Adjustments)
+-- 13. Stock Entering & Logs (Wastage, Adjustments)
 CREATE TABLE IF NOT EXISTS stock_logs (
     id INT AUTO_INCREMENT PRIMARY KEY,
     product_id INT NOT NULL,
@@ -190,7 +226,7 @@ CREATE TABLE IF NOT EXISTS stock_logs (
     FOREIGN KEY (user_id) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 13. Expenses Entering Screen & Expenses Report
+-- 14. Expenses Entering Screen & Expenses Report
 CREATE TABLE IF NOT EXISTS expenses (
     id INT AUTO_INCREMENT PRIMARY KEY,
     title VARCHAR(255) NOT NULL,
@@ -203,10 +239,10 @@ CREATE TABLE IF NOT EXISTS expenses (
     FOREIGN KEY (recorded_by) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 14. Audit Trail & Reprint Log (Reprinted, Cancelled, Modified Bills)
+-- 15. Audit Trail & Reprint Log (Reprinted, Cancelled, Modified Bills)
 CREATE TABLE IF NOT EXISTS audit_logs (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    action_type ENUM('login', 'logout', 'delete_bill', 'change_price', 'edit_stock', 'reprint_bill', 'modify_bill') NOT NULL,
+    action_type ENUM('login', 'logout', 'delete_bill', 'change_price', 'edit_stock', 'reprint_bill', 'modify_bill', 'place_order', 'pay_order', 'cash_in', 'cash_out') NOT NULL,
     table_name VARCHAR(50) DEFAULT NULL,
     record_id INT DEFAULT NULL,
     details TEXT NOT NULL,
@@ -215,19 +251,18 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     FOREIGN KEY (user_id) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-
--- 15. Ingredients
+-- 16. Ingredients
 CREATE TABLE IF NOT EXISTS ingredients (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(100) NOT NULL,
-    unit VARCHAR(20) NOT NULL DEFAULT 'kg',
+    name VARCHAR(100) NOT NULL UNIQUE,
+    unit VARCHAR(50) NOT NULL DEFAULT 'kg',
     stock_qty DECIMAL(10,3) NOT NULL DEFAULT 0.000,
     min_stock_level DECIMAL(10,3) NOT NULL DEFAULT 5.000,
     cost_per_unit DECIMAL(10,2) NOT NULL DEFAULT 0.00,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 16. Ingredient Stock Logs
+-- 17. Ingredient Stock Logs
 CREATE TABLE IF NOT EXISTS ingredient_stock_logs (
     id INT AUTO_INCREMENT PRIMARY KEY,
     ingredient_id INT NOT NULL,
@@ -240,7 +275,7 @@ CREATE TABLE IF NOT EXISTS ingredient_stock_logs (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 17. System Notifications
+-- 18. System Notifications
 CREATE TABLE IF NOT EXISTS notifications (
     id INT AUTO_INCREMENT PRIMARY KEY,
     title VARCHAR(255) NOT NULL,
@@ -250,13 +285,17 @@ CREATE TABLE IF NOT EXISTS notifications (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 18. Promotional Offers
+-- 19. Promotional Offers
 CREATE TABLE IF NOT EXISTS offers (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    title VARCHAR(255) NOT NULL,
+    title VARCHAR(255) NULL,
+    name VARCHAR(255) NULL,
     description TEXT NULL,
     discount_percentage DECIMAL(5,2) NOT NULL,
     code VARCHAR(50) NULL,
+    start_date DATE NULL,
+    end_date DATE NULL,
+    image_base64 LONGTEXT NULL,
     status ENUM('active', 'inactive') DEFAULT 'active',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -290,7 +329,8 @@ CREATE TABLE IF NOT EXISTS pre_order_items (
     quantity INT NOT NULL,
     price DECIMAL(10,2) NOT NULL,
     notes VARCHAR(255) DEFAULT NULL,
-    FOREIGN KEY (pre_order_id) REFERENCES pre_orders(id) ON DELETE CASCADE
+    FOREIGN KEY (pre_order_id) REFERENCES pre_orders(id) ON DELETE CASCADE,
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 21. Global Settings
@@ -303,15 +343,20 @@ CREATE TABLE IF NOT EXISTS global_settings (
 -- 22. Roles & Permissions
 CREATE TABLE IF NOT EXISTS roles (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(100) NOT NULL UNIQUE
+    name VARCHAR(100) NOT NULL UNIQUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS role_permissions (
     id INT AUTO_INCREMENT PRIMARY KEY,
     role_id INT NOT NULL,
     page VARCHAR(100) NOT NULL,
-    can_view BOOLEAN DEFAULT TRUE,
-    FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE
+    can_view TINYINT(1) DEFAULT 0,
+    can_create TINYINT(1) DEFAULT 0,
+    can_update TINYINT(1) DEFAULT 0,
+    can_delete TINYINT(1) DEFAULT 0,
+    FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE,
+    UNIQUE KEY uq_role_page (role_id, page)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 23. Staff Payroll & Advances
@@ -321,39 +366,65 @@ CREATE TABLE IF NOT EXISTS staff_advances (
     amount DECIMAL(10,2) NOT NULL,
     reason VARCHAR(255) NULL,
     advance_date DATE NOT NULL,
+    status ENUM('pending', 'deducted', 'settled') DEFAULT 'pending',
+    recorded_by INT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (recorded_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS staff_payroll_settings (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL UNIQUE,
+    basic_salary DECIMAL(10,2) DEFAULT 0.00,
+    salary_type ENUM('daily', 'weekly', 'monthly') DEFAULT 'monthly',
+    ot_rate_per_hour DECIMAL(10,2) NULL,
+    allowances DECIMAL(10,2) DEFAULT 0.00,
+    salary_due_day INT DEFAULT 28,
     monthly_salary DECIMAL(10,2) DEFAULT 0.00,
     daily_salary DECIMAL(10,2) DEFAULT 0.00,
     hourly_rate DECIMAL(10,2) DEFAULT 0.00,
     ot_hourly_rate DECIMAL(10,2) DEFAULT 0.00,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS staff_payrolls (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
-    month_year VARCHAR(20) NOT NULL,
+    month_year VARCHAR(20) NULL,
+    period_start DATE NULL,
+    period_end DATE NULL,
     basic_salary DECIMAL(10,2) DEFAULT 0.00,
+    working_hours DECIMAL(10,2) DEFAULT 0.00,
+    ot_hours DECIMAL(10,2) DEFAULT 0.00,
+    ot_rate DECIMAL(10,2) DEFAULT 0.00,
     ot_amount DECIMAL(10,2) DEFAULT 0.00,
+    tip_amount DECIMAL(10,2) DEFAULT 0.00,
+    bonuses_others DECIMAL(10,2) DEFAULT 0.00,
+    allowances DECIMAL(10,2) DEFAULT 0.00,
+    advance_deduction DECIMAL(10,2) DEFAULT 0.00,
     advances_deducted DECIMAL(10,2) DEFAULT 0.00,
-    net_salary DECIMAL(10,2) DEFAULT 0.00,
+    net_salary DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    payment_method ENUM('cash', 'bank', 'drawer') DEFAULT 'cash',
+    payment_status ENUM('draft', 'paid', 'unpaid') DEFAULT 'paid',
     status VARCHAR(50) DEFAULT 'unpaid',
+    paid_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by INT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS staff_shifts (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
-    clock_in TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    clock_out TIMESTAMP NULL,
+    clock_in DATETIME DEFAULT CURRENT_TIMESTAMP,
+    clock_out DATETIME DEFAULT NULL,
+    duration_minutes INT DEFAULT 0,
     hours_worked DECIMAL(5,2) DEFAULT 0.00,
+    status ENUM('active', 'completed') DEFAULT 'active',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -361,11 +432,13 @@ CREATE TABLE IF NOT EXISTS staff_shifts (
 -- 24. Suppliers & Supplier Deliveries
 CREATE TABLE IF NOT EXISTS suppliers (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(100) NOT NULL,
+    name VARCHAR(255) NOT NULL,
     company VARCHAR(100) NULL,
     phone VARCHAR(20) NULL,
     email VARCHAR(100) NULL,
     address TEXT NULL,
+    outstanding_balance DECIMAL(10,2) DEFAULT 0.00,
+    delivery_cycle VARCHAR(255) DEFAULT 'Weekly',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -373,7 +446,10 @@ CREATE TABLE IF NOT EXISTS supplier_deliveries (
     id INT AUTO_INCREMENT PRIMARY KEY,
     supplier_id INT NOT NULL,
     invoice_number VARCHAR(100) NULL,
-    total_amount DECIMAL(10,2) NOT NULL,
+    item_name VARCHAR(255) NULL,
+    quantity DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    unit VARCHAR(50) DEFAULT 'kg',
+    total_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
     delivery_date DATE NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE CASCADE
@@ -384,6 +460,8 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
     supplier_id INT NOT NULL,
     amount DECIMAL(10,2) NOT NULL,
     payment_method VARCHAR(50) DEFAULT 'cash',
+    payment_source ENUM('drawer', 'bank') NOT NULL DEFAULT 'drawer',
+    remarks VARCHAR(255) NULL,
     payment_date DATE NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE CASCADE
@@ -398,14 +476,15 @@ CREATE TABLE IF NOT EXISTS user_addresses (
     address_line TEXT NOT NULL,
     latitude DECIMAL(10,7) NULL,
     longitude DECIMAL(10,7) NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 
 -- Seed Data
 
 -- Insert default admin, owner, cashier, kitchen, delivery
--- Default password for all: 123456 (using raw passwords for local testing/demo, or bcrypt hash)
--- For demonstration/testing we will seed active users:
 INSERT INTO users (name, username, password_hash, role) VALUES
 ('System Administrator', 'admin', '$2a$10$KYVVXoS7ntUm8jLTGL7HgOe4Ff/NPByXj0z9wcMS/UwY2ZVglw7Y6', 'admin'),
 ('Cashier Perera', 'cashier', '$2a$10$KYVVXoS7ntUm8jLTGL7HgOe4Ff/NPByXj0z9wcMS/UwY2ZVglw7Y6', 'cashier'),
