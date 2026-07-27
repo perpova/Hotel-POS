@@ -312,6 +312,12 @@ class ApiService {
     ).timeout(const Duration(seconds: 5));
   }
 
+  // ─── PRE-ORDERS ──────────────────────────────────────────────────────────
+  Future<List<Map<String, dynamic>>> getPreOrders() async {
+    final data = await _getJson('$_baseUrl/api/pre-orders');
+    return data is List ? List<Map<String, dynamic>>.from(data) : [];
+  }
+
   // ─── CATEGORIES ──────────────────────────────────────────────────────
   Future<List<Map<String, dynamic>>> getCategories() async {
     final data = await _getJson('$_baseUrl/api/categories');

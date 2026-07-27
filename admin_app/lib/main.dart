@@ -6,6 +6,7 @@ import 'providers/realtime_provider.dart';
 import 'providers/dashboard_provider.dart';
 import 'providers/stock_provider.dart';
 import 'providers/live_pos_provider.dart';
+import 'providers/notification_provider.dart';
 import 'screens/login_screen.dart';
 import 'screens/main_shell.dart';
 
@@ -23,6 +24,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => DashboardProvider()),
         ChangeNotifierProvider(create: (_) => StockProvider()),
         ChangeNotifierProvider(create: (_) => LivePosProvider()),
+        ChangeNotifierProvider(create: (_) => NotificationProvider()),
       ],
       child: const HotelAdminApp(),
     ),
