@@ -962,15 +962,20 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
     }
   }
 
-  void _showAddCategoryDialog() {
-    final TextEditingController categoryNameController = TextEditingController();
-    String? categoryImageBase64;
+  void _showAddCategoryDialog({CategoryModel? category}) {
+    final bool isEditing = category != null;
+    final TextEditingController categoryNameController =
+        TextEditingController(text: category?.name ?? '');
+    String? categoryImageBase64 = category?.imageBase64;
 
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setStateDialog) => AlertDialog(
-          title: Text('Create Category', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+          title: Text(
+            isEditing ? 'Edit Category' : 'Create Category',
+            style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+          ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1085,25 +1090,48 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
                 final name = categoryNameController.text.trim();
                 if (name.isEmpty) return;
                 try {
-                  final newCat = await _api.createCategory({
-                    'name': name,
-                    'image_base64': categoryImageBase64,
-                  });
-                  setState(() {
-                    _localCategories.add(newCat);
-                    _selectedCategoryId = newCat.id;
-                  });
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Category "$name" created successfully!'), backgroundColor: Colors.green),
-                  );
+                  if (isEditing) {
+                    // --- EDIT MODE ---
+                    final updatedCat = await _api.updateCategory(category!.id, {
+                      'name': name,
+                      'image_base64': categoryImageBase64,
+                    });
+                    setState(() {
+                      final idx = _localCategories.indexWhere((c) => c.id == category.id);
+                      if (idx != -1) _localCategories[idx] = updatedCat;
+                    });
+                    if (context.mounted) Navigator.pop(context);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Category "$name" updated!'), backgroundColor: Colors.green),
+                      );
+                    }
+                  } else {
+                    // --- CREATE MODE ---
+                    final newCat = await _api.createCategory({
+                      'name': name,
+                      'image_base64': categoryImageBase64,
+                    });
+                    setState(() {
+                      _localCategories.add(newCat);
+                      _selectedCategoryId = newCat.id;
+                    });
+                    if (context.mounted) Navigator.pop(context);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Category "$name" created!'), backgroundColor: Colors.green),
+                      );
+                    }
+                  }
                 } catch (e) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Failed to create category: $e'), backgroundColor: Colors.red),
-                  );
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Failed to save category: $e'), backgroundColor: Colors.red),
+                    );
+                  }
                 }
               },
-              child: const Text('Create'),
+              child: Text(isEditing ? 'Save Changes' : 'Create'),
             ),
           ],
         ),
@@ -1352,6 +1380,23 @@ class _ItemFormDrawerState extends State<_ItemFormDrawer> {
               tooltip: 'Add New Category',
               onPressed: () => _showAddCategoryDialog(),
             ),
+            if (_selectedCategoryId != null) ...[
+              const SizedBox(width: 6),
+              IconButton(
+                icon: Icon(Icons.edit_outlined, color: AppTheme.primary, size: 16),
+                style: IconButton.styleFrom(
+                  backgroundColor: AppTheme.cardLight,
+                  side: BorderSide(color: AppTheme.primary),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  padding: const EdgeInsets.all(12),
+                ),
+                tooltip: 'Edit Selected Category',
+                onPressed: () {
+                  final cat = _localCategories.firstWhere((c) => c.id == _selectedCategoryId);
+                  _showAddCategoryDialog(category: cat);
+                },
+              ),
+            ],
           ],
         ),
       ],

@@ -249,16 +249,16 @@ class _POSScreenState extends State<POSScreen> {
           ),
           const SizedBox(height: 16),
 
-          // Horizontal Categories Slider with FoodKing Card style
-          SizedBox(
-            height: 78,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              children: [
-                _buildCategoryTab(null, 'All Items', controller),
-                ...controller.categories.map((cat) => _buildCategoryTab(cat, cat.name, controller)).toList(),
-              ],
-            ),
+          // Category Tabs – wrap into multiple rows when many categories
+          Wrap(
+            spacing: 0,
+            runSpacing: 10,
+            children: [
+              _buildCategoryTabWrapped(null, 'All Items', controller),
+              ...controller.categories
+                  .map((cat) => _buildCategoryTabWrapped(cat, cat.name, controller))
+                  .toList(),
+            ],
           ),
           const SizedBox(height: 16),
 
@@ -361,6 +361,86 @@ class _POSScreenState extends State<POSScreen> {
                 title,
                 textAlign: TextAlign.center,
                 maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.inter(
+                  fontSize: 10,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                  color: isSelected ? AppTheme.primary : AppTheme.textLightPrimary,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Same design as [_buildCategoryTab] but sized for use inside a [Wrap].
+  Widget _buildCategoryTabWrapped(CategoryModel? cat, String title, POSController controller) {
+    final id = cat?.id;
+    final isSelected = controller.activeCategoryId == id;
+    final icon = _getCategoryIcon(title);
+    final base64Str = cat?.imageBase64;
+
+    return GestureDetector(
+      onTap: () => controller.filterCategory(id),
+      child: Container(
+        width: 95,
+        height: 78,
+        margin: const EdgeInsets.only(right: 12),
+        decoration: BoxDecoration(
+          color: isSelected ? AppTheme.primary.withOpacity(0.12) : AppTheme.cardLight,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? AppTheme.primary : AppTheme.borderLight,
+            width: isSelected ? 1.5 : 1,
+          ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: AppTheme.primary.withOpacity(0.06),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  )
+                ]
+              : [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.01),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  )
+                ],
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            base64Str != null && base64Str.isNotEmpty
+                ? ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Base64ImageWidget(
+                      base64Str: base64Str,
+                      width: 24,
+                      height: 24,
+                      fit: BoxFit.cover,
+                      fallback: Icon(
+                        icon,
+                        color: isSelected ? AppTheme.primary : AppTheme.textLightSecondary,
+                        size: 24,
+                      ),
+                    ),
+                  )
+                : Icon(
+                    icon,
+                    color: isSelected ? AppTheme.primary : AppTheme.textLightSecondary,
+                    size: 24,
+                  ),
+            const SizedBox(height: 6),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              child: Text(
+                title,
+                textAlign: TextAlign.center,
+                maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: GoogleFonts.inter(
                   fontSize: 10,

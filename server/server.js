@@ -242,9 +242,56 @@ app.post('/api/categories', authenticateToken, async (req, res) => {
         );
         const newId = result.insertId;
         const [category] = await db.query('SELECT * FROM categories WHERE id = ?', [newId]);
+        broadcast({ type: 'category_created', data: { categoryId: newId, category } });
         broadcast({ type: 'database_synchronized' });
         triggerRemoteMirror({ categories: [category] });
         res.json(category);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Update Product Category
+app.put('/api/categories/:id', authenticateToken, async (req, res) => {
+    const userRole = (req.user && req.user.role ? req.user.role : '').toLowerCase();
+    if (userRole !== 'admin' && userRole !== 'owner' && userRole !== 'system administrator' && userRole !== 'manager' && userRole !== 'cashier') {
+        return res.status(403).json({ error: 'Unauthorized' });
+    }
+    const { id } = req.params;
+    const { name, image_base64 } = req.body;
+    if (!name || name.trim() === '') {
+        return res.status(400).json({ error: 'Category name is required' });
+    }
+    try {
+        const [existingCat] = await db.query('SELECT image_base64 FROM categories WHERE id = ?', [id]);
+        const finalImageBase64 = (image_base64 !== undefined && image_base64 !== null) ? image_base64 : (existingCat ? existingCat.image_base64 : null);
+
+        await db.query(
+            'UPDATE categories SET name = ?, image_base64 = ? WHERE id = ?',
+            [name.trim(), finalImageBase64, id]
+        );
+        const [category] = await db.query('SELECT * FROM categories WHERE id = ?', [id]);
+        broadcast({ type: 'category_updated', data: { categoryId: id, category } });
+        broadcast({ type: 'database_synchronized' });
+        triggerRemoteMirror({ categories: [category] });
+        res.json(category);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Delete Product Category
+app.delete('/api/categories/:id', authenticateToken, async (req, res) => {
+    const userRole = (req.user && req.user.role ? req.user.role : '').toLowerCase();
+    if (userRole !== 'admin' && userRole !== 'owner' && userRole !== 'system administrator') {
+        return res.status(403).json({ error: 'Unauthorized' });
+    }
+    const { id } = req.params;
+    try {
+        await db.query('UPDATE categories SET status = "inactive" WHERE id = ?', [id]);
+        broadcast({ type: 'category_deleted', data: { categoryId: id } });
+        broadcast({ type: 'database_synchronized' });
+        res.json({ success: true, message: 'Category marked as inactive' });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -617,6 +664,9 @@ app.put('/api/products/:id', authenticateToken, async (req, res) => {
             validCatId = firstCat ? firstCat.id : null;
         }
 
+        const [existingProd] = await db.query('SELECT image_base64 FROM products WHERE id = ?', [id]);
+        const finalImageBase64 = (image_base64 !== undefined && image_base64 !== null) ? image_base64 : (existingProd ? existingProd.image_base64 : null);
+
         const sizesStr = typeof sizes === 'string' ? sizes : (sizes ? JSON.stringify(sizes) : null);
         const extrasStr = typeof extras === 'string' ? extras : (extras ? JSON.stringify(extras) : null);
         const addonsStr = typeof addons === 'string' ? addons : (addons ? JSON.stringify(addons) : null);
@@ -632,7 +682,7 @@ app.put('/api/products/:id', authenticateToken, async (req, res) => {
             WHERE id = ?
         `, [
             name, sinhala_name || null, description || null, validCatId, price || 0.00, cost || 0.00, barcode || null,
-            stock_qty || 0, min_stock_level || 10, is_short_eat ? 1 : 0, status || 'active', image_base64 || null,
+            stock_qty || 0, min_stock_level || 10, is_short_eat ? 1 : 0, status || 'active', finalImageBase64,
             item_type || 'Veg', tax || 0.00, is_featured ? 1 : 0, caution || null,
             has_sizes ? 1 : 0, has_extras ? 1 : 0, has_addons ? 1 : 0, track_stock !== undefined ? (track_stock ? 1 : 0) : 1,
             sizesStr, extrasStr, addonsStr,
@@ -644,6 +694,7 @@ app.put('/api/products/:id', authenticateToken, async (req, res) => {
         const [product] = await db.query('SELECT * FROM products WHERE id = ?', [id]);
         
         await logAudit('edit_stock', 'products', id, `Product ${name} updated manually.`, req.user.id);
+        broadcast({ type: 'product_updated', data: { productId: id, product } });
         broadcast({ type: 'database_synchronized' });
         
         triggerRemoteMirror({ products: [product] });
@@ -4942,7 +4993,7 @@ async function processCatalogMirror(body) {
                         name = VALUES(name),
                         parent_id = VALUES(parent_id),
                         status = VALUES(status),
-                        image_base64 = VALUES(image_base64)
+                        image_base64 = COALESCE(VALUES(image_base64), categories.image_base64)
                 `, [c.id, c.name, c.parentId || c.parent_id || null, c.status || 'active', c.imageBase64 || c.image_base64 || null]);
             } catch (cErr) {
                 console.error('Error mirroring category:', cErr.message);
@@ -4975,7 +5026,7 @@ async function processCatalogMirror(body) {
                         stock_qty = VALUES(stock_qty),
                         min_stock_level = VALUES(min_stock_level),
                         is_short_eat = VALUES(is_short_eat),
-                        image_base64 = VALUES(image_base64),
+                        image_base64 = COALESCE(VALUES(image_base64), products.image_base64),
                         status = VALUES(status),
                         item_type = VALUES(item_type),
                         tax = VALUES(tax),
@@ -5686,7 +5737,7 @@ function makeSyncRequest(urlStr, method, data, token) {
                     'Content-Type': 'application/json',
                     ...(token ? { 'Authorization': `Bearer ${token}` } : {})
                 },
-                timeout: 10000
+                timeout: 60000
             };
             if (payload) {
                 options.headers['Content-Length'] = Buffer.byteLength(payload);

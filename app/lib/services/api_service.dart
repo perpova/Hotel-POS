@@ -346,6 +346,35 @@ class APIService {
     }
   }
 
+  Future<CategoryModel> updateCategory(int id, Map<String, dynamic> data) async {
+    final response = await http.put(
+      Uri.parse('$_baseUrl/api/categories/$id'),
+      headers: _getHeaders(),
+      body: jsonEncode(data),
+    );
+    if (response.statusCode == 200) {
+      return CategoryModel.fromJson(jsonDecode(response.body));
+    }
+    try {
+      final errData = jsonDecode(response.body);
+      throw Exception(errData['error'] ?? 'Failed to update category');
+    } catch (_) {
+      throw Exception('Server error (${response.statusCode}): ${response.reasonPhrase}');
+    }
+  }
+
+  Future<void> deleteCategory(int id) async {
+    final response = await http.delete(Uri.parse('$_baseUrl/api/categories/$id'), headers: _getHeaders());
+    if (response.statusCode != 200) {
+      try {
+        final errData = jsonDecode(response.body);
+        throw Exception(errData['error'] ?? 'Failed to delete category');
+      } catch (_) {
+        throw Exception('Server error (${response.statusCode}): ${response.reasonPhrase}');
+      }
+    }
+  }
+
   Future<List<ProductModel>> getProducts() async {
     final response = await http.get(Uri.parse('$_baseUrl/api/products'), headers: _getHeaders());
     if (response.statusCode == 200) {
