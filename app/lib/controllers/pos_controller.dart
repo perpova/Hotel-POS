@@ -715,6 +715,7 @@ class POSController extends ChangeNotifier {
       print('POS Event Received: ${event['type']}');
       switch (event['type']) {
         case 'table_status_changed':
+        case 'order_created':
         case 'happy_hour_updated':
         case 'database_synchronized':
         case 'shift_updated':

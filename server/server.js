@@ -10,6 +10,7 @@ require('dotenv').config();
 
 const db = require('./db');
 
+const path = require('path');
 const upload = multer({ storage: multer.memoryStorage() });
 
 const app = express();
@@ -22,6 +23,8 @@ const JWT_SECRET = process.env.JWT_SECRET || 'hotel_pos_super_secret_key_123';
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
+app.use('/order', express.static(path.join(__dirname, 'public/customer_order')));
+app.use(express.static(path.join(__dirname, 'public')));
 
 // WebSocket Clients Map
 const clients = new Set();
@@ -5922,17 +5925,261 @@ app.post('/api/sync/trigger-db-to-db', async (req, res) => {
     }
 });
 
-let isBackgroundDBSyncing = false;
-setInterval(async () => {
-    if (isBackgroundDBSyncing) return;
-    isBackgroundDBSyncing = true;
+// ----------------------------------------------------
+// DINING TABLES ENDPOINTS
+// ----------------------------------------------------
+
+// GET /api/tables - Fetch all dining tables
+app.get('/api/tables', async (req, res) => {
     try {
-        await performDbToDbSync();
-    } catch (_) {
-    } finally {
-        isBackgroundDBSyncing = false;
+        const tables = await db.query('SELECT * FROM dining_tables ORDER BY id ASC');
+        res.json(tables);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
-}, 10000);
+});
+
+// POST /api/tables - Create new table
+app.post('/api/tables', async (req, res) => {
+    const { table_number, capacity } = req.body;
+    if (!table_number) {
+        return res.status(400).json({ error: 'Table number is required' });
+    }
+    try {
+        const result = await db.query(
+            'INSERT INTO dining_tables (table_number, capacity, status, active_status) VALUES (?, ?, "empty", "active")',
+            [table_number.trim(), capacity || 4]
+        );
+        const [newTable] = await db.query('SELECT * FROM dining_tables WHERE id = ?', [result.insertId]);
+        broadcast({ type: 'table_created', data: newTable });
+        broadcast({ type: 'database_synchronized' });
+        res.json(newTable);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// PUT /api/tables/:id - Update table status or details
+app.put('/api/tables/:id', async (req, res) => {
+    const { id } = req.params;
+    const { table_number, capacity, status, steward_name, active_status } = req.body;
+    try {
+        const [existing] = await db.query('SELECT * FROM dining_tables WHERE id = ?', [id]);
+        if (!existing) return res.status(404).json({ error: 'Table not found' });
+
+        const updatedNumber = table_number !== undefined ? table_number : existing.table_number;
+        const updatedCapacity = capacity !== undefined ? capacity : existing.capacity;
+        const updatedStatus = status !== undefined ? status : existing.status;
+        const updatedSteward = steward_name !== undefined ? steward_name : existing.steward_name;
+        const updatedActive = active_status !== undefined ? active_status : existing.active_status;
+
+        await db.query(
+            'UPDATE dining_tables SET table_number = ?, capacity = ?, status = ?, steward_name = ?, active_status = ? WHERE id = ?',
+            [updatedNumber, updatedCapacity, updatedStatus, updatedSteward, updatedActive, id]
+        );
+        const [table] = await db.query('SELECT * FROM dining_tables WHERE id = ?', [id]);
+        broadcast({ type: 'table_status_changed', data: { tableId: id, status: updatedStatus, table } });
+        broadcast({ type: 'database_synchronized' });
+        res.json(table);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// DELETE /api/tables/:id - Soft delete table
+app.delete('/api/tables/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        await db.query("UPDATE dining_tables SET active_status = 'inactive' WHERE id = ?", [id]);
+        broadcast({ type: 'table_deleted', data: { id } });
+        broadcast({ type: 'database_synchronized' });
+        res.json({ success: true, message: 'Table marked as inactive' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/tables/ping-seated - Mark table seated when QR code is scanned
+app.post('/api/tables/ping-seated', async (req, res) => {
+    const { table_number } = req.body;
+    if (!table_number) return res.status(400).json({ error: 'table_number is required' });
+    try {
+        let [table] = await db.query('SELECT * FROM dining_tables WHERE table_number = ?', [table_number]);
+        if (!table) {
+            const insRes = await db.query('INSERT INTO dining_tables (table_number, capacity, status) VALUES (?, 4, "seated")', [table_number]);
+            [table] = await db.query('SELECT * FROM dining_tables WHERE id = ?', [insRes.insertId]);
+        } else {
+            await db.query('UPDATE dining_tables SET status = "seated" WHERE id = ?', [table.id]);
+        }
+        broadcast({ type: 'table_status_changed', data: { tableId: table.id, status: 'seated' } });
+        broadcast({ type: 'database_synchronized' });
+        res.json({ success: true, table });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/customer-orders - Place a dine-in order from QR Code Web App
+app.post('/api/customer-orders', async (req, res) => {
+    const { table_number, customer_name, items, notes } = req.body;
+
+    if (!table_number) {
+        return res.status(400).json({ error: 'Table number is required' });
+    }
+    if (!items || !Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ error: 'Order must contain at least one item' });
+    }
+
+    try {
+        // 1. Find table by table_number or create if not exists
+        let [table] = await db.query('SELECT * FROM dining_tables WHERE table_number = ?', [table_number]);
+        if (!table) {
+            const insRes = await db.query('INSERT INTO dining_tables (table_number, capacity, status) VALUES (?, 4, "seated")', [table_number]);
+            [table] = await db.query('SELECT * FROM dining_tables WHERE id = ?', [insRes.insertId]);
+        }
+
+        // 2. Fetch products to compute accurate pricing
+        const productIds = items.map(i => Number(i.product_id)).filter(id => !isNaN(id) && id > 0);
+        let productsList = [];
+        if (productIds.length > 0) {
+            const placeholders = productIds.map(() => '?').join(',');
+            productsList = await db.query(`SELECT * FROM products WHERE id IN (${placeholders})`, productIds);
+        }
+        const productMap = {};
+        productsList.forEach(p => { productMap[p.id] = p; });
+
+        let subtotal = 0;
+        const processedItems = [];
+
+        for (const item of items) {
+            const p = productMap[item.product_id];
+            if (!p) continue;
+            const price = Number(p.price);
+            const qty = Number(item.quantity || 1);
+            const itemTotal = price * qty;
+            subtotal += itemTotal;
+            processedItems.push({
+                product_id: p.id,
+                product_name: p.name,
+                product_sinhala_name: p.sinhala_name || null,
+                quantity: qty,
+                price: price,
+                notes: item.notes || null,
+                is_short_eat: !!p.is_short_eat,
+                status: 'pending'
+            });
+        }
+
+        if (processedItems.length === 0) {
+            return res.status(400).json({ error: 'None of the submitted products were found in catalog' });
+        }
+
+        // 3. Find open shift or default shift 1
+        const openShifts = await db.query("SELECT id FROM shifts WHERE status = 'open' ORDER BY id DESC LIMIT 1");
+        const shiftId = openShifts.length > 0 ? openShifts[0].id : 1;
+
+        // 4. Find cashier user id (or user 1 default)
+        const cashiers = await db.query("SELECT id FROM users WHERE role = 'cashier' OR role = 'admin' LIMIT 1");
+        const cashierId = cashiers.length > 0 ? cashiers[0].id : 1;
+
+        // 5. Generate Order Number
+        const orderNumber = `ORD-QR-${Date.now().toString().slice(-6)}`;
+        const total = subtotal;
+
+        // 6. Insert Order
+        const orderResult = await db.query(`
+            INSERT INTO orders (
+                order_number, table_id, order_type, customer_id, steward_name,
+                status, payment_status, subtotal, discount, total,
+                cashier_id, shift_id, sync_status
+            ) VALUES (?, ?, 'dine_in', NULL, ?, 'pending', 'unpaid', ?, 0.00, ?, ?, ?, 'synced')
+        `, [
+            orderNumber, table.id, customer_name || `QR Customer (${table_number})`,
+            subtotal, total, cashierId, shiftId
+        ]);
+
+        const orderId = orderResult.insertId;
+
+        // 7. Insert Order Items
+        for (const item of processedItems) {
+            await db.query(`
+                INSERT INTO order_items (
+                    order_id, order_number, product_id, product_name, product_sinhala_name,
+                    quantity, price, notes, status, is_short_eat
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `, [
+                orderId, orderNumber, item.product_id, item.product_name, item.product_sinhala_name,
+                item.quantity, item.price, item.notes, item.status, item.is_short_eat ? 1 : 0
+            ]);
+        }
+
+        // 8. Update Table status to 'seated'
+        await db.query('UPDATE dining_tables SET status = "seated", current_order_id = ? WHERE id = ?', [orderId, table.id]);
+
+        // 9. Broadcast real-time WebSocket notifications to POS app, Kitchen (KDS), and Admin App
+        const broadcastOrderData = {
+            id: orderId,
+            orderNumber,
+            tableId: table.id,
+            orderType: 'dine_in',
+            tableName: table_number,
+            status: 'pending',
+            paymentStatus: 'unpaid',
+            subtotal,
+            total,
+            items: processedItems,
+            createdAt: new Date()
+        };
+
+        broadcast({ type: 'order_created', data: broadcastOrderData });
+        broadcast({ type: 'table_status_changed', data: { tableId: table.id, status: 'seated' } });
+        broadcast({ type: 'kot_trigger_voice', data: { orderId, orderType: 'dine_in', tableName: table_number, items: processedItems } });
+        broadcast({ type: 'new_notification', data: { title: 'New QR Table Order', message: `Customer placed order for ${table_number} (${orderNumber})`, type: 'order' } });
+        broadcast({ type: 'database_synchronized' });
+
+        res.json({
+            success: true,
+            order_id: orderId,
+            order_number: orderNumber,
+            table_number,
+            total,
+            message: 'Order sent successfully to Kitchen & POS!'
+        });
+    } catch (err) {
+        console.error('Error creating customer QR order:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ----------------------------------------------------
+// CUSTOMER REVIEWS & RATINGS ENDPOINTS
+// ----------------------------------------------------
+
+// POST /api/customer-reviews - Submit feedback/rating from customer web app
+app.post('/api/customer-reviews', async (req, res) => {
+    const { table_number, customer_name, rating, comment } = req.body;
+    try {
+        const result = await db.query(
+            'INSERT INTO customer_reviews (table_number, customer_name, rating, comment) VALUES (?, ?, ?, ?)',
+            [table_number || 'General', customer_name || 'Anonymous Customer', rating || 5, comment || '']
+        );
+        const [review] = await db.query('SELECT * FROM customer_reviews WHERE id = ?', [result.insertId]);
+        broadcast({ type: 'new_customer_review', data: review });
+        res.json({ success: true, review });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/customer-reviews - Fetch all customer reviews
+app.get('/api/customer-reviews', async (req, res) => {
+    try {
+        const reviews = await db.query('SELECT * FROM customer_reviews ORDER BY created_at DESC LIMIT 100');
+        res.json(reviews);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
 
 // Start Server and Init Database
 server.listen(PORT, async () => {

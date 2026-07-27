@@ -9,7 +9,8 @@ const dbConfig = {
     password: process.env.DB_PASSWORD || '1234',
     database: process.env.DB_NAME || 'hotel_pos',
     multipleStatements: true,
-    dateStrings: true
+    dateStrings: true,
+    charset: 'utf8mb4'
 };
 
 let pool;
@@ -25,7 +26,8 @@ async function getPool() {
                     host: dbConfig.host,
                     user: dbConfig.user,
                     password: pw,
-                    multipleStatements: true
+                    multipleStatements: true,
+                    charset: 'utf8mb4'
                 };
                 const tempConn = await mysql.createConnection(tempConfig);
                 await tempConn.query(`CREATE DATABASE IF NOT EXISTS \`${dbConfig.database}\`;`);
@@ -565,6 +567,20 @@ async function initializeDatabase() {
                 `);
             } catch (_) {}
             try { await dbPool.query("ALTER TABLE staff_shifts ADD COLUMN hours_worked DECIMAL(5,2) DEFAULT 0.00"); } catch (_) {}
+
+            // 18. CUSTOMER_REVIEWS table migration
+            try {
+                await dbPool.query(`
+                    CREATE TABLE IF NOT EXISTS customer_reviews (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        table_number VARCHAR(50) NULL,
+                        customer_name VARCHAR(100) NULL,
+                        rating INT NOT NULL DEFAULT 5,
+                        comment TEXT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+                `);
+            } catch (_) {}
 
             console.log("Self-healing schema synchronization completed successfully ✓");
         }

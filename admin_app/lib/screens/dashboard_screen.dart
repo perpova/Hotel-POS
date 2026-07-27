@@ -11,6 +11,8 @@ import '../widgets/order_details_dialog.dart';
 import '../core/update_service.dart';
 import '../widgets/update_dialog.dart';
 
+import 'table_qr_management_screen.dart';
+
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({Key? key}) : super(key: key);
   @override
@@ -72,6 +74,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
             actions: [
+              IconButton(
+                icon: const Icon(Icons.qr_code_2_rounded, color: AppColors.primary),
+                tooltip: 'Dine-In QR & Reviews',
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const TableQRManagementScreen()),
+                ),
+              ),
               if (dash.isLoading)
                 const Padding(padding: EdgeInsets.only(right: 16),
                   child: Center(child: SizedBox(width: 18, height: 18,

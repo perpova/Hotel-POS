@@ -481,6 +481,17 @@ CREATE TABLE IF NOT EXISTS user_addresses (
     FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- 26. Customer Reviews & Ratings
+CREATE TABLE IF NOT EXISTS customer_reviews (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    table_number VARCHAR(50) NULL,
+    customer_name VARCHAR(100) NULL,
+    rating INT NOT NULL DEFAULT 5,
+    comment TEXT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
 
 -- Seed Data
 

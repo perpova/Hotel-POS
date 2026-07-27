@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import '../pos_controller.dart';
 import '../theme.dart';
 import '../models/models.dart';
@@ -81,6 +82,68 @@ class _TableManagementScreenState extends State<TableManagementScreen> {
         setState(() => _isLoading = false);
       }
     }
+  }
+
+  // Show Table QR Code Dialog
+  void _showQrCodeDialog(DiningTableModel table) {
+    final baseUrl = _api.baseUrl;
+    final encodedTable = Uri.encodeComponent(table.tableNumber);
+    final qrUrl = '$baseUrl/order?table=$encodedTable';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          constraints: const BoxConstraints(maxWidth: 340),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Dine-In QR Code',
+                style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                table.tableNumber,
+                style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.primary),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: QrImageView(
+                  data: qrUrl,
+                  version: QrVersions.auto,
+                  size: 180.0,
+                ),
+              ),
+              const SizedBox(height: 12),
+              SelectableText(
+                qrUrl,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary),
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton.icon(
+                onPressed: () => Navigator.pop(ctx),
+                icon: const Icon(Icons.check, size: 16),
+                label: const Text('Close'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primary,
+                  minimumSize: const Size(double.infinity, 40),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   // Open Add/Edit Drawer Modal
@@ -331,6 +394,14 @@ class _TableManagementScreenState extends State<TableManagementScreen> {
                               DataCell(
                                 Row(
                                   children: [
+                                    // QR Code Action
+                                    _buildActionIconButton(
+                                      icon: Icons.qr_code_2,
+                                      bgColor: const Color(0xFFEEF2FF),
+                                      iconColor: const Color(0xFF6366F1),
+                                      onTap: () => _showQrCodeDialog(table),
+                                    ),
+                                    const SizedBox(width: 8),
                                     // Grid Seating Action (opens Seating dialog or toggles to Grid view)
                                     _buildActionIconButton(
                                       icon: Icons.grid_view_outlined,

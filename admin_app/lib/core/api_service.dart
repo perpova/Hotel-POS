@@ -330,6 +330,46 @@ class ApiService {
     return data is List ? List<Map<String, dynamic>>.from(data) : [];
   }
 
+  Future<Map<String, dynamic>> createTable(String tableNumber, int capacity) async {
+    final res = await http.post(
+      Uri.parse('$_baseUrl/api/tables'),
+      headers: _headers,
+      body: jsonEncode({'table_number': tableNumber, 'capacity': capacity}),
+    ).timeout(const Duration(seconds: 10));
+    if (res.statusCode == 200) return jsonDecode(res.body);
+    final err = jsonDecode(res.body);
+    throw Exception(err['error'] ?? 'Failed to create table');
+  }
+
+  Future<void> updateTable(int id, Map<String, dynamic> data) async {
+    final res = await http.put(
+      Uri.parse('$_baseUrl/api/tables/$id'),
+      headers: _headers,
+      body: jsonEncode(data),
+    ).timeout(const Duration(seconds: 10));
+    if (res.statusCode != 200) {
+      final err = jsonDecode(res.body);
+      throw Exception(err['error'] ?? 'Failed to update table');
+    }
+  }
+
+  Future<void> deleteTable(int id) async {
+    final res = await http.delete(
+      Uri.parse('$_baseUrl/api/tables/$id'),
+      headers: _headers,
+    ).timeout(const Duration(seconds: 10));
+    if (res.statusCode != 200) {
+      final err = jsonDecode(res.body);
+      throw Exception(err['error'] ?? 'Failed to delete table');
+    }
+  }
+
+  // ─── CUSTOMER REVIEWS ────────────────────────────────────────────────
+  Future<List<Map<String, dynamic>>> getCustomerReviews() async {
+    final data = await _getJson('$_baseUrl/api/customer-reviews');
+    return data is List ? List<Map<String, dynamic>>.from(data) : [];
+  }
+
   // ─── USER MANAGEMENT ─────────────────────────────────────────
   Future<List<UserModel>> getUsers({String? role}) async {
     String url = '$_baseUrl/api/users';
