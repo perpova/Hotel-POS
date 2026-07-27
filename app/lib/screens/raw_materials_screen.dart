@@ -13,6 +13,7 @@ import '../pos_controller.dart';
 import '../theme.dart';
 import '../services/api_service.dart';
 import '../models/models.dart';
+import '../services/translation_service.dart';
 
 class RawMaterialsScreen extends StatefulWidget {
   const RawMaterialsScreen({Key? key}) : super(key: key);
@@ -401,7 +402,7 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Depleted / Negative Stock Warning!',
+                  'Depleted / Negative Stock Warning!'.tr(context),
                   style: GoogleFonts.inter(
                     fontSize: 13,
                     fontWeight: FontWeight.bold,
@@ -410,7 +411,7 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'The following ingredients are out of stock or negative: $names. Please update stock level immediately to prevent recipe deduction errors.',
+                  'The following ingredients are out of stock or negative: $names. Please update stock level immediately to prevent recipe deduction errors.'.tr(context),
                   style: GoogleFonts.inter(
                     fontSize: 12,
                     color: AppTheme.isDarkMode ? const Color(0xFFFEE2E2) : const Color(0xFFB91C1C),
@@ -450,15 +451,15 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Raw Materials Stock',
+                      'Raw Materials Stock'.tr(context),
                       style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
                     ),
                     const SizedBox(height: 4),
                     Row(
                       children: [
-                        Text('Dashboard', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
+                        Text('Dashboard'.tr(context), style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
                         Icon(Icons.chevron_right, size: 14, color: AppTheme.textLightSecondary),
-                        Text('Raw Materials', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.primary, fontWeight: FontWeight.w600)),
+                        Text('Raw Materials'.tr(context), style: GoogleFonts.inter(fontSize: 12, color: AppTheme.primary, fontWeight: FontWeight.w600)),
                       ],
                     ),
                   ],
@@ -494,7 +495,7 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
                     OutlinedButton.icon(
                       onPressed: () => setState(() => _isFilterExpanded = !_isFilterExpanded),
                       icon: Icon(Icons.filter_alt_outlined, size: 14, color: AppTheme.primary),
-                      label: Text('Filter', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primary)),
+                      label: Text('Filter'.tr(context), style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primary)),
                       style: OutlinedButton.styleFrom(
                         side: BorderSide(color: AppTheme.primary),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),

@@ -14,6 +14,7 @@ import '../theme.dart';
 import '../services/api_service.dart';
 import '../models/models.dart';
 import '../services/local_db.dart';
+import '../services/translation_service.dart';
 
 class POSStockScreen extends StatefulWidget {
   const POSStockScreen({Key? key}) : super(key: key);
@@ -392,7 +393,7 @@ class _POSStockScreenState extends State<POSStockScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'POS Low Stock / Depleted Warning!',
+                  'POS Low Stock / Depleted Warning!'.tr(context),
                   style: GoogleFonts.inter(
                     fontSize: 13,
                     fontWeight: FontWeight.bold,
@@ -401,7 +402,7 @@ class _POSStockScreenState extends State<POSStockScreen> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'The following POS items are running low or depleted: $names$suffix. Please replenish stock immediately.',
+                  'The following POS items are running low or depleted: $names$suffix. Please replenish stock immediately.'.tr(context),
                   style: GoogleFonts.inter(
                     fontSize: 12,
                     color: AppTheme.isDarkMode ? const Color(0xFFFEE2E2) : const Color(0xFFB91C1C),
@@ -449,15 +450,15 @@ class _POSStockScreenState extends State<POSStockScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'POS Stock Management',
+                      'POS Stock Management'.tr(context),
                       style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
                     ),
                     const SizedBox(height: 4),
                     Row(
                       children: [
-                        Text('Dashboard', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
+                        Text('Dashboard'.tr(context), style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
                         Icon(Icons.chevron_right, size: 14, color: AppTheme.textLightSecondary),
-                        Text('POS Stock', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.primary, fontWeight: FontWeight.w600)),
+                        Text('POS Stock'.tr(context), style: GoogleFonts.inter(fontSize: 12, color: AppTheme.primary, fontWeight: FontWeight.w600)),
                       ],
                     ),
                   ],
@@ -493,7 +494,7 @@ class _POSStockScreenState extends State<POSStockScreen> {
                     OutlinedButton.icon(
                       onPressed: () => setState(() => _isFilterExpanded = !_isFilterExpanded),
                       icon: Icon(Icons.filter_alt_outlined, size: 14, color: AppTheme.primary),
-                      label: Text('Filter', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primary)),
+                      label: Text('Filter'.tr(context), style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primary)),
                       style: OutlinedButton.styleFrom(
                         side: BorderSide(color: AppTheme.primary),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -520,7 +521,7 @@ class _POSStockScreenState extends State<POSStockScreen> {
                             children: [
                               const Icon(Icons.picture_as_pdf_outlined, size: 16, color: Color(0xFF64748B)),
                               const SizedBox(width: 8),
-                              Text('Export PDF', style: GoogleFonts.inter(fontSize: 13)),
+                              Text('Export PDF'.tr(context), style: GoogleFonts.inter(fontSize: 13)),
                             ],
                           ),
                         ),
@@ -530,7 +531,7 @@ class _POSStockScreenState extends State<POSStockScreen> {
                             children: [
                               const Icon(Icons.print_outlined, size: 16, color: Color(0xFF64748B)),
                               const SizedBox(width: 8),
-                              Text('Print Report', style: GoogleFonts.inter(fontSize: 13)),
+                              Text('Print Report'.tr(context), style: GoogleFonts.inter(fontSize: 13)),
                             ],
                           ),
                         ),
@@ -540,7 +541,7 @@ class _POSStockScreenState extends State<POSStockScreen> {
                             children: [
                               const Icon(Icons.table_view_outlined, size: 16, color: Color(0xFF64748B)),
                               const SizedBox(width: 8),
-                              Text('Export CSV', style: GoogleFonts.inter(fontSize: 13)),
+                              Text('Export CSV'.tr(context), style: GoogleFonts.inter(fontSize: 13)),
                             ],
                           ),
                         ),
@@ -557,7 +558,7 @@ class _POSStockScreenState extends State<POSStockScreen> {
                             Icon(Icons.download_outlined, size: 14, color: AppTheme.primary),
                             const SizedBox(width: 8),
                             Text(
-                              'Export',
+                              'Export'.tr(context),
                               style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primary),
                             ),
                             const SizedBox(width: 4),
@@ -789,7 +790,7 @@ class _POSStockScreenState extends State<POSStockScreen> {
               children: [
                 Icon(Icons.inventory_2_outlined, color: AppTheme.primary),
                 const SizedBox(width: 8),
-                Text('POS Items Stock Corrections', style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
+                Text('POS Items Stock Corrections'.tr(context), style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
               ],
             ),
             const SizedBox(height: 20),
@@ -842,10 +843,10 @@ class _POSStockScreenState extends State<POSStockScreen> {
                         value: _stockType,
                         dropdownColor: AppTheme.cardLight,
                         style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary),
-                        items: const [
-                          DropdownMenuItem(value: 'purchase', child: Text('New Purchase / Input')),
-                          DropdownMenuItem(value: 'adjustment', child: Text('Correction / Count')),
-                          DropdownMenuItem(value: 'wastage', child: Text('Wastage / Spoiled')),
+                        items: [
+                          DropdownMenuItem(value: 'purchase', child: Text('New Purchase / Input'.tr(context))),
+                          DropdownMenuItem(value: 'adjustment', child: Text('Stock Correction / Audit'.tr(context))),
+                          DropdownMenuItem(value: 'wastage', child: Text('Damage / Spoiled Loss'.tr(context))),
                         ],
                         onChanged: (val) => setState(() => _stockType = val!),
                       ),
@@ -873,7 +874,7 @@ class _POSStockScreenState extends State<POSStockScreen> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 padding: const EdgeInsets.symmetric(vertical: 14),
               ),
-              child: Text('Update POS Inventory Level', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+              child: Text('Update POS Inventory Level'.tr(context), style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
             ),
           ],
         ),
@@ -1207,7 +1208,7 @@ class _POSStockScreenState extends State<POSStockScreen> {
           child: Row(
             children: [
               Text(
-                'Report Period:',
+                'Report Period:'.tr(context),
                 style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
               ),
               const SizedBox(width: 16),
@@ -1229,7 +1230,7 @@ class _POSStockScreenState extends State<POSStockScreen> {
                   icon: const Icon(Icons.date_range, size: 16),
                   label: Text(
                     _startDate == null || _endDate == null
-                        ? 'Select Range'
+                        ? 'Select Range'.tr(context)
                         : '${DateFormat('yyyy-MM-dd').format(_startDate!)} to ${DateFormat('yyyy-MM-dd').format(_endDate!)}',
                     style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold),
                   ),
@@ -1245,7 +1246,7 @@ class _POSStockScreenState extends State<POSStockScreen> {
   Widget _buildDatePresetChip(String presetKey, String label) {
     final isSelected = _datePreset == presetKey;
     return ChoiceChip(
-      label: Text(label, style: TextStyle(fontSize: 12, color: isSelected ? Colors.white : AppTheme.textLightPrimary)),
+      label: Text(label.tr(context), style: TextStyle(fontSize: 12, color: isSelected ? Colors.white : AppTheme.textLightPrimary)),
       selectedColor: AppTheme.primary,
       backgroundColor: AppTheme.bgLight,
       selected: isSelected,

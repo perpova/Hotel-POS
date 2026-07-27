@@ -8,6 +8,7 @@ import 'supplier_detail_screen.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import '../services/translation_service.dart';
 
 class ReportsScreen extends StatefulWidget {
   const ReportsScreen({Key? key}) : super(key: key);
@@ -112,15 +113,15 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Reports & Logs',
+                      'Reports & Logs'.tr(context),
                       style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
                     ),
                     const SizedBox(height: 4),
                     Row(
                       children: [
-                        Text('Dashboard', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
+                        Text('Dashboard'.tr(context), style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
                         Icon(Icons.chevron_right, size: 14, color: AppTheme.textLightSecondary),
-                        Text('Reports & Logs', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.primary, fontWeight: FontWeight.w600)),
+                        Text('Reports & Logs'.tr(context), style: GoogleFonts.inter(fontSize: 12, color: AppTheme.primary, fontWeight: FontWeight.w600)),
                       ],
                     ),
                   ],
@@ -145,12 +146,12 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
                 indicatorWeight: 3,
                 labelStyle: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold),
                 unselectedLabelStyle: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w500),
-                tabs: const [
-                  Tab(text: 'End-of-Day Summary'),
-                  Tab(text: 'Expenses'),
-                  Tab(text: 'Supplier Balances'),
-                  Tab(text: 'Historical Reports'),
-                  Tab(text: 'User Activity Logs'),
+                tabs: [
+                  Tab(text: 'End-of-Day Summary'.tr(context)),
+                  Tab(text: 'Expenses'.tr(context)),
+                  Tab(text: 'Supplier Balances'.tr(context)),
+                  Tab(text: 'Historical Reports'.tr(context)),
+                  Tab(text: 'User Activity Logs'.tr(context)),
                 ],
               ),
             ),
@@ -287,14 +288,14 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Sales Breakdown', style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold, color: AppTheme.primary)),
+                        Text('Sales Breakdown'.tr(context), style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold, color: AppTheme.primary)),
                         Divider(height: 32, color: AppTheme.isDarkMode ? AppTheme.primary.withOpacity(0.2) : const Color(0xFFFFD1D1)),
                         ...sales.map((s) => Padding(
                           padding: const EdgeInsets.symmetric(vertical: 8),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text('${s['payment_method'].toString().toUpperCase()} (${s['count']} bills)', style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightSecondary)),
+                              Text('${s['payment_method'].toString().toUpperCase().tr(context)} (${s['count']} bills)', style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightSecondary)),
                               Text('LKR ${(double.parse(s['total'].toString())).toStringAsFixed(2)}', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
                             ],
                           ),
@@ -303,7 +304,7 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text('Total Gross Sales:', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
+                            Text('Total Gross Sales:'.tr(context), style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
                             Text('LKR ${totalSales.toStringAsFixed(2)}', style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.bold, color: AppTheme.primary)),
                           ],
                         ),
@@ -330,12 +331,12 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('Expenses Summary', style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold, color: AppTheme.primary)),
+                            Text('Expenses Summary'.tr(context), style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold, color: AppTheme.primary)),
                             Divider(height: 32, color: AppTheme.isDarkMode ? AppTheme.primary.withOpacity(0.2) : const Color(0xFFFFD1D1)),
                             if (expenses.isEmpty)
                               Padding(
                                 padding: const EdgeInsets.symmetric(vertical: 8),
-                                child: Text('No expenses recorded today.', style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightSecondary)),
+                                child: Text('No expenses recorded today.'.tr(context), style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightSecondary)),
                               )
                             else
                               ...expenses.map((e) => Padding(
@@ -343,7 +344,7 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
                                 child: Row(
                                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
-                                    Text(e['category'].toString().toUpperCase(), style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightSecondary)),
+                                    Text(e['category'].toString().toUpperCase().tr(context), style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightSecondary)),
                                     Text('LKR ${(double.parse(e['total'].toString())).toStringAsFixed(2)}', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
                                   ],
                                 ),
@@ -352,7 +353,7 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Text('Total Expenses:', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
+                                Text('Total Expenses:'.tr(context), style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
                                 Text('LKR ${totalExpenses.toStringAsFixed(2)}', style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.bold, color: AppTheme.primary)),
                               ],
                             ),
@@ -373,7 +374,7 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text('Credit Settlements Received:', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
+                            Text('Credit Settlements Received:'.tr(context), style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
                             Text('LKR ${creditSettlements.toStringAsFixed(2)}', style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.bold, color: const Color(0xFF10B981))),
                           ],
                         ),

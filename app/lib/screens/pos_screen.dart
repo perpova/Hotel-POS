@@ -18,6 +18,7 @@ import '../api_service.dart';
 import '../widgets/image_helper.dart';
 import '../controllers/app_settings_controller.dart';
 import '../controllers/dashboard_controller.dart';
+import '../services/translation_service.dart';
 
 class POSScreen extends StatefulWidget {
   const POSScreen({Key? key}) : super(key: key);
@@ -3767,9 +3768,9 @@ class _POSScreenState extends State<POSScreen> {
                     child: pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
-                        _buildPdfInfoRow('KOT No:', _getKOTNumber(data), sinhalaFont),
+                        _buildPdfInfoRow(TranslationService.translateRaw('KOT No:', lang), _getKOTNumber(data), sinhalaFont),
                         if (data.tableName != null && data.tableName!.isNotEmpty)
-                          _buildPdfInfoRow('Table:', data.tableName!, sinhalaFont),
+                          _buildPdfInfoRow(TranslationService.translateRaw('Table:', lang), data.tableName!, sinhalaFont),
                       ],
                     ),
                   ),
@@ -3778,8 +3779,8 @@ class _POSScreenState extends State<POSScreen> {
                     child: pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
-                        _buildPdfInfoRow('Date:', '${DateTime.now().day.toString().padLeft(2, '0')}/${DateTime.now().month.toString().padLeft(2, '0')}/${DateTime.now().year}', sinhalaFont),
-                        _buildPdfInfoRow('Time:', _formatTime(DateTime.now(), includeSpace: true), sinhalaFont),
+                        _buildPdfInfoRow(TranslationService.translateRaw('Date:', lang), '${DateTime.now().day.toString().padLeft(2, '0')}/${DateTime.now().month.toString().padLeft(2, '0')}/${DateTime.now().year}', sinhalaFont),
+                        _buildPdfInfoRow(TranslationService.translateRaw('Time:', lang), _formatTime(DateTime.now(), includeSpace: true), sinhalaFont),
                       ],
                     ),
                   ),
@@ -3793,8 +3794,8 @@ class _POSScreenState extends State<POSScreen> {
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  pw.Text('Description', style: pw.TextStyle(font: sinhalaFont, fontWeight: pw.FontWeight.bold, fontSize: 8)),
-                  pw.Text('Qty', style: pw.TextStyle(font: sinhalaFont, fontWeight: pw.FontWeight.bold, fontSize: 8)),
+                  pw.Text(TranslationService.translateRaw('Description', lang), style: pw.TextStyle(font: sinhalaFont, fontWeight: pw.FontWeight.bold, fontSize: 8)),
+                  pw.Text(TranslationService.translateRaw('Qty', lang), style: pw.TextStyle(font: sinhalaFont, fontWeight: pw.FontWeight.bold, fontSize: 8)),
                 ],
               ),
               pw.SizedBox(height: 2),
@@ -3987,19 +3988,19 @@ class _POSScreenState extends State<POSScreen> {
               pw.SizedBox(height: 8),
               pw.Center(
                 child: pw.Text(
-                  'INVOICE',
+                  TranslationService.translateRaw('INVOICE', lang),
                   style: pw.TextStyle(font: sinhalaFont, fontSize: 10, fontWeight: pw.FontWeight.bold, decoration: pw.TextDecoration.underline),
                 ),
               ),
               pw.SizedBox(height: 4),
               
-              _buildPdfInfoRow('Receipt No', _getReceiptNumber(data), sinhalaFont),
+              _buildPdfInfoRow(TranslationService.translateRaw('Receipt No', lang), _getReceiptNumber(data), sinhalaFont),
               
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
                   pw.Text(
-                    'Date  ${DateTime.now().day.toString().padLeft(2, '0')}-${_getMonthName(DateTime.now())}-${DateTime.now().year}',
+                    '${TranslationService.translateRaw('Date:', lang)}  ${DateTime.now().day.toString().padLeft(2, '0')}-${_getMonthName(DateTime.now())}-${DateTime.now().year}',
                     style: pw.TextStyle(font: sinhalaFont, fontSize: 8),
                   ),
                   pw.Text(
@@ -4019,10 +4020,10 @@ class _POSScreenState extends State<POSScreen> {
 
               pw.Row(
                 children: [
-                  pw.Expanded(flex: 3, child: pw.Text('Description', style: pw.TextStyle(font: sinhalaFont, fontWeight: pw.FontWeight.bold, fontSize: 8))),
-                  pw.Expanded(flex: 1, child: pw.Align(alignment: pw.Alignment.center, child: pw.Text('Qty', style: pw.TextStyle(font: sinhalaFont, fontWeight: pw.FontWeight.bold, fontSize: 8)))),
-                  pw.Expanded(flex: 2, child: pw.Align(alignment: pw.Alignment.centerRight, child: pw.Text('Price', style: pw.TextStyle(font: sinhalaFont, fontWeight: pw.FontWeight.bold, fontSize: 8)))),
-                  pw.Expanded(flex: 2, child: pw.Align(alignment: pw.Alignment.centerRight, child: pw.Text('Amount', style: pw.TextStyle(font: sinhalaFont, fontWeight: pw.FontWeight.bold, fontSize: 8)))),
+                  pw.Expanded(flex: 3, child: pw.Text(TranslationService.translateRaw('Description', lang), style: pw.TextStyle(font: sinhalaFont, fontWeight: pw.FontWeight.bold, fontSize: 8))),
+                  pw.Expanded(flex: 1, child: pw.Align(alignment: pw.Alignment.center, child: pw.Text(TranslationService.translateRaw('Qty', lang), style: pw.TextStyle(font: sinhalaFont, fontWeight: pw.FontWeight.bold, fontSize: 8)))),
+                  pw.Expanded(flex: 2, child: pw.Align(alignment: pw.Alignment.centerRight, child: pw.Text(TranslationService.translateRaw('Price', lang), style: pw.TextStyle(font: sinhalaFont, fontWeight: pw.FontWeight.bold, fontSize: 8)))),
+                  pw.Expanded(flex: 2, child: pw.Align(alignment: pw.Alignment.centerRight, child: pw.Text(TranslationService.translateRaw('Amount', lang), style: pw.TextStyle(font: sinhalaFont, fontWeight: pw.FontWeight.bold, fontSize: 8)))),
                 ],
               ),
               pw.SizedBox(height: 2),
@@ -4126,14 +4127,14 @@ class _POSScreenState extends State<POSScreen> {
                       children: [
                         pw.Row(
                           children: [
-                            pw.Text('Items', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                            pw.Text(TranslationService.translateRaw('Items', lang), style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
                             pw.SizedBox(width: 6),
                             pw.Text('$totalQty', style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold)),
                           ],
                         ),
                         pw.SizedBox(height: 4),
                         pw.Text(
-                          'PAID BY ${data.paymentMethod.toUpperCase()}',
+                          TranslationService.translateRaw('PAID BY ${data.paymentMethod.toUpperCase()}', lang),
                           style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold),
                         ),
                       ],
@@ -4148,7 +4149,7 @@ class _POSScreenState extends State<POSScreen> {
                         pw.Row(
                           mainAxisAlignment: pw.MainAxisAlignment.end,
                           children: [
-                            pw.Text('Sub Total', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                            pw.Text(TranslationService.translateRaw('Sub Total', lang), style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
                             pw.SizedBox(width: 4),
                             pw.Text(':', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
                             pw.SizedBox(width: 4),
@@ -4160,7 +4161,7 @@ class _POSScreenState extends State<POSScreen> {
                           pw.Row(
                             mainAxisAlignment: pw.MainAxisAlignment.end,
                             children: [
-                              pw.Text('Discount', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                              pw.Text(TranslationService.translateRaw('Discount', lang), style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
                               pw.SizedBox(width: 4),
                               pw.Text(':', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
                               pw.SizedBox(width: 4),
@@ -4172,7 +4173,7 @@ class _POSScreenState extends State<POSScreen> {
                         pw.Row(
                           mainAxisAlignment: pw.MainAxisAlignment.end,
                           children: [
-                            pw.Text('Total', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                            pw.Text(TranslationService.translateRaw('Total', lang), style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
                             pw.SizedBox(width: 4),
                             pw.Text(':', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
                             pw.SizedBox(width: 4),
@@ -4192,7 +4193,7 @@ class _POSScreenState extends State<POSScreen> {
                           pw.Row(
                             mainAxisAlignment: pw.MainAxisAlignment.end,
                             children: [
-                              pw.Text('Adv Paid', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                              pw.Text(TranslationService.translateRaw('Adv Paid', lang), style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
                               pw.SizedBox(width: 4),
                               pw.Text(':', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
                               pw.SizedBox(width: 4),
@@ -4203,7 +4204,7 @@ class _POSScreenState extends State<POSScreen> {
                           pw.Row(
                             mainAxisAlignment: pw.MainAxisAlignment.end,
                             children: [
-                              pw.Text('Bal Due', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                              pw.Text(TranslationService.translateRaw('Bal Due', lang), style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
                               pw.SizedBox(width: 4),
                               pw.Text(':', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
                               pw.SizedBox(width: 4),
@@ -4215,7 +4216,7 @@ class _POSScreenState extends State<POSScreen> {
                         pw.Row(
                           mainAxisAlignment: pw.MainAxisAlignment.end,
                           children: [
-                            pw.Text('Paid', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                            pw.Text(TranslationService.translateRaw('Paid', lang), style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
                             pw.SizedBox(width: 4),
                             pw.Text(':', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
                             pw.SizedBox(width: 4),
@@ -4226,7 +4227,7 @@ class _POSScreenState extends State<POSScreen> {
                         pw.Row(
                           mainAxisAlignment: pw.MainAxisAlignment.end,
                           children: [
-                            pw.Text('Balance', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
+                            pw.Text(TranslationService.translateRaw('Balance', lang), style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
                             pw.SizedBox(width: 4),
                             pw.Text(':', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
                             pw.SizedBox(width: 4),
@@ -4263,10 +4264,10 @@ class _POSScreenState extends State<POSScreen> {
               pw.SizedBox(height: 5),
               
               pw.Center(
-                child: pw.Text('Thank you & Come Again', style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                child: pw.Text(TranslationService.translateRaw('Thank you & Come Again', lang), style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold)),
               ),
               pw.Center(
-                child: pw.Text('Software by Perpova. 0713555566', style: pw.TextStyle(font: sinhalaFont, fontSize: 7)),
+                child: pw.Text(TranslationService.translateRaw('Software by Perpova. 0713555566', lang), style: pw.TextStyle(font: sinhalaFont, fontSize: 7)),
               ),
             ],
           );

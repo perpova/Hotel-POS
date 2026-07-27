@@ -11,6 +11,7 @@ import 'package:printing/printing.dart';
 import '../theme.dart';
 import '../services/api_service.dart';
 import '../models/models.dart';
+import '../services/translation_service.dart';
 
 class CreditBalanceReportScreen extends StatefulWidget {
   const CreditBalanceReportScreen({Key? key}) : super(key: key);
@@ -295,15 +296,15 @@ class _CreditBalanceReportScreenState extends State<CreditBalanceReportScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Credit Balance Report',
+                      'Credit Balance Report'.tr(context),
                       style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
                     ),
                     const SizedBox(height: 4),
                     Row(
                       children: [
-                        Text('Dashboard', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
+                        Text('Dashboard'.tr(context), style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
                         Icon(Icons.chevron_right, size: 14, color: AppTheme.textLightSecondary),
-                        Text('Credit Balance', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.primary, fontWeight: FontWeight.w600)),
+                        Text('Credit Balance'.tr(context), style: GoogleFonts.inter(fontSize: 12, color: AppTheme.primary, fontWeight: FontWeight.w600)),
                       ],
                     ),
                   ],
@@ -339,7 +340,7 @@ class _CreditBalanceReportScreenState extends State<CreditBalanceReportScreen> {
                     OutlinedButton.icon(
                       onPressed: () => setState(() => _isFilterExpanded = !_isFilterExpanded),
                       icon: Icon(Icons.filter_alt_outlined, size: 14, color: AppTheme.primary),
-                      label: Text('Filter', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primary)),
+                      label: Text('Filter'.tr(context), style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primary)),
                       style: OutlinedButton.styleFrom(
                         side: BorderSide(color: AppTheme.primary),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -366,7 +367,7 @@ class _CreditBalanceReportScreenState extends State<CreditBalanceReportScreen> {
                             children: [
                               const Icon(Icons.picture_as_pdf_outlined, size: 16, color: Color(0xFF64748B)),
                               const SizedBox(width: 8),
-                              Text('Export PDF', style: GoogleFonts.inter(fontSize: 13)),
+                              Text('Export PDF'.tr(context), style: GoogleFonts.inter(fontSize: 13)),
                             ],
                           ),
                         ),
@@ -376,7 +377,7 @@ class _CreditBalanceReportScreenState extends State<CreditBalanceReportScreen> {
                             children: [
                               const Icon(Icons.print_outlined, size: 16, color: Color(0xFF64748B)),
                               const SizedBox(width: 8),
-                              Text('Print Report', style: GoogleFonts.inter(fontSize: 13)),
+                              Text('Print Report'.tr(context), style: GoogleFonts.inter(fontSize: 13)),
                             ],
                           ),
                         ),
@@ -386,7 +387,7 @@ class _CreditBalanceReportScreenState extends State<CreditBalanceReportScreen> {
                             children: [
                               const Icon(Icons.table_view_outlined, size: 16, color: Color(0xFF64748B)),
                               const SizedBox(width: 8),
-                              Text('Export CSV', style: GoogleFonts.inter(fontSize: 13)),
+                              Text('Export CSV'.tr(context), style: GoogleFonts.inter(fontSize: 13)),
                             ],
                           ),
                         ),
@@ -403,7 +404,7 @@ class _CreditBalanceReportScreenState extends State<CreditBalanceReportScreen> {
                             Icon(Icons.download_outlined, size: 14, color: AppTheme.primary),
                             const SizedBox(width: 8),
                             Text(
-                              'Export',
+                              'Export'.tr(context),
                               style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primary),
                             ),
                             const SizedBox(width: 4),
@@ -620,7 +621,7 @@ class _CreditBalanceReportScreenState extends State<CreditBalanceReportScreen> {
                             ElevatedButton.icon(
                               onPressed: () => _showPayCreditDialog(c),
                               icon: const Icon(Icons.account_balance_wallet, size: 14),
-                              label: const Text('Pay', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                              label: Text('Pay'.tr(context), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFF10B981),
                                 foregroundColor: Colors.white,
@@ -1385,7 +1386,7 @@ class _CreditBalanceReportScreenState extends State<CreditBalanceReportScreen> {
 
   Widget _buildTableHeaderText(String label) {
     return Text(
-      label,
+      label.tr(context),
       style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary, letterSpacing: 0.5),
     );
   }

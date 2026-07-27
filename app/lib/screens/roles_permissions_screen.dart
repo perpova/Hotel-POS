@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../pos_controller.dart';
 import '../theme.dart';
 import '../api_service.dart';
+import '../services/translation_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Pages that can be assigned permissions
@@ -221,12 +222,12 @@ class _RolesPermissionsContentState extends State<RolesPermissionsContent> {
       if (widget.showHeader) ...[
         Row(children: [
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Role & Permissions', style: GoogleFonts.outfit(fontSize: 22, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
+            Text('Roles & Permissions'.tr(context), style: GoogleFonts.outfit(fontSize: 22, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
             const SizedBox(height: 2),
             Row(children: [
-              Text('Dashboard', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
+              Text('Dashboard'.tr(context), style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
               Icon(Icons.chevron_right, size: 14, color: AppTheme.textLightSecondary),
-              Text('Role & Permissions', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.primary, fontWeight: FontWeight.w600)),
+              Text('Roles & Permissions'.tr(context), style: GoogleFonts.inter(fontSize: 12, color: AppTheme.primary, fontWeight: FontWeight.w600)),
             ]),
           ])),
           _addRoleBtn(),
@@ -234,7 +235,7 @@ class _RolesPermissionsContentState extends State<RolesPermissionsContent> {
         const SizedBox(height: 20),
       ] else ...[
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          Text('Role & Permissions', style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
+          Text('Roles & Permissions'.tr(context), style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
           _addRoleBtn(),
         ]),
         const SizedBox(height: 4),
@@ -418,7 +419,7 @@ class _RolesPermissionsContentState extends State<RolesPermissionsContent> {
       color: i % 2 == 0 ? AppTheme.cardLight : AppTheme.bgLight,
       child: Row(children: [
         SizedBox(width: 32, child: Checkbox(value: enabled, activeColor: AppTheme.primary, onChanged: toggleView)),
-        Expanded(child: Text(page, style: GoogleFonts.inter(
+        Expanded(child: Text(page.tr(context), style: GoogleFonts.inter(
           fontSize: 13,
           fontWeight: enabled ? FontWeight.w600 : FontWeight.normal,
           color: enabled ? AppTheme.primary : AppTheme.textLightPrimary,

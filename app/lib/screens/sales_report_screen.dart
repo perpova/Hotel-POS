@@ -12,6 +12,7 @@ import '../theme.dart';
 import '../services/api_service.dart';
 import '../models/models.dart';
 import '../utils/date_helper.dart';
+import '../services/translation_service.dart';
 
 class SalesReportScreen extends StatefulWidget {
   const SalesReportScreen({Key? key}) : super(key: key);
@@ -397,15 +398,15 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Sales Report',
+                      'Sales Report'.tr(context),
                       style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
                     ),
                     const SizedBox(height: 4),
                     Row(
                       children: [
-                        Text('Dashboard', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
+                        Text('Dashboard'.tr(context), style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
                         Icon(Icons.chevron_right, size: 14, color: AppTheme.textLightSecondary),
-                        Text('Sales Report', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.primary, fontWeight: FontWeight.w600)),
+                        Text('Sales Report'.tr(context), style: GoogleFonts.inter(fontSize: 12, color: AppTheme.primary, fontWeight: FontWeight.w600)),
                       ],
                     ),
                   ],
@@ -441,7 +442,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                     OutlinedButton.icon(
                       onPressed: () => setState(() => _isFilterExpanded = !_isFilterExpanded),
                       icon: Icon(Icons.filter_alt_outlined, size: 14, color: AppTheme.primary),
-                      label: Text('Filter', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primary)),
+                      label: Text('Filter'.tr(context), style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primary)),
                       style: OutlinedButton.styleFrom(
                         side: BorderSide(color: AppTheme.primary),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -468,7 +469,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                             children: [
                               const Icon(Icons.picture_as_pdf_outlined, size: 16, color: Color(0xFF64748B)),
                               const SizedBox(width: 8),
-                              Text('Export PDF', style: GoogleFonts.inter(fontSize: 13)),
+                              Text('Export PDF'.tr(context), style: GoogleFonts.inter(fontSize: 13)),
                             ],
                           ),
                         ),
@@ -478,7 +479,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                             children: [
                               const Icon(Icons.print_outlined, size: 16, color: Color(0xFF64748B)),
                               const SizedBox(width: 8),
-                              Text('Print Report', style: GoogleFonts.inter(fontSize: 13)),
+                              Text('Print Report'.tr(context), style: GoogleFonts.inter(fontSize: 13)),
                             ],
                           ),
                         ),
@@ -488,7 +489,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                             children: [
                               const Icon(Icons.table_view_outlined, size: 16, color: Color(0xFF64748B)),
                               const SizedBox(width: 8),
-                              Text('Export CSV', style: GoogleFonts.inter(fontSize: 13)),
+                              Text('Export CSV'.tr(context), style: GoogleFonts.inter(fontSize: 13)),
                             ],
                           ),
                         ),
@@ -505,7 +506,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                             Icon(Icons.download_outlined, size: 14, color: AppTheme.primary),
                             const SizedBox(width: 8),
                             Text(
-                              'Export',
+                              'Export'.tr(context),
                               style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primary),
                             ),
                             const SizedBox(width: 4),
@@ -525,13 +526,13 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
             // Statistics Counters Row Cards
             Row(
               children: [
-                Expanded(child: _buildStatCard('Total Orders', '$totalOrders', Icons.inventory_2_outlined, Colors.blue)),
+                Expanded(child: _buildStatCard('Total Orders'.tr(context), '$totalOrders', Icons.inventory_2_outlined, Colors.blue)),
                 const SizedBox(width: 16),
-                Expanded(child: _buildStatCard('Total Earnings', 'LKR ${totalEarnings.toStringAsFixed(2)}', Icons.monetization_on_outlined, const Color(0xFF10B981))),
+                Expanded(child: _buildStatCard('Total Earnings'.tr(context), 'LKR ${totalEarnings.toStringAsFixed(2)}', Icons.monetization_on_outlined, const Color(0xFF10B981))),
                 const SizedBox(width: 16),
-                Expanded(child: _buildStatCard('Total Discounts', 'LKR ${totalDiscounts.toStringAsFixed(2)}', Icons.local_offer_outlined, Colors.orange)),
+                Expanded(child: _buildStatCard('Total Discounts'.tr(context), 'LKR ${totalDiscounts.toStringAsFixed(2)}', Icons.local_offer_outlined, Colors.orange)),
                 const SizedBox(width: 16),
-                Expanded(child: _buildStatCard('Total Delivery Charges', 'LKR ${totalDeliveryCharges.toStringAsFixed(2)}', Icons.local_shipping_outlined, Colors.purple)),
+                Expanded(child: _buildStatCard('Total Delivery Charges'.tr(context), 'LKR ${totalDeliveryCharges.toStringAsFixed(2)}', Icons.local_shipping_outlined, Colors.purple)),
               ],
             ),
             const SizedBox(height: 24),
@@ -852,7 +853,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
-                            isPaid ? 'Paid' : 'Unpaid',
+                            (isPaid ? 'Paid' : 'Unpaid').tr(context),
                             style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: isPaid ? const Color(0xFF137333) : const Color(0xFFC5221F)),
                           ),
                         ),
@@ -870,7 +871,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
 
   Widget _buildTableHeaderText(String label) {
     return Text(
-      label,
+      label.tr(context),
       style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary, letterSpacing: 0.5),
     );
   }
@@ -890,7 +891,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           child: Row(
             children: [
               Text(
-                'Report Period:',
+                'Report Period:'.tr(context),
                 style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
               ),
               const SizedBox(width: 16),
@@ -912,7 +913,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                   icon: const Icon(Icons.date_range, size: 16),
                   label: Text(
                     _startDate == null || _endDate == null
-                        ? 'Select Range'
+                        ? 'Select Range'.tr(context)
                         : '${DateFormat('yyyy-MM-dd').format(_startDate!)} to ${DateFormat('yyyy-MM-dd').format(_endDate!)}',
                     style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold),
                   ),
@@ -928,7 +929,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
   Widget _buildDatePresetChip(String presetKey, String label) {
     final isSelected = _datePreset == presetKey;
     return ChoiceChip(
-      label: Text(label, style: TextStyle(fontSize: 12, color: isSelected ? Colors.white : AppTheme.textLightPrimary)),
+      label: Text(label.tr(context), style: TextStyle(fontSize: 12, color: isSelected ? Colors.white : AppTheme.textLightPrimary)),
       selectedColor: AppTheme.primary,
       backgroundColor: AppTheme.bgLight,
       selected: isSelected,

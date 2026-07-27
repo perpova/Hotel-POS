@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../api_service.dart';
 
 class DashboardController extends ChangeNotifier {
@@ -7,6 +8,23 @@ class DashboardController extends ChangeNotifier {
   bool _isLoading = false;
   String _selectedBranch = 'Mirpur-1 (Main)';
   String _selectedLanguage = 'English';
+
+  DashboardController() {
+    _loadSavedLanguage();
+  }
+
+  Future<void> _loadSavedLanguage() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedLang = prefs.getString('app_language');
+      if (savedLang != null && (savedLang == 'English' || savedLang == 'Sinhala')) {
+        _selectedLanguage = savedLang;
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('Error loading saved language: $e');
+    }
+  }
 
   // Date ranges for individual panels
   DateTimeRange _salesDateRange = DateTimeRange(
@@ -47,10 +65,16 @@ class DashboardController extends ChangeNotifier {
     }
   }
 
-  void setLanguage(String lang) {
+  void setLanguage(String lang) async {
     if (_selectedLanguage != lang) {
       _selectedLanguage = lang;
       notifyListeners();
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('app_language', lang);
+      } catch (e) {
+        debugPrint('Error saving language preference: $e');
+      }
     }
   }
 

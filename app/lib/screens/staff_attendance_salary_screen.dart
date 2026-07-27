@@ -8,6 +8,7 @@ import '../services/api_service.dart';
 import '../services/pdf_helper.dart';
 import '../widgets/image_helper.dart';
 import '../utils/date_helper.dart';
+import '../services/translation_service.dart';
 
 class StaffAttendanceSalaryScreen extends StatefulWidget {
   const StaffAttendanceSalaryScreen({Key? key}) : super(key: key);
@@ -243,15 +244,15 @@ class _StaffAttendanceSalaryScreenState extends State<StaffAttendanceSalaryScree
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Staff Attendance & Salary Management',
+                      'Staff Attendance & Salary Management'.tr(context),
                       style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
                     ),
                     const SizedBox(height: 4),
                     Row(
                       children: [
-                        Text('Dashboard', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
+                        Text('Dashboard'.tr(context), style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
                         Icon(Icons.chevron_right, size: 14, color: AppTheme.textLightSecondary),
-                        Text('Staff Attendance & Salary', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.primary, fontWeight: FontWeight.w600)),
+                        Text('Staff Attendance & Salary'.tr(context), style: GoogleFonts.inter(fontSize: 12, color: AppTheme.primary, fontWeight: FontWeight.w600)),
                       ],
                     ),
                   ],
@@ -259,7 +260,7 @@ class _StaffAttendanceSalaryScreenState extends State<StaffAttendanceSalaryScree
                 ElevatedButton.icon(
                   onPressed: _loadAllData,
                   icon: const Icon(Icons.refresh, size: 16),
-                  label: const Text('Refresh Data'),
+                  label: Text('Refresh Data'.tr(context)),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.cardLight,
                     foregroundColor: AppTheme.primary,
@@ -288,11 +289,11 @@ class _StaffAttendanceSalaryScreenState extends State<StaffAttendanceSalaryScree
                 indicatorWeight: 3,
                 labelStyle: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold),
                 unselectedLabelStyle: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w500),
-                tabs: const [
-                  Tab(text: 'Attendance & Work Sheet'),
-                  Tab(text: 'Salary Calculation & Payslips'),
-                  Tab(text: 'Staff Advances'),
-                  Tab(text: 'Payroll Settings & OT Rates'),
+                tabs: [
+                  Tab(text: 'Attendance & Work Sheet'.tr(context)),
+                  Tab(text: 'Salary Calculation & Payslips'.tr(context)),
+                  Tab(text: 'Staff Advances'.tr(context)),
+                  Tab(text: 'Payroll Settings & OT Rates'.tr(context)),
                 ],
               ),
             ),
@@ -347,7 +348,7 @@ class _StaffAttendanceSalaryScreenState extends State<StaffAttendanceSalaryScree
                   icon: const Icon(Icons.date_range, size: 16),
                   label: Text(_selectedDateRange != null
                       ? '${DateFormat('MMM dd').format(_selectedDateRange!.start)} - ${DateFormat('MMM dd').format(_selectedDateRange!.end)}'
-                      : 'All Time Range'),
+                      : 'All Time Range'.tr(context)),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.cardLight,
                     foregroundColor: AppTheme.textLightPrimary,
@@ -373,7 +374,7 @@ class _StaffAttendanceSalaryScreenState extends State<StaffAttendanceSalaryScree
                 ElevatedButton.icon(
                   onPressed: _showManualClockDialog,
                   icon: const Icon(Icons.add_alarm, size: 16),
-                  label: const Text('Manual Clock Entry'),
+                  label: Text('Manual Clock Entry'.tr(context)),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.cardLight,
                     foregroundColor: AppTheme.primary,
@@ -386,7 +387,7 @@ class _StaffAttendanceSalaryScreenState extends State<StaffAttendanceSalaryScree
                 ElevatedButton.icon(
                   onPressed: _exportWorkSheetPDF,
                   icon: const Icon(Icons.picture_as_pdf, size: 16),
-                  label: const Text('Download / Print Worksheet PDF'),
+                  label: Text('Download / Print Worksheet PDF'.tr(context)),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.primary,
                     foregroundColor: Colors.white,

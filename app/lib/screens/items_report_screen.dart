@@ -11,6 +11,7 @@ import 'package:printing/printing.dart';
 import '../theme.dart';
 import '../services/api_service.dart';
 import '../models/models.dart';
+import '../services/translation_service.dart';
 
 class ItemsReportScreen extends StatefulWidget {
   const ItemsReportScreen({Key? key}) : super(key: key);
@@ -561,15 +562,15 @@ class _ItemsReportScreenState extends State<ItemsReportScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Items Report',
+                      'Items Report'.tr(context),
                       style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
                     ),
                     const SizedBox(height: 4),
                     Row(
                       children: [
-                        Text('Dashboard', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
+                        Text('Dashboard'.tr(context), style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
                         Icon(Icons.chevron_right, size: 14, color: AppTheme.textLightSecondary),
-                        Text('Items Report', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.primary, fontWeight: FontWeight.w600)),
+                        Text('Items Report'.tr(context), style: GoogleFonts.inter(fontSize: 12, color: AppTheme.primary, fontWeight: FontWeight.w600)),
                       ],
                     ),
                   ],
@@ -605,7 +606,7 @@ class _ItemsReportScreenState extends State<ItemsReportScreen> {
                     OutlinedButton.icon(
                       onPressed: () => setState(() => _isFilterExpanded = !_isFilterExpanded),
                       icon: Icon(Icons.filter_alt_outlined, size: 14, color: AppTheme.primary),
-                      label: Text('Filter', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primary)),
+                      label: Text('Filter'.tr(context), style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primary)),
                       style: OutlinedButton.styleFrom(
                         side: BorderSide(color: AppTheme.primary),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -632,7 +633,7 @@ class _ItemsReportScreenState extends State<ItemsReportScreen> {
                             children: [
                               const Icon(Icons.picture_as_pdf_outlined, size: 16, color: Color(0xFF64748B)),
                               const SizedBox(width: 8),
-                              Text('Export PDF', style: GoogleFonts.inter(fontSize: 13)),
+                              Text('Export PDF'.tr(context), style: GoogleFonts.inter(fontSize: 13)),
                             ],
                           ),
                         ),
@@ -642,7 +643,7 @@ class _ItemsReportScreenState extends State<ItemsReportScreen> {
                             children: [
                               const Icon(Icons.print_outlined, size: 16, color: Color(0xFF64748B)),
                               const SizedBox(width: 8),
-                              Text('Print Report', style: GoogleFonts.inter(fontSize: 13)),
+                              Text('Print Report'.tr(context), style: GoogleFonts.inter(fontSize: 13)),
                             ],
                           ),
                         ),
@@ -652,7 +653,7 @@ class _ItemsReportScreenState extends State<ItemsReportScreen> {
                             children: [
                               const Icon(Icons.table_view_outlined, size: 16, color: Color(0xFF64748B)),
                               const SizedBox(width: 8),
-                              Text('Export CSV', style: GoogleFonts.inter(fontSize: 13)),
+                              Text('Export CSV'.tr(context), style: GoogleFonts.inter(fontSize: 13)),
                             ],
                           ),
                         ),
@@ -669,7 +670,7 @@ class _ItemsReportScreenState extends State<ItemsReportScreen> {
                             Icon(Icons.download_outlined, size: 14, color: AppTheme.primary),
                             const SizedBox(width: 8),
                             Text(
-                              'Export',
+                              'Export'.tr(context),
                               style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primary),
                             ),
                             const SizedBox(width: 4),
@@ -735,7 +736,7 @@ class _ItemsReportScreenState extends State<ItemsReportScreen> {
   Widget _buildTabChip(String tabKey, String label) {
     final isSelected = _activeTab == tabKey;
     return ChoiceChip(
-      label: Text(label, style: TextStyle(color: isSelected ? Colors.white : AppTheme.textLightPrimary)),
+      label: Text(label.tr(context), style: TextStyle(color: isSelected ? Colors.white : AppTheme.textLightPrimary)),
       selectedColor: AppTheme.primary,
       backgroundColor: AppTheme.cardLight,
       selected: isSelected,
@@ -1148,7 +1149,7 @@ class _ItemsReportScreenState extends State<ItemsReportScreen> {
 
   Widget _buildTableHeaderText(String label) {
     return Text(
-      label,
+      label.tr(context),
       style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary, letterSpacing: 0.5),
     );
   }

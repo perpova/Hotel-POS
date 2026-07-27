@@ -13,6 +13,7 @@ import '../services/api_service.dart';
 import '../models/models.dart';
 import '../widgets/image_helper.dart';
 import '../utils/date_helper.dart';
+import '../services/translation_service.dart';
 
 class UsersScreen extends StatefulWidget {
   final String userType; // 'Administrators', 'Delivery Boys', 'Customers', 'Employees', 'Waiters', 'Chefs'
@@ -1096,15 +1097,15 @@ class _UsersScreenState extends State<UsersScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  widget.userType,
+                                  widget.userType.tr(context),
                                   style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
                                 ),
                                 const SizedBox(height: 4),
                                 Row(
                                   children: [
-                                    Text('Dashboard', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
+                                    Text('Dashboard'.tr(context), style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
                                     Icon(Icons.chevron_right, size: 14, color: AppTheme.textLightSecondary),
-                                    Text(widget.userType, style: GoogleFonts.inter(fontSize: 12, color: AppTheme.primary, fontWeight: FontWeight.w600)),
+                                    Text(widget.userType.tr(context), style: GoogleFonts.inter(fontSize: 12, color: AppTheme.primary, fontWeight: FontWeight.w600)),
                                   ],
                                 ),
                               ],
@@ -1115,7 +1116,7 @@ class _UsersScreenState extends State<UsersScreen> {
                                 const SizedBox(width: 8),
                                 _buildOutlineButton(
                                   icon: Icons.filter_alt_outlined,
-                                  label: 'Filter',
+                                  label: 'Filter'.tr(context),
                                   onTap: () => setState(() => _isFilterExpanded = !_isFilterExpanded),
                                 ),
                                 const SizedBox(width: 12),
@@ -1138,7 +1139,7 @@ class _UsersScreenState extends State<UsersScreen> {
                                         children: [
                                           const Icon(Icons.picture_as_pdf_outlined, size: 16, color: Color(0xFF64748B)),
                                           const SizedBox(width: 8),
-                                          Text('Export PDF', style: GoogleFonts.inter(fontSize: 13)),
+                                          Text('Export PDF'.tr(context), style: GoogleFonts.inter(fontSize: 13)),
                                         ],
                                       ),
                                     ),
@@ -1148,7 +1149,7 @@ class _UsersScreenState extends State<UsersScreen> {
                                         children: [
                                           const Icon(Icons.print_outlined, size: 16, color: Color(0xFF64748B)),
                                           const SizedBox(width: 8),
-                                          Text('Print Report', style: GoogleFonts.inter(fontSize: 13)),
+                                          Text('Print Report'.tr(context), style: GoogleFonts.inter(fontSize: 13)),
                                         ],
                                       ),
                                     ),
@@ -1158,7 +1159,7 @@ class _UsersScreenState extends State<UsersScreen> {
                                         children: [
                                           const Icon(Icons.table_view_outlined, size: 16, color: Color(0xFF64748B)),
                                           const SizedBox(width: 8),
-                                          Text('Export CSV', style: GoogleFonts.inter(fontSize: 13)),
+                                          Text('Export CSV'.tr(context), style: GoogleFonts.inter(fontSize: 13)),
                                         ],
                                       ),
                                     ),
@@ -1175,7 +1176,7 @@ class _UsersScreenState extends State<UsersScreen> {
                                         Icon(Icons.download_outlined, size: 14, color: AppTheme.primary),
                                         const SizedBox(width: 8),
                                         Text(
-                                          'Export',
+                                          'Export'.tr(context),
                                           style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primary),
                                         ),
                                         const SizedBox(width: 4),
@@ -1188,7 +1189,7 @@ class _UsersScreenState extends State<UsersScreen> {
                                 ElevatedButton.icon(
                                   onPressed: () => _openDrawer(),
                                   icon: const Icon(Icons.add_circle_outline, size: 16),
-                                  label: Text('Add ${_getSingleName(widget.userType)}'),
+                                  label: Text('Add ${_getSingleName(widget.userType)}'.tr(context)),
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: AppTheme.primary,
                                     foregroundColor: Colors.white,
@@ -1474,7 +1475,7 @@ class _UsersScreenState extends State<UsersScreen> {
           ),
           const SizedBox(height: 16),
           Text(
-            'No data available.',
+            'No data available.'.tr(context),
             style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary),
           ),
         ],
@@ -3411,7 +3412,7 @@ class _UsersScreenState extends State<UsersScreen> {
 
   Widget _buildFieldLabel(String text) {
     return Text(
-      text,
+      text.tr(context),
       style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary),
     );
   }

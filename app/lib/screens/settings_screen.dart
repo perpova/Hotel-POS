@@ -13,6 +13,7 @@ import '../api_service.dart';
 import '../pos_controller.dart';
 import '../controllers/app_settings_controller.dart';
 import '../widgets/image_helper.dart';
+import '../services/translation_service.dart';
 import 'roles_permissions_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -94,11 +95,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           // ── Breadcrumb ───────────────────────────────────────────────────
           Row(children: [
-            Text('Dashboard', style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightSecondary)),
+            Text('Dashboard'.tr(context), style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightSecondary)),
             Icon(Icons.chevron_right, size: 15, color: AppTheme.textLightSecondary),
-            Text('Settings', style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightSecondary)),
+            Text('Settings'.tr(context), style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightSecondary)),
             Icon(Icons.chevron_right, size: 15, color: AppTheme.textLightSecondary),
-            Text(_tabTitle(_activeTab),
+            Text(_tabTitle(_activeTab).tr(context),
                 style: GoogleFonts.inter(fontSize: 13, color: AppTheme.primary, fontWeight: FontWeight.w600)),
           ]),
           const SizedBox(height: 20),
@@ -118,21 +119,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   child: ListView(
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     children: [
-                      _section('COMPANY'),
+                      _section('COMPANY'.tr(context)),
                       _item(Icons.business_outlined,     'Company',          _SettingsTab.company),
                       _item(Icons.palette_outlined,      'Theme',            _SettingsTab.theme),
                       _item(Icons.store_outlined,        'Branches',         _SettingsTab.branches),
                       Divider(height: 1, color: AppTheme.isDarkMode ? const Color(0xFF334155) : const Color(0xFFF1F5F9)),
-                      _section('PROFILE'),
+                      _section('PROFILE'.tr(context)),
                       _item(Icons.person_outline,        'Edit Profile',     _SettingsTab.editProfile),
                       _item(Icons.lock_outline,          'Change Password',  _SettingsTab.changePassword),
                       Divider(height: 1, color: AppTheme.isDarkMode ? const Color(0xFF334155) : const Color(0xFFF1F5F9)),
                       if (APIService.instance.canViewPage('Roles & Permissions')) ...[
-                        _section('USERS'),
+                        _section('USERS'.tr(context)),
                         _item(Icons.shield_outlined,       'Roles & Permissions', _SettingsTab.rolesPermissions),
                         Divider(height: 1, color: AppTheme.isDarkMode ? const Color(0xFF334155) : const Color(0xFFF1F5F9)),
                       ],
-                      _section('SYSTEM'),
+                      _section('SYSTEM'.tr(context)),
                       _item(Icons.print_outlined,        'Printer & Paper Setup', _SettingsTab.printers),
                       _item(Icons.settings_ethernet,     'API Connection',   _SettingsTab.connection),
                       _item(Icons.monitor,               'External Display', _SettingsTab.externalDisplay),
@@ -189,7 +190,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         child: Row(children: [
           Icon(icon, size: 16, color: active ? AppTheme.primary : AppTheme.textLightSecondary),
           const SizedBox(width: 10),
-          Text(label, style: GoogleFonts.inter(
+          Text(label.tr(context), style: GoogleFonts.inter(
             fontSize: 13,
             fontWeight: active ? FontWeight.w600 : FontWeight.normal,
             color: active ? AppTheme.primary : AppTheme.textLightPrimary,
@@ -908,7 +909,7 @@ class _CompanyTabState extends State<_CompanyTab> {
     super.dispose();
   }
 
-  Widget _lbl(String t) => Text(t, style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold,
+  Widget _lbl(String t) => Text(t.tr(context), style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold,
       color: AppTheme.textLightSecondary, letterSpacing: 0.5));
 
   Widget _tf(TextEditingController c, {int maxLines = 1, TextInputType? kt}) =>
@@ -927,7 +928,7 @@ class _CompanyTabState extends State<_CompanyTab> {
   Widget build(BuildContext context) {
     return SingleChildScrollView(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('Company', style: GoogleFonts.outfit(fontSize: 17, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
+        Text('Company'.tr(context), style: GoogleFonts.outfit(fontSize: 17, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
         Divider(color: AppTheme.dividerColor),
         const SizedBox(height: 16),
 
@@ -958,8 +959,8 @@ class _CompanyTabState extends State<_CompanyTab> {
             );
             setState(() => _saving = false);
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                content: Text('Company settings saved!'),
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                content: Text('Company settings saved!'.tr(context)),
                 backgroundColor: AppTheme.accent,
               ));
             }
@@ -967,7 +968,7 @@ class _CompanyTabState extends State<_CompanyTab> {
           icon: _saving
               ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
               : const Icon(Icons.save_outlined, size: 16),
-          label: const Text('Save'),
+          label: Text('Save'.tr(context)),
           style: ElevatedButton.styleFrom(
             backgroundColor: AppTheme.primary, foregroundColor: Colors.white,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
