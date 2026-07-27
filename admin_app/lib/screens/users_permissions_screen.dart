@@ -57,8 +57,8 @@ class _UsersPermissionsScreenState extends State<UsersPermissionsScreen> with Si
     _wsSub = ApiService.instance.eventStream.listen((event) {
       final type = event['type']?.toString();
       if (type == 'database_synchronized' || type == 'ws_reconnected' || type == 'user_updated') {
-        _loadUsers();
-        _loadRoles();
+        _loadUsers(silent: true);
+        _loadRoles(silent: true);
       }
     });
   }
@@ -82,8 +82,10 @@ class _UsersPermissionsScreenState extends State<UsersPermissionsScreen> with Si
     return role;
   }
 
-  Future<void> _loadUsers() async {
-    setState(() => _loadingUsers = true);
+  Future<void> _loadUsers({bool silent = false}) async {
+    if (!silent && _users.isEmpty) {
+      setState(() => _loadingUsers = true);
+    }
     try {
       final users = await ApiService.instance.getUsers();
       if (mounted) {
@@ -100,8 +102,10 @@ class _UsersPermissionsScreenState extends State<UsersPermissionsScreen> with Si
     }
   }
 
-  Future<void> _loadRoles() async {
-    setState(() => _loadingRoles = true);
+  Future<void> _loadRoles({bool silent = false}) async {
+    if (!silent && _roles.isEmpty) {
+      setState(() => _loadingRoles = true);
+    }
     try {
       final roles = await ApiService.instance.getRoles();
       if (mounted) {

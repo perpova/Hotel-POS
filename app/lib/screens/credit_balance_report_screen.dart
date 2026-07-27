@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -19,6 +20,7 @@ class CreditBalanceReportScreen extends StatefulWidget {
 }
 
 class _CreditBalanceReportScreenState extends State<CreditBalanceReportScreen> {
+  StreamSubscription? _wsSub;
   List<CustomerModel> _customers = [];
   bool _isLoading = false;
   String _errorMessage = '';
@@ -41,22 +43,37 @@ class _CreditBalanceReportScreenState extends State<CreditBalanceReportScreen> {
   void initState() {
     super.initState();
     _loadCustomers();
+    _wsSub = APIService.instance.eventStream.listen((event) {
+      final type = event['type']?.toString();
+      if (type == 'database_synchronized' ||
+          type == 'ws_reconnected' ||
+          type == 'customer_updated' ||
+          type == 'customer_created' ||
+          type == 'credit_settled' ||
+          type == 'payment_completed' ||
+          type == 'order_created') {
+        _loadCustomers(silent: true);
+      }
+    });
   }
 
   @override
   void dispose() {
+    _wsSub?.cancel();
     _filterNameController.dispose();
     _filterEmailController.dispose();
     _filterPhoneController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadCustomers() async {
+  Future<void> _loadCustomers({bool silent = false}) async {
     if (!mounted) return;
-    setState(() {
-      _isLoading = true;
-      _errorMessage = '';
-    });
+    if (!silent && _customers.isEmpty) {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = '';
+      });
+    }
     try {
       final custs = await APIService.instance.getCustomers();
       if (mounted) {
@@ -66,7 +83,7 @@ class _CreditBalanceReportScreenState extends State<CreditBalanceReportScreen> {
         });
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted && !silent) {
         setState(() {
           _errorMessage = 'Failed to load credit balances: $e';
           _isLoading = false;

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -18,6 +19,7 @@ class StaffAttendanceSalaryScreen extends StatefulWidget {
 class _StaffAttendanceSalaryScreenState extends State<StaffAttendanceSalaryScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   bool _isLoading = false;
+  StreamSubscription? _wsSub;
 
   // Tab 1: Attendance
   List<Map<String, dynamic>> _attendanceSummary = [];
@@ -47,10 +49,21 @@ class _StaffAttendanceSalaryScreenState extends State<StaffAttendanceSalaryScree
     _tabController = TabController(length: 4, vsync: this);
     _tabController.addListener(_handleTabChange);
     _loadAllData();
+    _wsSub = APIService.instance.eventStream.listen((event) {
+      final type = event['type']?.toString();
+      if (type == 'database_synchronized' ||
+          type == 'ws_reconnected' ||
+          type == 'shift_updated' ||
+          type == 'payroll_updated' ||
+          type == 'user_updated') {
+        _loadAllData(silent: true);
+      }
+    });
   }
 
   @override
   void dispose() {
+    _wsSub?.cancel();
     _tabController.dispose();
     super.dispose();
   }
@@ -60,8 +73,10 @@ class _StaffAttendanceSalaryScreenState extends State<StaffAttendanceSalaryScree
     _loadTabSpecificData();
   }
 
-  Future<void> _loadAllData() async {
-    setState(() => _isLoading = true);
+  Future<void> _loadAllData({bool silent = false}) async {
+    if (!silent && _attendanceSummary.isEmpty) {
+      setState(() => _isLoading = true);
+    }
     try {
       await Future.wait([
         _loadAttendance(),

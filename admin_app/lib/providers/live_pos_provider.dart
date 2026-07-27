@@ -41,10 +41,12 @@ class LivePosProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> load() async {
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
+  Future<void> load({bool silent = false}) async {
+    if (!silent && _orders.isEmpty) {
+      _isLoading = true;
+      _error = null;
+      notifyListeners();
+    }
     try {
       final raw = await ApiService.instance.getTodayOrders();
       _orders = raw.map((o) => OrderSummary.fromJson(o)).toList();
@@ -78,7 +80,7 @@ class LivePosProvider extends ChangeNotifier {
   /// Debounced full reload — 800ms after the last trigger.
   void _scheduleReload() {
     _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 800), load);
+    _debounce = Timer(const Duration(milliseconds: 800), () => load(silent: true));
   }
 
   void onRealtimeEvent(Map<String, dynamic> event) {

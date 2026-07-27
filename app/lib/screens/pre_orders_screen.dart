@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -28,18 +29,36 @@ class _PreOrdersScreenState extends State<PreOrdersScreen> {
   String _searchQuery = '';
   bool _isLoading = false;
   String _selectedFilterTab = 'active'; // 'active', 'history'
+  StreamSubscription? _wsSub;
 
   @override
   void initState() {
     super.initState();
     _loadData();
+    _wsSub = APIService.instance.eventStream.listen((event) {
+      final type = event['type']?.toString();
+      if (type == 'database_synchronized' ||
+          type == 'ws_reconnected' ||
+          type == 'pre_order_created' ||
+          type == 'pre_order_updated' ||
+          type == 'pre_order_deleted') {
+        _loadData(silent: true);
+      }
+    });
   }
 
-  Future<void> _loadData() async {
-    setState(() => _isLoading = true);
+  @override
+  void dispose() {
+    _wsSub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _loadData({bool silent = false}) async {
+    if (!mounted) return;
+    if (!silent) setState(() => _isLoading = true);
     final controller = Provider.of<POSController>(context, listen: false);
     await controller.fetchPreOrders();
-    setState(() => _isLoading = false);
+    if (mounted && !silent) setState(() => _isLoading = false);
   }
 
   @override

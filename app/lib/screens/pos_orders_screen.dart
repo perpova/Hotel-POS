@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -29,6 +30,7 @@ class POSOrdersScreen extends StatefulWidget {
 }
 
 class _POSOrdersScreenState extends State<POSOrdersScreen> {
+  StreamSubscription? _wsSub;
   List<OrderModel> _allOrders = [];
   bool _isLoadingOrders = false;
   String _errorMessage = '';
@@ -51,14 +53,34 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
   void initState() {
     super.initState();
     _loadOrders();
+    _wsSub = APIService.instance.eventStream.listen((event) {
+      final type = event['type']?.toString();
+      if (type == 'database_synchronized' ||
+          type == 'ws_reconnected' ||
+          type == 'order_created' ||
+          type == 'order_updated' ||
+          type == 'order_status_changed' ||
+          type == 'payment_completed' ||
+          type == 'pre_order_updated') {
+        _loadOrders(silent: true);
+      }
+    });
   }
 
-  Future<void> _loadOrders() async {
+  @override
+  void dispose() {
+    _wsSub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _loadOrders({bool silent = false}) async {
     if (!mounted) return;
-    setState(() {
-      _isLoadingOrders = true;
-      _errorMessage = '';
-    });
+    if (!silent && _allOrders.isEmpty) {
+      setState(() {
+        _isLoadingOrders = true;
+        _errorMessage = '';
+      });
+    }
     try {
       final api = APIService.instance;
       final online = await api.checkOnline();

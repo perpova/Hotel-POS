@@ -29,10 +29,12 @@ class DashboardProvider extends ChangeNotifier {
   int get paidOrders => _stats?['paidOrders'] as int? ?? 0;
   int get unpaidOrders => _stats?['unpaidOrders'] as int? ?? 0;
 
-  Future<void> load() async {
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
+  Future<void> load({bool silent = false}) async {
+    if (!silent && _stats == null) {
+      _isLoading = true;
+      _error = null;
+      notifyListeners();
+    }
     try {
       final results = await Future.wait([
         ApiService.instance.getDashboardStats(),
@@ -101,7 +103,7 @@ class DashboardProvider extends ChangeNotifier {
 
     if (triggers.contains(type)) {
       _debounce?.cancel();
-      _debounce = Timer(const Duration(milliseconds: 1500), load);
+      _debounce = Timer(const Duration(milliseconds: 1500), () => load(silent: true));
     }
   }
 

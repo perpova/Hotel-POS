@@ -98,7 +98,7 @@ class _UsersScreenState extends State<UsersScreen> {
     _wsSub = APIService.instance.eventStream.listen((event) {
       final type = event['type']?.toString();
       if (type == 'database_synchronized' || type == 'ws_reconnected' || type == 'user_updated') {
-        _loadData();
+        _loadData(silent: true);
       }
     });
   }
@@ -135,12 +135,14 @@ class _UsersScreenState extends State<UsersScreen> {
 
   bool get _isCustomerType => widget.userType == 'Customers';
 
-  Future<void> _loadData() async {
+  Future<void> _loadData({bool silent = false}) async {
     if (!mounted) return;
-    setState(() {
-      _isLoading = true;
-      _errorMessage = '';
-    });
+    if (!silent && _items.isEmpty) {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = '';
+      });
+    }
     try {
       try {
         _categories = await APIService.instance.getCategories();

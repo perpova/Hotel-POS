@@ -18,16 +18,34 @@ class _KDSScreenState extends State<KDSScreen> {
   // Map containing orders and their items list
   final Map<int, List<OrderItemModel>> _orderItemsMap = {};
   bool _loadingItems = false;
+  StreamSubscription? _wsSub;
 
   @override
   void initState() {
     super.initState();
     _loadItemsForOrders();
+    _wsSub = APIService.instance.eventStream.listen((event) {
+      final type = event['type']?.toString();
+      if (type == 'database_synchronized' ||
+          type == 'ws_reconnected' ||
+          type == 'order_created' ||
+          type == 'order_updated' ||
+          type == 'order_status_changed' ||
+          type == 'kot_trigger_voice') {
+        _loadItemsForOrders(silent: true);
+      }
+    });
   }
 
-  Future<void> _loadItemsForOrders() async {
+  @override
+  void dispose() {
+    _wsSub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _loadItemsForOrders({bool silent = false}) async {
     if (!mounted) return;
-    setState(() => _loadingItems = true);
+    if (!silent) setState(() => _loadingItems = true);
     final controller = Provider.of<POSController>(context, listen: false);
     
     try {

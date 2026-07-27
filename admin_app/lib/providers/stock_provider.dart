@@ -22,10 +22,12 @@ class StockProvider extends ChangeNotifier {
       _ingredients.where((i) => i.isLowStock).toList();
   List<Map<String, dynamic>> get stockLogs => _stockLogs;
 
-  Future<void> loadProducts() async {
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
+  Future<void> loadProducts({bool silent = false}) async {
+    if (!silent && _products.isEmpty) {
+      _isLoading = true;
+      _error = null;
+      notifyListeners();
+    }
     try {
       _products = await ApiService.instance.getAllProducts();
       _isLoading = false;
@@ -51,10 +53,12 @@ class StockProvider extends ChangeNotifier {
     } catch (_) {}
   }
 
-  Future<void> loadAll() async {
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
+  Future<void> loadAll({bool silent = false}) async {
+    if (!silent && _products.isEmpty) {
+      _isLoading = true;
+      _error = null;
+      notifyListeners();
+    }
     try {
       final results = await Future.wait([
         ApiService.instance.getAllProducts(),
@@ -113,7 +117,7 @@ class StockProvider extends ChangeNotifier {
     _debounce?.cancel();
     _debounce = Timer(
       const Duration(milliseconds: 1000),
-      productsOnly ? loadProducts : loadAll,
+      () => productsOnly ? loadProducts(silent: true) : loadAll(silent: true),
     );
   }
 

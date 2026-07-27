@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -20,6 +21,7 @@ class ItemsScreen extends StatefulWidget {
 
 class _ItemsScreenState extends State<ItemsScreen> {
   final APIService _api = APIService.instance;
+  StreamSubscription? _wsSub;
   
   List<ProductModel> _allProducts = [];
   List<CategoryModel> _categories = [];
@@ -39,27 +41,57 @@ class _ItemsScreenState extends State<ItemsScreen> {
   void initState() {
     super.initState();
     _fetchData();
+    _wsSub = APIService.instance.eventStream.listen((event) {
+      final type = event['type']?.toString();
+      if (type == 'database_synchronized' ||
+          type == 'ws_reconnected' ||
+          type == 'product_updated' ||
+          type == 'product_created' ||
+          type == 'product_deleted' ||
+          type == 'category_updated' ||
+          type == 'category_created' ||
+          type == 'category_deleted' ||
+          type == 'stock_updated') {
+        _fetchData(silent: true);
+      }
+    });
   }
 
-  Future<void> _fetchData() async {
-    setState(() {
-      _isLoading = true;
-    });
+  @override
+  void dispose() {
+    _wsSub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _fetchData({bool silent = false}) async {
+    if (!mounted) return;
+    if (!silent && _allProducts.isEmpty) {
+      setState(() {
+        _isLoading = true;
+      });
+    }
     try {
       final products = await _api.getAllProducts();
       final categories = await _api.getCategories();
       final ingredients = await _api.getIngredients();
-      setState(() {
-        _allProducts = products;
-        _categories = categories;
-        _ingredients = ingredients;
-      });
+      if (mounted) {
+        setState(() {
+          _allProducts = products;
+          _categories = categories;
+          _ingredients = ingredients;
+          _isLoading = false;
+        });
+      }
     } catch (e) {
-      _showSnackBar('Error loading items: $e', Colors.red);
+      if (mounted && !silent) {
+        _showSnackBar('Error loading items: $e', Colors.red);
+      }
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 

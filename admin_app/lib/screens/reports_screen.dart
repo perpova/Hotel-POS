@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -28,6 +29,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
   bool   _loading   = false;
   bool   _pdfBusy   = false;
   String _err       = '';
+  StreamSubscription? _wsSub;
 
   DateTime _from = DateTime.now().subtract(const Duration(days: 6));
   DateTime _to   = DateTime.now();
@@ -45,11 +47,29 @@ class _ReportsScreenState extends State<ReportsScreen> {
     super.initState();
     // Defer load so the widget tree is fully built before hitting network
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+    _wsSub = ApiService.instance.eventStream.listen((event) {
+      final type = event['type']?.toString();
+      if (type == 'database_synchronized' ||
+          type == 'ws_reconnected' ||
+          type == 'order_created' ||
+          type == 'order_updated' ||
+          type == 'payment_completed' ||
+          type == 'stock_updated' ||
+          type == 'ingredient_stock_updated') {
+        _load(silent: true);
+      }
+    });
   }
 
-  Future<void> _load() async {
+  @override
+  void dispose() {
+    _wsSub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _load({bool silent = false}) async {
     if (!mounted) return;
-    setState(() { _loading = true; _err = ''; });
+    if (!silent) setState(() { _loading = true; _err = ''; });
     try {
       final fs  = DateFormat('yyyy-MM-dd').format(_from);
       final ts  = DateFormat('yyyy-MM-dd').format(_to);
@@ -62,7 +82,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
       setState(() { _orders = ord; _usersReport = usr; _ingredients = ing; _loading = false; });
     } catch (e) {
       if (!mounted) return;
-      setState(() { _err = e.toString(); _loading = false; });
+      if (!silent) setState(() { _err = e.toString(); _loading = false; });
     }
   }
 

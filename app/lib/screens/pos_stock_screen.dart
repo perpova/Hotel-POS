@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -22,6 +23,7 @@ class POSStockScreen extends StatefulWidget {
 }
 
 class _POSStockScreenState extends State<POSStockScreen> {
+  StreamSubscription? _wsSub;
   ProductModel? _selectedStockProduct;
   final _stockChangeController = TextEditingController();
   final _stockReasonController = TextEditingController();
@@ -54,10 +56,20 @@ class _POSStockScreenState extends State<POSStockScreen> {
   void initState() {
     super.initState();
     _loadLogs();
+    _wsSub = APIService.instance.eventStream.listen((event) {
+      final type = event['type']?.toString();
+      if (type == 'database_synchronized' ||
+          type == 'ws_reconnected' ||
+          type == 'stock_updated' ||
+          type == 'product_updated') {
+        _loadLogs(silent: true);
+      }
+    });
   }
 
   @override
   void dispose() {
+    _wsSub?.cancel();
     _stockChangeController.dispose();
     _stockReasonController.dispose();
     _filterProductController.dispose();
@@ -65,9 +77,11 @@ class _POSStockScreenState extends State<POSStockScreen> {
     super.dispose();
   }
 
-  Future<void> _loadLogs() async {
+  Future<void> _loadLogs({bool silent = false}) async {
     if (!mounted) return;
-    setState(() => _loading = true);
+    if (!silent && _logs.isEmpty) {
+      setState(() => _loading = true);
+    }
     try {
       final logsData = await APIService.instance.getProductStockLogs();
       if (mounted) {

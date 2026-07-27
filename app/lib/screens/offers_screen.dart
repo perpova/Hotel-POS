@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -20,6 +21,7 @@ class OffersScreen extends StatefulWidget {
 }
 
 class _OffersScreenState extends State<OffersScreen> {
+  StreamSubscription? _wsSub;
   List<OfferModel> _offers = [];
   List<Map<String, dynamic>> _happyHours = [];
   bool _isLoading = false;
@@ -67,10 +69,22 @@ class _OffersScreenState extends State<OffersScreen> {
   void initState() {
     super.initState();
     _loadOffers();
+    _wsSub = APIService.instance.eventStream.listen((event) {
+      final type = event['type']?.toString();
+      if (type == 'database_synchronized' ||
+          type == 'ws_reconnected' ||
+          type == 'offer_created' ||
+          type == 'offer_updated' ||
+          type == 'offer_deleted' ||
+          type == 'happy_hour_updated') {
+        _loadOffers(silent: true);
+      }
+    });
   }
 
   @override
   void dispose() {
+    _wsSub?.cancel();
     _nameController.dispose();
     _discountController.dispose();
     _startDateController.dispose();
@@ -82,12 +96,14 @@ class _OffersScreenState extends State<OffersScreen> {
     super.dispose();
   }
 
-  Future<void> _loadOffers() async {
+  Future<void> _loadOffers({bool silent = false}) async {
     if (!mounted) return;
-    setState(() {
-      _isLoading = true;
-      _errorMessage = '';
-    });
+    if (!silent && _offers.isEmpty) {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = '';
+      });
+    }
     try {
       final ords = await APIService.instance.getOffers();
       final promos = await APIService.instance.getHappyHours();
@@ -99,7 +115,7 @@ class _OffersScreenState extends State<OffersScreen> {
         });
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted && !silent) {
         setState(() {
           _errorMessage = 'Failed to load offers: $e';
           _isLoading = false;

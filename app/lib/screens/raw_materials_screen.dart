@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -21,6 +22,8 @@ class RawMaterialsScreen extends StatefulWidget {
 }
 
 class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
+  StreamSubscription? _wsSub;
+
   // Raw Ingredient Stock Controllers
   List<IngredientModel> _ingredients = [];
   List<dynamic> _logs = [];
@@ -58,10 +61,21 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
   void initState() {
     super.initState();
     _loadData();
+    _wsSub = APIService.instance.eventStream.listen((event) {
+      final type = event['type']?.toString();
+      if (type == 'database_synchronized' ||
+          type == 'ws_reconnected' ||
+          type == 'ingredient_stock_updated' ||
+          type == 'ingredient_created' ||
+          type == 'ingredient_updated') {
+        _loadData(silent: true);
+      }
+    });
   }
 
   @override
   void dispose() {
+    _wsSub?.cancel();
     _ingChangeController.dispose();
     _ingReasonController.dispose();
     _newIngNameController.dispose();
@@ -71,9 +85,11 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
     super.dispose();
   }
 
-  Future<void> _loadData() async {
+  Future<void> _loadData({bool silent = false}) async {
     if (!mounted) return;
-    setState(() => _loading = true);
+    if (!silent && _ingredients.isEmpty) {
+      setState(() => _loading = true);
+    }
     try {
       final ings = await APIService.instance.getIngredients();
       final logsData = await APIService.instance.getIngredientStockLogs();

@@ -634,9 +634,11 @@ class POSController extends ChangeNotifier {
   }
 
   // Load and refresh POS local environment with full 2-Way Cache Mirroring
-  Future<void> reloadEnvironment() async {
-    isLoading = true;
-    notifyListeners();
+  Future<void> reloadEnvironment({bool silent = false}) async {
+    if (!silent && products.isEmpty) {
+      isLoading = true;
+      notifyListeners();
+    }
 
     isOnline = await _api.checkOnline();
     
@@ -717,7 +719,7 @@ class POSController extends ChangeNotifier {
         case 'database_synchronized':
         case 'shift_updated':
         case 'ingredient_stock_updated':
-          reloadEnvironment();
+          reloadEnvironment(silent: true);
           break;
         case 'stock_updated':
           final data = event['data'];

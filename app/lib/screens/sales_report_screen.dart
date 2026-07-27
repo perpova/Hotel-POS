@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -20,6 +21,7 @@ class SalesReportScreen extends StatefulWidget {
 }
 
 class _SalesReportScreenState extends State<SalesReportScreen> {
+  StreamSubscription? _wsSub;
   List<OrderModel> _orders = [];
   bool _isLoading = false;
   String _errorMessage = '';
@@ -49,22 +51,36 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
   void initState() {
     super.initState();
     _loadOrders();
+    _wsSub = APIService.instance.eventStream.listen((event) {
+      final type = event['type']?.toString();
+      if (type == 'database_synchronized' ||
+          type == 'ws_reconnected' ||
+          type == 'order_created' ||
+          type == 'order_updated' ||
+          type == 'order_status_changed' ||
+          type == 'payment_completed') {
+        _loadOrders(silent: true);
+      }
+    });
   }
 
   @override
   void dispose() {
+    _wsSub?.cancel();
     _filterIdController.dispose();
     _filterDateController.dispose();
     _filterPaymentTypeController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadOrders() async {
+  Future<void> _loadOrders({bool silent = false}) async {
     if (!mounted) return;
-    setState(() {
-      _isLoading = true;
-      _errorMessage = '';
-    });
+    if (!silent && _orders.isEmpty) {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = '';
+      });
+    }
     try {
       final ords = await APIService.instance.getOrders();
       if (mounted) {
@@ -74,7 +90,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
         });
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted && !silent) {
         setState(() {
           _errorMessage = 'Failed to load sales data: $e';
           _isLoading = false;
