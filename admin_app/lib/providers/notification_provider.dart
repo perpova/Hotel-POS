@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../core/api_service.dart';
 import '../core/local_notification_service.dart';
 import '../models/models.dart';
@@ -15,6 +16,9 @@ class NotificationProvider extends ChangeNotifier {
   // Track keys that have already triggered a device status bar push notification
   final Set<String> _notifiedSystemKeys = {};
 
+  // Persistent set of notification keys that have been marked as read by user
+  Set<String> _readKeys = {};
+
   // Debounce for rapid realtime events
   Timer? _stockDebounce;
   Timer? _preOrderDebounce;
@@ -28,13 +32,29 @@ class NotificationProvider extends ChangeNotifier {
 
   // ─── Initialization ────────────────────────────────────────────────────────
 
-  void init() {
+  void init() async {
     LocalNotificationService.instance.init();
+    await _loadReadKeys();
     _loadAll();
     // Periodic refresh every 30 minutes (fallback when WS misses something)
     _periodicCheck = Timer.periodic(const Duration(minutes: 30), (_) {
       _loadAll(silent: true);
     });
+  }
+
+  Future<void> _loadReadKeys() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final list = prefs.getStringList('read_notification_keys') ?? [];
+      _readKeys = list.toSet();
+    } catch (_) {}
+  }
+
+  Future<void> _saveReadKeys() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList('read_notification_keys', _readKeys.toList());
+    } catch (_) {}
   }
 
   Future<void> _loadAll({bool silent = false}) async {
@@ -55,14 +75,21 @@ class NotificationProvider extends ChangeNotifier {
       final seen = <String>{};
       final merged = <AppNotification>[];
       for (final n in [...serverNotes, ...stockAlerts, ...preOrderAlerts]) {
-        if (seen.add(n.key)) merged.add(n);
+        if (seen.add(n.key)) {
+          // Preserve persistent read status across app restarts
+          if (_readKeys.contains(n.key)) {
+            merged.add(n.copyWith(isRead: true));
+          } else {
+            merged.add(n);
+          }
+        }
       }
       merged.sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
       _notifications = merged;
       _recalcUnread();
 
-      // Fire system status bar notifications for unread items
+      // Fire system status bar notifications ONLY for unread items
       for (final n in merged) {
         if (!n.isRead) {
           _triggerSystemPush(n);
@@ -270,9 +297,11 @@ class NotificationProvider extends ChangeNotifier {
     }
     final existing = {for (final n in _notifications) n.key: n};
     for (final n in fresh) {
-      existing.putIfAbsent(n.key, () => n);
-      if (!n.isRead) {
-        _triggerSystemPush(n);
+      final isAlreadyRead = _readKeys.contains(n.key) || n.isRead;
+      final updated = isAlreadyRead ? n.copyWith(isRead: true) : n;
+      existing.putIfAbsent(n.key, () => updated);
+      if (!updated.isRead) {
+        _triggerSystemPush(updated);
       }
     }
     final merged = existing.values.toList()
@@ -282,7 +311,11 @@ class NotificationProvider extends ChangeNotifier {
   }
 
   void _triggerSystemPush(AppNotification notification) {
-    if (_notifiedSystemKeys.contains(notification.key)) return;
+    if (notification.isRead ||
+        _readKeys.contains(notification.key) ||
+        _notifiedSystemKeys.contains(notification.key)) {
+      return;
+    }
     _notifiedSystemKeys.add(notification.key);
 
     final isUrgent = notification.type == NotificationType.stockCritical ||
@@ -311,8 +344,10 @@ class NotificationProvider extends ChangeNotifier {
 
   void markRead(String key) {
     final idx = _notifications.indexWhere((n) => n.key == key);
-    if (idx != -1 && !_notifications[idx].isRead) {
+    if (idx != -1) {
       _notifications[idx] = _notifications[idx].copyWith(isRead: true);
+      _readKeys.add(key);
+      _saveReadKeys();
       _recalcUnread();
       notifyListeners();
       // If it's a server notification, tell the API
@@ -325,6 +360,10 @@ class NotificationProvider extends ChangeNotifier {
 
   void markAllRead() {
     _notifications = _notifications.map((n) => n.copyWith(isRead: true)).toList();
+    for (final n in _notifications) {
+      _readKeys.add(n.key);
+    }
+    _saveReadKeys();
     _unreadCount = 0;
     notifyListeners();
     ApiService.instance.markAllNotificationsRead();
