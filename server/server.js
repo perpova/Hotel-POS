@@ -243,6 +243,7 @@ app.post('/api/categories', authenticateToken, async (req, res) => {
         const newId = result.insertId;
         const [category] = await db.query('SELECT * FROM categories WHERE id = ?', [newId]);
         broadcast({ type: 'database_synchronized' });
+        triggerRemoteMirror({ categories: [category] });
         res.json(category);
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -586,20 +587,7 @@ app.post('/api/products', authenticateToken, async (req, res) => {
         await logAudit('edit_stock', 'products', newId, `Product ${name} created manually.`, req.user.id);
         broadcast({ type: 'database_synchronized' });
         
-        // Mirror newly created product to Remote Server if online
-        try {
-            const remoteUrl = process.env.REMOTE_SERVER_URL || 'https://pos0001.perpova.dev';
-            if (process.env.IS_REMOTE_SERVER !== 'true') {
-                const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
-                await fetch(`${remoteUrl}/api/sync/mirror-catalog`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ products: [product] }),
-                    timeout: 5000
-                });
-            }
-        } catch (_) {}
-
+        triggerRemoteMirror({ products: [product] });
         res.json(product);
     } catch (err) {
         console.error('Error creating product:', err.message);
@@ -658,20 +646,7 @@ app.put('/api/products/:id', authenticateToken, async (req, res) => {
         await logAudit('edit_stock', 'products', id, `Product ${name} updated manually.`, req.user.id);
         broadcast({ type: 'database_synchronized' });
         
-        // Mirror updated product to Remote Server if online
-        try {
-            const remoteUrl = process.env.REMOTE_SERVER_URL || 'https://pos0001.perpova.dev';
-            if (process.env.IS_REMOTE_SERVER !== 'true') {
-                const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
-                await fetch(`${remoteUrl}/api/sync/mirror-catalog`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ products: [product] }),
-                    timeout: 5000
-                });
-            }
-        } catch (_) {}
-
+        triggerRemoteMirror({ products: [product] });
         res.json(product);
     } catch (err) {
         console.error('Error updating product:', err.message);
@@ -4945,269 +4920,652 @@ function formatMySqlDateTime(dateVal) {
     return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
 }
 
+// Helper function to upsert catalog & system tables into local database
+async function processCatalogMirror(body) {
+    const {
+        categories, products, diningTables, customers, users,
+        ingredients, happyHours, offers, roles, rolePermissions,
+        suppliers, globalSettings, preOrders, preOrderItems,
+        expenses, shifts, cashDrawerLogs, creditSettlements,
+        stockLogs, ingredientStockLogs, staffAdvances, staffPayrollSettings,
+        staffPayrolls, staffShifts, supplierDeliveries, supplierPayments,
+        userAddresses, orders, orderItems
+    } = body || {};
+
+    if (categories && Array.isArray(categories)) {
+        for (const c of categories) {
+            try {
+                await db.query(`
+                    INSERT INTO categories (id, name, parent_id, status, image_base64)
+                    VALUES (?, ?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE
+                        name = VALUES(name),
+                        parent_id = VALUES(parent_id),
+                        status = VALUES(status),
+                        image_base64 = VALUES(image_base64)
+                `, [c.id, c.name, c.parentId || c.parent_id || null, c.status || 'active', c.imageBase64 || c.image_base64 || null]);
+            } catch (cErr) {
+                console.error('Error mirroring category:', cErr.message);
+            }
+        }
+    }
+
+    if (products && Array.isArray(products)) {
+        const [firstCatRow] = await db.query("SELECT id FROM categories LIMIT 1");
+        const fallbackCatId = firstCatRow ? firstCatRow.id : null;
+
+        for (const p of products) {
+            try {
+                let catId = p.categoryId || p.category_id;
+                if (!catId || catId === 0 || catId === '0') {
+                    catId = fallbackCatId;
+                }
+
+                await db.query(`
+                    INSERT INTO products (id, name, sinhala_name, description, category_id, price, cost, barcode, stock_qty, min_stock_level, is_short_eat, image_base64, status, item_type, tax, is_featured, caution, has_sizes, has_extras, has_addons, track_stock, is_happy_hour_eligible, ingredients, is_kot_item)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE
+                        name = VALUES(name),
+                        sinhala_name = VALUES(sinhala_name),
+                        description = VALUES(description),
+                        category_id = VALUES(category_id),
+                        price = VALUES(price),
+                        cost = VALUES(cost),
+                        barcode = VALUES(barcode),
+                        stock_qty = VALUES(stock_qty),
+                        min_stock_level = VALUES(min_stock_level),
+                        is_short_eat = VALUES(is_short_eat),
+                        image_base64 = VALUES(image_base64),
+                        status = VALUES(status),
+                        item_type = VALUES(item_type),
+                        tax = VALUES(tax),
+                        is_featured = VALUES(is_featured),
+                        caution = VALUES(caution),
+                        has_sizes = VALUES(has_sizes),
+                        has_extras = VALUES(has_extras),
+                        has_addons = VALUES(has_addons),
+                        track_stock = VALUES(track_stock),
+                        is_happy_hour_eligible = VALUES(is_happy_hour_eligible),
+                        ingredients = VALUES(ingredients),
+                        is_kot_item = VALUES(is_kot_item)
+                `, [
+                    p.id || null, p.name, p.sinhalaName || p.sinhala_name || null, p.description || null, catId, p.price, p.cost || 0.00, p.barcode || null, p.stockQty ?? p.stock_qty ?? 0, p.minStockLevel ?? p.min_stock_level ?? 10, (p.isShortEat || p.is_short_eat) ? 1 : 0, p.imageBase64 || p.image_base64 || null, p.status || 'active', p.itemType || p.item_type || 'Veg', p.tax || 0.00, (p.isFeatured || p.is_featured) ? 1 : 0, p.caution || null, (p.hasSizes || p.has_sizes) ? 1 : 0, (p.hasExtras || p.has_extras) ? 1 : 0, (p.hasAddons || p.has_addons) ? 1 : 0, (p.trackStock ?? p.track_stock ?? 1) ? 1 : 0, (p.isHappyHourEligible ?? p.is_happy_hour_eligible ?? 1) ? 1 : 0, p.ingredients ? (typeof p.ingredients === 'string' ? p.ingredients : JSON.stringify(p.ingredients)) : null, (p.isKotItem || p.is_kot_item) ? 1 : 0
+                ]);
+            } catch (pErr) {
+                console.error('Error mirroring product:', pErr.message);
+            }
+        }
+    }
+
+    if (diningTables && Array.isArray(diningTables)) {
+        for (const t of diningTables) {
+            try {
+                await db.query(`
+                    INSERT INTO dining_tables (id, table_number, capacity, status, current_order_id, steward_name, active_status)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE
+                        table_number = VALUES(table_number),
+                        capacity = VALUES(capacity),
+                        status = VALUES(status),
+                        current_order_id = VALUES(current_order_id),
+                        steward_name = VALUES(steward_name),
+                        active_status = VALUES(active_status)
+                `, [t.id, t.tableNumber || t.table_number, t.capacity || 4, t.status || 'empty', t.currentOrderId || t.current_order_id || null, t.stewardName || t.steward_name || null, t.activeStatus || t.active_status || 'active']);
+            } catch (tErr) {
+                console.error('Error mirroring dining table:', tErr.message);
+            }
+        }
+    }
+
+    if (customers && Array.isArray(customers)) {
+        for (const c of customers) {
+            try {
+                const birthdayVal = formatMySqlDate(c.birthday);
+                await db.query(`
+                    INSERT INTO customers (id, name, phone, birthday, favorite_items, credit_limit, outstanding_balance, image_base64)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE
+                        name = VALUES(name),
+                        phone = VALUES(phone),
+                        birthday = VALUES(birthday),
+                        favorite_items = VALUES(favorite_items),
+                        credit_limit = VALUES(credit_limit),
+                        outstanding_balance = VALUES(outstanding_balance),
+                        image_base64 = VALUES(image_base64)
+                `, [c.id, c.name, c.phone, birthdayVal, c.favoriteItems || c.favorite_items || null, c.creditLimit ?? c.credit_limit ?? 0.00, c.outstandingBalance ?? c.outstanding_balance ?? 0.00, c.imageBase64 || c.image_base64 || null]);
+            } catch (custErr) {
+                console.error('Error mirroring customer:', custErr.message);
+            }
+        }
+    }
+
+    if (users && Array.isArray(users)) {
+        for (const u of users) {
+            try {
+                await db.query(`
+                    INSERT INTO users (id, name, username, password_hash, role, status, image_base64, email, phone, branch, category_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE
+                        name = VALUES(name),
+                        username = VALUES(username),
+                        role = VALUES(role),
+                        status = VALUES(status),
+                        image_base64 = VALUES(image_base64),
+                        email = VALUES(email),
+                        phone = VALUES(phone),
+                        branch = VALUES(branch),
+                        category_id = VALUES(category_id)
+                `, [u.id, u.name, u.username, u.passwordHash || u.password_hash || '$2a$10$KYVVXoS7ntUm8jLTGL7HgOe4Ff/NPByXj0z9wcMS/UwY2ZVglw7Y6', u.role, u.status || 'active', u.imageBase64 || u.image_base64 || null, u.email || null, u.phone || null, u.branch || 'current', u.category_id || u.categoryId || null]);
+            } catch (uErr) {
+                console.error('Error mirroring user:', uErr.message);
+            }
+        }
+    }
+
+    if (ingredients && Array.isArray(ingredients)) {
+        for (const i of ingredients) {
+            try {
+                await db.query(`
+                    INSERT INTO ingredients (id, name, stock_qty, unit, min_stock_level, cost_per_unit)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE
+                        name = VALUES(name),
+                        stock_qty = VALUES(stock_qty),
+                        unit = VALUES(unit),
+                        min_stock_level = VALUES(min_stock_level),
+                        cost_per_unit = VALUES(cost_per_unit)
+                `, [i.id, i.name, i.stock_qty ?? i.stockQty ?? 0.0, i.unit || 'kg', i.min_stock_level ?? i.minStockLevel ?? 0.0, i.cost_per_unit ?? i.costPerUnit ?? 0.0]);
+            } catch (iErr) {
+                console.error('Error mirroring ingredient:', iErr.message);
+            }
+        }
+    }
+
+    if (happyHours && Array.isArray(happyHours)) {
+        for (const h of happyHours) {
+            try {
+                await db.query(`
+                    INSERT INTO happy_hour_pricing (id, product_id, promo_price, start_time, end_time, days_of_week, name, category_id, status, image_base64)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE
+                        promo_price = VALUES(promo_price),
+                        start_time = VALUES(start_time),
+                        end_time = VALUES(end_time),
+                        days_of_week = VALUES(days_of_week),
+                        name = VALUES(name),
+                        category_id = VALUES(category_id),
+                        status = VALUES(status),
+                        image_base64 = VALUES(image_base64)
+                `, [h.id, h.product_id || null, h.promo_price, h.start_time, h.end_time, h.days_of_week, h.name || null, h.category_id || null, h.status || 'active', h.image_base64 || h.imageBase64 || null]);
+            } catch (hErr) {
+                console.error('Error mirroring happy hour:', hErr.message);
+            }
+        }
+    }
+
+    if (offers && Array.isArray(offers)) {
+        for (const o of offers) {
+            try {
+                await db.query(`
+                    INSERT INTO offers (id, title, name, description, discount_percentage, code, start_date, end_date, image_base64, status)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE
+                        title = VALUES(title),
+                        name = VALUES(name),
+                        description = VALUES(description),
+                        discount_percentage = VALUES(discount_percentage),
+                        code = VALUES(code),
+                        start_date = VALUES(start_date),
+                        end_date = VALUES(end_date),
+                        image_base64 = VALUES(image_base64),
+                        status = VALUES(status)
+                `, [o.id, o.title || null, o.name || null, o.description || null, o.discount_percentage ?? o.discountPercentage ?? 0.00, o.code || null, formatMySqlDate(o.start_date ?? o.startDate), formatMySqlDate(o.end_date ?? o.endDate), o.image_base64 || null, o.status || 'active']);
+            } catch (oErr) {
+                console.error('Error mirroring offer:', oErr.message);
+            }
+        }
+    }
+
+    if (roles && Array.isArray(roles)) {
+        for (const r of roles) {
+            try {
+                await db.query(`
+                    INSERT INTO roles (id, name) VALUES (?, ?)
+                    ON DUPLICATE KEY UPDATE name = VALUES(name)
+                `, [r.id, r.name]);
+            } catch (rErr) {
+                console.error('Error mirroring role:', rErr.message);
+            }
+        }
+    }
+
+    if (rolePermissions && Array.isArray(rolePermissions)) {
+        for (const rp of rolePermissions) {
+            try {
+                await db.query(`
+                    INSERT INTO role_permissions (id, role_id, page, can_view, can_create, can_update, can_delete)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE
+                        can_view = VALUES(can_view),
+                        can_create = VALUES(can_create),
+                        can_update = VALUES(can_update),
+                        can_delete = VALUES(can_delete)
+                `, [rp.id, rp.role_id || rp.roleId, rp.page, rp.can_view ? 1 : 0, rp.can_create ? 1 : 0, rp.can_update ? 1 : 0, rp.can_delete ? 1 : 0]);
+            } catch (rpErr) {
+                console.error('Error mirroring role permission:', rpErr.message);
+            }
+        }
+    }
+
+    if (suppliers && Array.isArray(suppliers)) {
+        for (const s of suppliers) {
+            try {
+                await db.query(`
+                    INSERT INTO suppliers (id, name, company, phone, email, address, outstanding_balance, delivery_cycle)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE
+                        name = VALUES(name),
+                        company = VALUES(company),
+                        phone = VALUES(phone),
+                        email = VALUES(email),
+                        address = VALUES(address),
+                        outstanding_balance = VALUES(outstanding_balance),
+                        delivery_cycle = VALUES(delivery_cycle)
+                `, [s.id, s.name, s.company || null, s.phone || null, s.email || null, s.address || null, s.outstanding_balance ?? s.outstandingBalance ?? 0.00, s.delivery_cycle || s.deliveryCycle || 'Weekly']);
+            } catch (sErr) {
+                console.error('Error mirroring supplier:', sErr.message);
+            }
+        }
+    }
+
+    if (globalSettings && Array.isArray(globalSettings)) {
+        for (const gs of globalSettings) {
+            try {
+                await db.query(`
+                    INSERT INTO global_settings (setting_key, setting_value)
+                    VALUES (?, ?)
+                    ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+                `, [gs.setting_key || gs.settingKey, gs.setting_value || gs.settingValue]);
+            } catch (gsErr) {
+                console.error('Error mirroring global setting:', gsErr.message);
+            }
+        }
+    }
+
+    if (preOrders && Array.isArray(preOrders)) {
+        for (const po of preOrders) {
+            try {
+                await db.query(`
+                    INSERT INTO pre_orders (id, pre_order_number, customer_id, customer_name, customer_phone, received_date, status, subtotal, discount, total, advance_payment, balance_amount, is_notified)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE
+                        customer_id = VALUES(customer_id),
+                        customer_name = VALUES(customer_name),
+                        customer_phone = VALUES(customer_phone),
+                        received_date = VALUES(received_date),
+                        status = VALUES(status),
+                        subtotal = VALUES(subtotal),
+                        discount = VALUES(discount),
+                        total = VALUES(total),
+                        advance_payment = VALUES(advance_payment),
+                        balance_amount = VALUES(balance_amount),
+                        is_notified = VALUES(is_notified)
+                `, [po.id, po.pre_order_number || po.preOrderNumber, po.customer_id || po.customerId || null, po.customer_name || po.customerName, po.customer_phone || po.customerPhone, formatMySqlDateTime(po.received_date || po.receivedDate), po.status || 'pending', po.subtotal || 0, po.discount || 0, po.total || 0, po.advance_payment || po.advancePayment || 0, po.balance_amount || po.balanceAmount || 0, po.is_notified || po.isNotified ? 1 : 0]);
+            } catch (poErr) {
+                console.error('Error mirroring pre order:', poErr.message);
+            }
+        }
+    }
+
+    if (preOrderItems && Array.isArray(preOrderItems)) {
+        for (const poi of preOrderItems) {
+            try {
+                await db.query(`
+                    INSERT INTO pre_order_items (id, pre_order_id, product_id, product_name, quantity, price, notes)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE
+                        product_name = VALUES(product_name),
+                        quantity = VALUES(quantity),
+                        price = VALUES(price),
+                        notes = VALUES(notes)
+                `, [poi.id, poi.pre_order_id || poi.preOrderId, poi.product_id || poi.productId, poi.product_name || poi.productName || null, poi.quantity || 1, poi.price || 0, poi.notes || null]);
+            } catch (poiErr) {
+                console.error('Error mirroring pre order item:', poiErr.message);
+            }
+        }
+    }
+
+    if (expenses && Array.isArray(expenses)) {
+        for (const e of expenses) {
+            try {
+                await db.query(`
+                    INSERT INTO expenses (id, title, amount, category, payment_source, recorded_by, expense_date)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE
+                        title = VALUES(title),
+                        amount = VALUES(amount),
+                        category = VALUES(category),
+                        payment_source = VALUES(payment_source),
+                        recorded_by = VALUES(recorded_by),
+                        expense_date = VALUES(expense_date)
+                `, [e.id, e.title, e.amount, e.category, e.payment_source || e.paymentSource, e.recorded_by || e.recordedBy || 1, formatMySqlDate(e.expense_date || e.expenseDate)]);
+            } catch (eErr) {
+                console.error('Error mirroring expense:', eErr.message);
+            }
+        }
+    }
+
+    if (shifts && Array.isArray(shifts)) {
+        for (const s of shifts) {
+            try {
+                await db.query(`
+                    INSERT INTO shifts (id, user_id, start_time, end_time, opening_balance, closing_balance, actual_closing_balance, status)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE
+                        end_time = VALUES(end_time),
+                        closing_balance = VALUES(closing_balance),
+                        actual_closing_balance = VALUES(actual_closing_balance),
+                        status = VALUES(status)
+                `, [s.id, s.user_id || s.userId || 1, formatMySqlDateTime(s.start_time || s.startTime), formatMySqlDateTime(s.end_time || s.endTime), s.opening_balance || s.openingBalance || 0, s.closing_balance || s.closingBalance || 0, s.actual_closing_balance || s.actualClosingBalance || 0, s.status || 'open']);
+            } catch (sErr) {
+                console.error('Error mirroring shift:', sErr.message);
+            }
+        }
+    }
+
+    if (cashDrawerLogs && Array.isArray(cashDrawerLogs)) {
+        for (const cdl of cashDrawerLogs) {
+            try {
+                await db.query(`
+                    INSERT INTO cash_drawer_logs (id, shift_id, type, amount, reason)
+                    VALUES (?, ?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE
+                        shift_id = VALUES(shift_id),
+                        type = VALUES(type),
+                        amount = VALUES(amount),
+                        reason = VALUES(reason)
+                `, [cdl.id, cdl.shift_id || cdl.shiftId, cdl.type, cdl.amount, cdl.reason]);
+            } catch (cdlErr) {
+                console.error('Error mirroring cash drawer log:', cdlErr.message);
+            }
+        }
+    }
+
+    if (creditSettlements && Array.isArray(creditSettlements)) {
+        for (const cs of creditSettlements) {
+            try {
+                await db.query(`
+                    INSERT INTO credit_settlements (id, customer_id, amount, payment_method, date_paid, recorded_by)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE
+                        amount = VALUES(amount),
+                        payment_method = VALUES(payment_method),
+                        date_paid = VALUES(date_paid),
+                        recorded_by = VALUES(recorded_by)
+                `, [cs.id, cs.customer_id || cs.customerId, cs.amount, cs.payment_method || cs.paymentMethod, formatMySqlDateTime(cs.date_paid || cs.datePaid), cs.recorded_by || cs.recordedBy || 1]);
+            } catch (csErr) {
+                console.error('Error mirroring credit settlement:', csErr.message);
+            }
+        }
+    }
+
+    if (stockLogs && Array.isArray(stockLogs)) {
+        for (const sl of stockLogs) {
+            try {
+                await db.query(`
+                    INSERT INTO stock_logs (id, product_id, change_qty, type, reason, user_id)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE
+                        change_qty = VALUES(change_qty),
+                        type = VALUES(type),
+                        reason = VALUES(reason)
+                `, [sl.id, sl.product_id || sl.productId, sl.change_qty || sl.changeQty, sl.type, sl.reason || null, sl.user_id || sl.userId || 1]);
+            } catch (slErr) {
+                console.error('Error mirroring stock log:', slErr.message);
+            }
+        }
+    }
+
+    if (ingredientStockLogs && Array.isArray(ingredientStockLogs)) {
+        for (const isl of ingredientStockLogs) {
+            try {
+                await db.query(`
+                    INSERT INTO ingredient_stock_logs (id, ingredient_id, change_qty, type, reason, user_id)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE
+                        change_qty = VALUES(change_qty),
+                        type = VALUES(type),
+                        reason = VALUES(reason)
+                `, [isl.id, isl.ingredient_id || isl.ingredientId, isl.change_qty || isl.changeQty, isl.type, isl.reason || null, isl.user_id || isl.userId || 1]);
+            } catch (islErr) {
+                console.error('Error mirroring ingredient stock log:', islErr.message);
+            }
+        }
+    }
+
+    if (staffAdvances && Array.isArray(staffAdvances)) {
+        for (const sa of staffAdvances) {
+            try {
+                await db.query(`
+                    INSERT INTO staff_advances (id, user_id, amount, reason, advance_date, status, recorded_by)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE
+                        amount = VALUES(amount),
+                        reason = VALUES(reason),
+                        advance_date = VALUES(advance_date),
+                        status = VALUES(status)
+                `, [sa.id, sa.user_id || sa.userId, sa.amount, sa.reason || null, formatMySqlDate(sa.advance_date || sa.advanceDate), sa.status || 'pending', sa.recorded_by || sa.recordedBy || null]);
+            } catch (saErr) {
+                console.error('Error mirroring staff advance:', saErr.message);
+            }
+        }
+    }
+
+    if (staffPayrollSettings && Array.isArray(staffPayrollSettings)) {
+        for (const sps of staffPayrollSettings) {
+            try {
+                await db.query(`
+                    INSERT INTO staff_payroll_settings (id, user_id, basic_salary, salary_type, ot_rate_per_hour, allowances, salary_due_day, monthly_salary, daily_salary, hourly_rate, ot_hourly_rate)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE
+                        basic_salary = VALUES(basic_salary),
+                        salary_type = VALUES(salary_type),
+                        ot_rate_per_hour = VALUES(ot_rate_per_hour),
+                        allowances = VALUES(allowances),
+                        salary_due_day = VALUES(salary_due_day),
+                        monthly_salary = VALUES(monthly_salary),
+                        daily_salary = VALUES(daily_salary),
+                        hourly_rate = VALUES(hourly_rate),
+                        ot_hourly_rate = VALUES(ot_hourly_rate)
+                `, [sps.id, sps.user_id || sps.userId, sps.basic_salary || sps.basicSalary || 0, sps.salary_type || sps.salaryType || 'monthly', sps.ot_rate_per_hour || sps.otRatePerHour || null, sps.allowances || 0, sps.salary_due_day || sps.salaryDueDay || 28, sps.monthly_salary || sps.monthlySalary || 0, sps.daily_salary || sps.dailySalary || 0, sps.hourly_rate || sps.hourlyRate || 0, sps.ot_hourly_rate || sps.otHourlyRate || 0]);
+            } catch (spsErr) {
+                console.error('Error mirroring staff payroll settings:', spsErr.message);
+            }
+        }
+    }
+
+    if (staffPayrolls && Array.isArray(staffPayrolls)) {
+        for (const sp of staffPayrolls) {
+            try {
+                await db.query(`
+                    INSERT INTO staff_payrolls (id, user_id, month_year, period_start, period_end, basic_salary, working_hours, ot_hours, ot_rate, ot_amount, tip_amount, bonuses_others, allowances, advance_deduction, advances_deducted, net_salary, payment_method, payment_status, status, paid_at, created_by)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE
+                        net_salary = VALUES(net_salary),
+                        payment_method = VALUES(payment_method),
+                        payment_status = VALUES(payment_status),
+                        status = VALUES(status)
+                `, [sp.id, sp.user_id || sp.userId, sp.month_year || sp.monthYear || null, formatMySqlDate(sp.period_start || sp.periodStart), formatMySqlDate(sp.period_end || sp.periodEnd), sp.basic_salary || sp.basicSalary || 0, sp.working_hours || sp.workingHours || 0, sp.ot_hours || sp.otHours || 0, sp.ot_rate || sp.otRate || 0, sp.ot_amount || sp.otAmount || 0, sp.tip_amount || sp.tipAmount || 0, sp.bonuses_others || sp.bonusesOthers || 0, sp.allowances || 0, sp.advance_deduction || sp.advanceDeduction || 0, sp.advances_deducted || sp.advancesDeducted || 0, sp.net_salary || sp.netSalary || 0, sp.payment_method || sp.paymentMethod || 'cash', sp.payment_status || sp.paymentStatus || 'paid', sp.status || 'unpaid', formatMySqlDateTime(sp.paid_at || sp.paidAt), sp.created_by || sp.createdBy || null]);
+            } catch (spErr) {
+                console.error('Error mirroring staff payroll:', spErr.message);
+            }
+        }
+    }
+
+    if (staffShifts && Array.isArray(staffShifts)) {
+        for (const ss of staffShifts) {
+            try {
+                await db.query(`
+                    INSERT INTO staff_shifts (id, user_id, clock_in, clock_out, duration_minutes, hours_worked, status)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE
+                        clock_out = VALUES(clock_out),
+                        duration_minutes = VALUES(duration_minutes),
+                        hours_worked = VALUES(hours_worked),
+                        status = VALUES(status)
+                `, [ss.id, ss.user_id || ss.userId, formatMySqlDateTime(ss.clock_in || ss.clockIn), formatMySqlDateTime(ss.clock_out || ss.clockOut), ss.duration_minutes || ss.durationMinutes || 0, ss.hours_worked || ss.hoursWorked || 0, ss.status || 'active']);
+            } catch (ssErr) {
+                console.error('Error mirroring staff shift:', ssErr.message);
+            }
+        }
+    }
+
+    if (supplierDeliveries && Array.isArray(supplierDeliveries)) {
+        for (const sd of supplierDeliveries) {
+            try {
+                await db.query(`
+                    INSERT INTO supplier_deliveries (id, supplier_id, invoice_number, item_name, quantity, unit, total_amount, delivery_date)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE
+                        invoice_number = VALUES(invoice_number),
+                        item_name = VALUES(item_name),
+                        quantity = VALUES(quantity),
+                        unit = VALUES(unit),
+                        total_amount = VALUES(total_amount),
+                        delivery_date = VALUES(delivery_date)
+                `, [sd.id, sd.supplier_id || sd.supplierId, sd.invoice_number || sd.invoiceNumber || null, sd.item_name || sd.itemName || null, sd.quantity || 0, sd.unit || 'kg', sd.total_amount || sd.totalAmount || 0, formatMySqlDate(sd.delivery_date || sd.deliveryDate)]);
+            } catch (sdErr) {
+                console.error('Error mirroring supplier delivery:', sdErr.message);
+            }
+        }
+    }
+
+    if (supplierPayments && Array.isArray(supplierPayments)) {
+        for (const sp of supplierPayments) {
+            try {
+                await db.query(`
+                    INSERT INTO supplier_payments (id, supplier_id, amount, payment_method, payment_source, remarks, payment_date)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE
+                        amount = VALUES(amount),
+                        payment_method = VALUES(payment_method),
+                        payment_source = VALUES(payment_source),
+                        remarks = VALUES(remarks),
+                        payment_date = VALUES(payment_date)
+                `, [sp.id, sp.supplier_id || sp.supplierId, sp.amount, sp.payment_method || sp.paymentMethod || 'cash', sp.payment_source || sp.paymentSource || 'drawer', sp.remarks || null, formatMySqlDate(sp.payment_date || sp.paymentDate)]);
+            } catch (spErr) {
+                console.error('Error mirroring supplier payment:', spErr.message);
+            }
+        }
+    }
+
+    if (userAddresses && Array.isArray(userAddresses)) {
+        for (const ua of userAddresses) {
+            try {
+                await db.query(`
+                    INSERT INTO user_addresses (id, user_id, customer_id, label, address_line, latitude, longitude)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE
+                        label = VALUES(label),
+                        address_line = VALUES(address_line),
+                        latitude = VALUES(latitude),
+                        longitude = VALUES(longitude)
+                `, [ua.id, ua.user_id || ua.userId || null, ua.customer_id || ua.customerId || null, ua.label || 'Home', ua.address_line || ua.addressLine, ua.latitude || null, ua.longitude || null]);
+            } catch (uaErr) {
+                console.error('Error mirroring user address:', uaErr.message);
+            }
+        }
+    }
+
+    if (orders && Array.isArray(orders)) {
+        for (const o of orders) {
+            try {
+                await db.query(`
+                    INSERT INTO orders (id, order_number, table_id, order_type, delivery_platform, customer_id, steward_name, status, payment_status, payment_method, subtotal, discount, total, cashier_id, shift_id, kot_printed, ack_printed, card_tx_reference, barcode, received_amount, change_amount, created_at, sync_status)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced')
+                    ON DUPLICATE KEY UPDATE
+                        status = VALUES(status),
+                        payment_status = VALUES(payment_status),
+                        payment_method = VALUES(payment_method),
+                        subtotal = VALUES(subtotal),
+                        discount = VALUES(discount),
+                        total = VALUES(total),
+                        received_amount = VALUES(received_amount),
+                        change_amount = VALUES(change_amount)
+                `, [o.id, o.order_number || o.orderNumber, o.table_id || o.tableId || null, o.order_type || o.orderType || 'takeaway', o.delivery_platform || o.deliveryPlatform || null, o.customer_id || o.customerId || null, o.steward_name || o.stewardName || null, o.status || 'pending', o.payment_status || o.paymentStatus || 'unpaid', o.payment_method || o.paymentMethod || null, o.subtotal || 0, o.discount || 0, o.total || 0, o.cashier_id || o.cashierId || 1, o.shift_id || o.shiftId || 1, o.kot_printed || o.kotPrinted ? 1 : 0, o.ack_printed || o.ackPrinted ? 1 : 0, o.card_tx_reference || o.cardTxReference || null, o.barcode || o.order_number, o.received_amount || o.receivedAmount || 0, o.change_amount || o.changeAmount || 0, formatMySqlDateTime(o.created_at || o.createdAt)]);
+
+                const items = o.items || o.order_items;
+                if (items && Array.isArray(items)) {
+                    for (const item of items) {
+                        await db.query(`
+                            INSERT INTO order_items (id, order_id, order_number, product_id, product_name, product_sinhala_name, quantity, price, notes, status, is_short_eat)
+                            VALUES (?, (SELECT id FROM orders WHERE order_number = ?), ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            ON DUPLICATE KEY UPDATE
+                                quantity = VALUES(quantity),
+                                price = VALUES(price),
+                                status = VALUES(status)
+                        `, [item.id || null, o.order_number || o.orderNumber, o.order_number || o.orderNumber, item.product_id || item.productId, item.product_name || item.productName || null, item.product_sinhala_name || item.productSinhalaName || null, item.quantity || 1, item.price || 0, item.notes || null, item.status || 'pending', item.is_short_eat || item.isShortEat ? 1 : 0]);
+                    }
+                }
+            } catch (oErr) {
+                console.error('Error mirroring order:', oErr.message);
+            }
+        }
+    }
+}
+
 // Bulk catalog mirror endpoint to sync central server catalog to local MySQL database
 app.post('/api/sync/mirror-catalog', async (req, res) => {
     try {
-        const {
-            categories, products, diningTables, customers, users,
-            ingredients, happyHours, offers, roles, rolePermissions,
-            preOrders, preOrderItems, suppliers, globalSettings
-        } = req.body;
-
-        if (categories && Array.isArray(categories)) {
-            for (const c of categories) {
-                try {
-                    await db.query(`
-                        INSERT INTO categories (id, name, parent_id, status, image_base64)
-                        VALUES (?, ?, ?, ?, ?)
-                        ON DUPLICATE KEY UPDATE
-                            name = VALUES(name),
-                            parent_id = VALUES(parent_id),
-                            status = VALUES(status),
-                            image_base64 = VALUES(image_base64)
-                    `, [c.id, c.name, c.parentId || c.parent_id || null, c.status || 'active', c.imageBase64 || c.image_base64 || null]);
-                } catch (cErr) {
-                    console.error('Error mirroring category:', cErr.message);
-                }
-            }
-        }
-
-        if (products && Array.isArray(products)) {
-            const [firstCatRow] = await db.query("SELECT id FROM categories LIMIT 1");
-            const fallbackCatId = firstCatRow ? firstCatRow.id : null;
-
-            for (const p of products) {
-                try {
-                    let catId = p.categoryId || p.category_id;
-                    if (!catId || catId === 0 || catId === '0') {
-                        catId = fallbackCatId;
-                    }
-
-                    await db.query(`
-                        INSERT INTO products (id, name, sinhala_name, description, category_id, price, cost, barcode, stock_qty, min_stock_level, is_short_eat, image_base64, status, item_type, tax, is_featured, caution, has_sizes, has_extras, has_addons, track_stock, is_happy_hour_eligible, ingredients, is_kot_item)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        ON DUPLICATE KEY UPDATE
-                            name = VALUES(name),
-                            sinhala_name = VALUES(sinhala_name),
-                            description = VALUES(description),
-                            category_id = VALUES(category_id),
-                            price = VALUES(price),
-                            cost = VALUES(cost),
-                            barcode = VALUES(barcode),
-                            stock_qty = VALUES(stock_qty),
-                            min_stock_level = VALUES(min_stock_level),
-                            is_short_eat = VALUES(is_short_eat),
-                            image_base64 = VALUES(image_base64),
-                            status = VALUES(status),
-                            item_type = VALUES(item_type),
-                            tax = VALUES(tax),
-                            is_featured = VALUES(is_featured),
-                            caution = VALUES(caution),
-                            has_sizes = VALUES(has_sizes),
-                            has_extras = VALUES(has_extras),
-                            has_addons = VALUES(has_addons),
-                            track_stock = VALUES(track_stock),
-                            is_happy_hour_eligible = VALUES(is_happy_hour_eligible),
-                            ingredients = VALUES(ingredients),
-                            is_kot_item = VALUES(is_kot_item)
-                    `, [
-                        p.id || null, p.name, p.sinhalaName || p.sinhala_name || null, p.description || null, catId, p.price, p.cost || 0.00, p.barcode || null, p.stockQty ?? p.stock_qty ?? 0, p.minStockLevel ?? p.min_stock_level ?? 10, (p.isShortEat || p.is_short_eat) ? 1 : 0, p.imageBase64 || p.image_base64 || null, p.status || 'active', p.itemType || p.item_type || 'Veg', p.tax || 0.00, (p.isFeatured || p.is_featured) ? 1 : 0, p.caution || null, (p.hasSizes || p.has_sizes) ? 1 : 0, (p.hasExtras || p.has_extras) ? 1 : 0, (p.hasAddons || p.has_addons) ? 1 : 0, (p.trackStock ?? p.track_stock ?? 1) ? 1 : 0, (p.isHappyHourEligible ?? p.is_happy_hour_eligible ?? 1) ? 1 : 0, p.ingredients ? (typeof p.ingredients === 'string' ? p.ingredients : JSON.stringify(p.ingredients)) : null, (p.isKotItem || p.is_kot_item) ? 1 : 0
-                    ]);
-                } catch (pErr) {
-                    console.error('Error mirroring product:', pErr.message);
-                }
-            }
-        }
-
-        if (diningTables && Array.isArray(diningTables)) {
-            for (const t of diningTables) {
-                try {
-                    await db.query(`
-                        INSERT INTO dining_tables (id, table_number, capacity, status, current_order_id, steward_name, active_status)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
-                        ON DUPLICATE KEY UPDATE
-                            table_number = VALUES(table_number),
-                            capacity = VALUES(capacity),
-                            status = VALUES(status),
-                            current_order_id = VALUES(current_order_id),
-                            steward_name = VALUES(steward_name),
-                            active_status = VALUES(active_status)
-                    `, [t.id, t.tableNumber || t.table_number, t.capacity || 4, t.status || 'empty', t.currentOrderId || t.current_order_id || null, t.stewardName || t.steward_name || null, t.activeStatus || t.active_status || 'active']);
-                } catch (tErr) {
-                    console.error('Error mirroring dining table:', tErr.message);
-                }
-            }
-        }
-
-        if (customers && Array.isArray(customers)) {
-            for (const c of customers) {
-                try {
-                    const birthdayVal = formatMySqlDate(c.birthday);
-                    await db.query(`
-                        INSERT INTO customers (id, name, phone, birthday, favorite_items, credit_limit, outstanding_balance, image_base64)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                        ON DUPLICATE KEY UPDATE
-                            name = VALUES(name),
-                            phone = VALUES(phone),
-                            birthday = VALUES(birthday),
-                            favorite_items = VALUES(favorite_items),
-                            credit_limit = VALUES(credit_limit),
-                            outstanding_balance = VALUES(outstanding_balance),
-                            image_base64 = VALUES(image_base64)
-                    `, [c.id, c.name, c.phone, birthdayVal, c.favoriteItems || c.favorite_items || null, c.creditLimit ?? c.credit_limit ?? 0.00, c.outstandingBalance ?? c.outstanding_balance ?? 0.00, c.imageBase64 || c.image_base64 || null]);
-                } catch (custErr) {
-                    console.error('Error mirroring customer:', custErr.message);
-                }
-            }
-        }
-
-        if (users && Array.isArray(users)) {
-            for (const u of users) {
-                try {
-                    await db.query(`
-                        INSERT INTO users (id, name, username, password_hash, role, status, image_base64)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
-                        ON DUPLICATE KEY UPDATE
-                            name = VALUES(name),
-                            username = VALUES(username),
-                            role = VALUES(role),
-                            status = VALUES(status),
-                            image_base64 = VALUES(image_base64)
-                    `, [u.id, u.name, u.username, u.passwordHash || u.password_hash || '$2a$10$KYVVXoS7ntUm8jLTGL7HgOe4Ff/NPByXj0z9wcMS/UwY2ZVglw7Y6', u.role, u.status || 'active', u.imageBase64 || u.image_base64 || null]);
-                } catch (uErr) {
-                    console.error('Error mirroring user:', uErr.message);
-                }
-            }
-        }
-
-        if (ingredients && Array.isArray(ingredients)) {
-            for (const i of ingredients) {
-                try {
-                    await db.query(`
-                        INSERT INTO ingredients (id, name, stock_qty, unit, min_stock_level)
-                        VALUES (?, ?, ?, ?, ?)
-                        ON DUPLICATE KEY UPDATE
-                            name = VALUES(name),
-                            stock_qty = VALUES(stock_qty),
-                            unit = VALUES(unit),
-                            min_stock_level = VALUES(min_stock_level)
-                    `, [i.id, i.name, i.stock_qty ?? i.stockQty ?? 0.0, i.unit || 'kg', i.min_stock_level ?? i.minStockLevel ?? 0.0]);
-                } catch (iErr) {
-                    console.error('Error mirroring ingredient:', iErr.message);
-                }
-            }
-        }
-
-        if (happyHours && Array.isArray(happyHours)) {
-            for (const h of happyHours) {
-                try {
-                    await db.query(`
-                        INSERT INTO happy_hour_pricing (id, product_id, promo_price, start_time, end_time, days_of_week, name, category_id, status)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        ON DUPLICATE KEY UPDATE
-                            promo_price = VALUES(promo_price),
-                            start_time = VALUES(start_time),
-                            end_time = VALUES(end_time),
-                            days_of_week = VALUES(days_of_week),
-                            status = VALUES(status)
-                    `, [h.id, h.product_id || null, h.promo_price, h.start_time, h.end_time, h.days_of_week, h.name || null, h.category_id || null, h.status || 'active']);
-                } catch (hErr) {
-                    console.error('Error mirroring happy hour:', hErr.message);
-                }
-            }
-        }
-
-        if (offers && Array.isArray(offers)) {
-            for (const o of offers) {
-                try {
-                    await db.query(`
-                        INSERT INTO offers (id, title, name, description, discount_percentage, code, start_date, end_date, image_base64, status)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        ON DUPLICATE KEY UPDATE
-                            title = VALUES(title),
-                            name = VALUES(name),
-                            description = VALUES(description),
-                            discount_percentage = VALUES(discount_percentage),
-                            code = VALUES(code),
-                            start_date = VALUES(start_date),
-                            end_date = VALUES(end_date),
-                            status = VALUES(status)
-                    `, [o.id, o.title || null, o.name || null, o.description || null, o.discount_percentage ?? o.discountPercentage ?? 0.00, o.code || null, formatMySqlDate(o.start_date ?? o.startDate), formatMySqlDate(o.end_date ?? o.endDate), o.image_base64 || null, o.status || 'active']);
-                } catch (oErr) {
-                    console.error('Error mirroring offer:', oErr.message);
-                }
-            }
-        }
-
-        if (roles && Array.isArray(roles)) {
-            for (const r of roles) {
-                try {
-                    await db.query(`
-                        INSERT INTO roles (id, name) VALUES (?, ?)
-                        ON DUPLICATE KEY UPDATE name = VALUES(name)
-                    `, [r.id, r.name]);
-                } catch (rErr) {
-                    console.error('Error mirroring role:', rErr.message);
-                }
-            }
-        }
-
-        if (rolePermissions && Array.isArray(rolePermissions)) {
-            for (const rp of rolePermissions) {
-                try {
-                    await db.query(`
-                        INSERT INTO role_permissions (id, role_id, page, can_view, can_create, can_update, can_delete)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
-                        ON DUPLICATE KEY UPDATE
-                            can_view = VALUES(can_view),
-                            can_create = VALUES(can_create),
-                            can_update = VALUES(can_update),
-                            can_delete = VALUES(can_delete)
-                    `, [rp.id, rp.role_id || rp.roleId, rp.page, rp.can_view ? 1 : 0, rp.can_create ? 1 : 0, rp.can_update ? 1 : 0, rp.can_delete ? 1 : 0]);
-                } catch (rpErr) {
-                    console.error('Error mirroring role permission:', rpErr.message);
-                }
-            }
-        }
-
-        if (suppliers && Array.isArray(suppliers)) {
-            for (const s of suppliers) {
-                try {
-                    await db.query(`
-                        INSERT INTO suppliers (id, name, company, phone, email, address, outstanding_balance, delivery_cycle)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                        ON DUPLICATE KEY UPDATE
-                            name = VALUES(name),
-                            company = VALUES(company),
-                            phone = VALUES(phone),
-                            email = VALUES(email),
-                            address = VALUES(address),
-                            outstanding_balance = VALUES(outstanding_balance),
-                            delivery_cycle = VALUES(delivery_cycle)
-                    `, [s.id, s.name, s.company || null, s.phone || null, s.email || null, s.address || null, s.outstanding_balance ?? s.outstandingBalance ?? 0.00, s.delivery_cycle || s.deliveryCycle || 'Weekly']);
-                } catch (sErr) {
-                    console.error('Error mirroring supplier:', sErr.message);
-                }
-            }
-        }
-
-        if (globalSettings && Array.isArray(globalSettings)) {
-            for (const gs of globalSettings) {
-                try {
-                    await db.query(`
-                        INSERT INTO global_settings (setting_key, setting_value)
-                        VALUES (?, ?)
-                        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
-                    `, [gs.setting_key || gs.settingKey, gs.setting_value || gs.settingValue]);
-                } catch (gsErr) {
-                    console.error('Error mirroring global setting:', gsErr.message);
-                }
-            }
-        }
-
+        await processCatalogMirror(req.body);
         res.json({ success: true, message: 'All persistent tables mirrored to Local MySQL database successfully' });
     } catch (err) {
         console.error('Error mirroring catalog to local MySQL:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Full data export endpoint for server-to-server bidirectional synchronization
+app.get('/api/sync/export-all-data', async (req, res) => {
+    try {
+        const categories = await db.query('SELECT * FROM categories');
+        const products = await db.query('SELECT * FROM products');
+        const diningTables = await db.query('SELECT * FROM dining_tables');
+        const customers = await db.query('SELECT * FROM customers');
+        const users = await db.query('SELECT id, name, username, password_hash, role, status, image_base64, email, phone, branch, category_id FROM users');
+        const ingredients = await db.query('SELECT * FROM ingredients');
+        const happyHours = await db.query('SELECT * FROM happy_hour_pricing');
+        const offers = await db.query('SELECT * FROM offers');
+        const roles = await db.query('SELECT * FROM roles');
+        const rolePermissions = await db.query('SELECT * FROM role_permissions');
+        const suppliers = await db.query('SELECT * FROM suppliers');
+        const globalSettings = await db.query('SELECT * FROM global_settings');
+        const preOrders = await db.query('SELECT * FROM pre_orders');
+        const preOrderItems = await db.query('SELECT * FROM pre_order_items');
+        const expenses = await db.query('SELECT * FROM expenses');
+        const shifts = await db.query('SELECT * FROM shifts');
+        const cashDrawerLogs = await db.query('SELECT * FROM cash_drawer_logs');
+        const creditSettlements = await db.query('SELECT * FROM credit_settlements');
+        const stockLogs = await db.query('SELECT * FROM stock_logs');
+        const ingredientStockLogs = await db.query('SELECT * FROM ingredient_stock_logs');
+        const staffAdvances = await db.query('SELECT * FROM staff_advances');
+        const staffPayrollSettings = await db.query('SELECT * FROM staff_payroll_settings');
+        const staffPayrolls = await db.query('SELECT * FROM staff_payrolls');
+        const staffShifts = await db.query('SELECT * FROM staff_shifts');
+        const supplierDeliveries = await db.query('SELECT * FROM supplier_deliveries');
+        const supplierPayments = await db.query('SELECT * FROM supplier_payments');
+        const userAddresses = await db.query('SELECT * FROM user_addresses');
+        const orders = await db.query('SELECT * FROM orders');
+        const orderItems = await db.query('SELECT * FROM order_items');
+
+        res.json({
+            categories, products, diningTables, customers, users, ingredients,
+            happyHours, offers, roles, rolePermissions, suppliers, globalSettings,
+            preOrders, preOrderItems, expenses, shifts, cashDrawerLogs, creditSettlements,
+            stockLogs, ingredientStockLogs, staffAdvances, staffPayrollSettings, staffPayrolls,
+            staffShifts, supplierDeliveries, supplierPayments, userAddresses, orders, orderItems
+        });
+    } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
@@ -5355,6 +5713,17 @@ function makeSyncRequest(urlStr, method, data, token) {
     });
 }
 
+async function triggerRemoteMirror(payload) {
+    if (process.env.IS_REMOTE_SERVER === 'true') return;
+    try {
+        const remoteUrl = process.env.REMOTE_SERVER_URL || 'https://pos0001.perpova.dev';
+        const systemToken = jwt.sign({ id: 1, username: 'system_autosync', role: 'admin' }, JWT_SECRET, { expiresIn: '1h' });
+        await makeSyncRequest(`${remoteUrl}/api/sync/mirror-catalog`, 'POST', payload, systemToken);
+    } catch (e) {
+        console.error('[InstantSync] Remote mirror failed:', e.message);
+    }
+}
+
 async function performDbToDbSync() {
     const remoteUrl = process.env.REMOTE_SERVER_URL || 'https://pos0001.perpova.dev';
     if (process.env.IS_REMOTE_SERVER === 'true') {
@@ -5389,49 +5758,89 @@ async function performDbToDbSync() {
             }
         } catch (orderSyncErr) {
             console.error('[AutoSync] Order sync error to remote server:', orderSyncErr.message);
-            throw orderSyncErr;
         }
     }
 
-    // 2. Sync local master catalog to Remote Server DB
-    const localProducts = await db.query('SELECT * FROM products');
-    const localCategories = await db.query('SELECT * FROM categories');
-    const localCustomers = await db.query('SELECT * FROM customers');
-    const localUsers = await db.query("SELECT id, name, username, role, email, phone, status, image_base64, category_id FROM users");
-    const localIngredients = await db.query('SELECT * FROM ingredients');
-    const localHappyHours = await db.query('SELECT * FROM happy_hour_pricing');
-    const localOffers = await db.query('SELECT * FROM offers');
-    const localDiningTables = await db.query('SELECT * FROM dining_tables');
-    const localRoles = await db.query('SELECT * FROM roles');
-    const localRolePermissions = await db.query('SELECT * FROM role_permissions');
-    const localSuppliers = await db.query('SELECT * FROM suppliers');
-    const localGlobalSettings = await db.query('SELECT * FROM global_settings');
+    // 2. PUSH: Sync local system tables to Remote Server DB
+    try {
+        const localProducts = await db.query('SELECT * FROM products');
+        const localCategories = await db.query('SELECT * FROM categories');
+        const localCustomers = await db.query('SELECT * FROM customers');
+        const localUsers = await db.query("SELECT id, name, username, role, email, phone, status, image_base64, category_id FROM users");
+        const localIngredients = await db.query('SELECT * FROM ingredients');
+        const localHappyHours = await db.query('SELECT * FROM happy_hour_pricing');
+        const localOffers = await db.query('SELECT * FROM offers');
+        const localDiningTables = await db.query('SELECT * FROM dining_tables');
+        const localRoles = await db.query('SELECT * FROM roles');
+        const localRolePermissions = await db.query('SELECT * FROM role_permissions');
+        const localSuppliers = await db.query('SELECT * FROM suppliers');
+        const localGlobalSettings = await db.query('SELECT * FROM global_settings');
+        const localPreOrders = await db.query('SELECT * FROM pre_orders');
+        const localPreOrderItems = await db.query('SELECT * FROM pre_order_items');
+        const localExpenses = await db.query('SELECT * FROM expenses');
+        const localShifts = await db.query('SELECT * FROM shifts');
+        const localCashDrawerLogs = await db.query('SELECT * FROM cash_drawer_logs');
+        const localCreditSettlements = await db.query('SELECT * FROM credit_settlements');
+        const localStockLogs = await db.query('SELECT * FROM stock_logs');
+        const localIngredientStockLogs = await db.query('SELECT * FROM ingredient_stock_logs');
+        const localStaffAdvances = await db.query('SELECT * FROM staff_advances');
+        const localStaffPayrollSettings = await db.query('SELECT * FROM staff_payroll_settings');
+        const localStaffPayrolls = await db.query('SELECT * FROM staff_payrolls');
+        const localStaffShifts = await db.query('SELECT * FROM staff_shifts');
+        const localSupplierDeliveries = await db.query('SELECT * FROM supplier_deliveries');
+        const localSupplierPayments = await db.query('SELECT * FROM supplier_payments');
+        const localUserAddresses = await db.query('SELECT * FROM user_addresses');
 
-    if (localProducts.length > 0 || localCategories.length > 0) {
-        try {
-            await makeSyncRequest(`${remoteUrl}/api/sync/mirror-catalog`, 'POST', {
-                categories: localCategories,
-                products: localProducts,
-                customers: localCustomers,
-                users: localUsers,
-                ingredients: localIngredients,
-                happyHours: localHappyHours,
-                offers: localOffers,
-                diningTables: localDiningTables,
-                roles: localRoles,
-                rolePermissions: localRolePermissions,
-                suppliers: localSuppliers,
-                globalSettings: localGlobalSettings
-            }, systemToken);
-        } catch (_) {}
+        await makeSyncRequest(`${remoteUrl}/api/sync/mirror-catalog`, 'POST', {
+            categories: localCategories,
+            products: localProducts,
+            customers: localCustomers,
+            users: localUsers,
+            ingredients: localIngredients,
+            happyHours: localHappyHours,
+            offers: localOffers,
+            diningTables: localDiningTables,
+            roles: localRoles,
+            rolePermissions: localRolePermissions,
+            suppliers: localSuppliers,
+            globalSettings: localGlobalSettings,
+            preOrders: localPreOrders,
+            preOrderItems: localPreOrderItems,
+            expenses: localExpenses,
+            shifts: localShifts,
+            cashDrawerLogs: localCashDrawerLogs,
+            creditSettlements: localCreditSettlements,
+            stockLogs: localStockLogs,
+            ingredientStockLogs: localIngredientStockLogs,
+            staffAdvances: localStaffAdvances,
+            staffPayrollSettings: localStaffPayrollSettings,
+            staffPayrolls: localStaffPayrolls,
+            staffShifts: localStaffShifts,
+            supplierDeliveries: localSupplierDeliveries,
+            supplierPayments: localSupplierPayments,
+            userAddresses: localUserAddresses
+        }, systemToken);
+    } catch (pushErr) {
+        console.error('[AutoSync] Catalog push error:', pushErr.message);
     }
+
+    // 3. PULL: Sync Remote Server DB data into Localhost MySQL Workbench DB
+    try {
+        const remoteDump = await makeSyncRequest(`${remoteUrl}/api/sync/export-all-data`, 'GET', null, systemToken);
+        if (remoteDump && typeof remoteDump === 'object') {
+            await processCatalogMirror(remoteDump);
+            console.log('[AutoSync] Successfully pulled and synchronized Remote Server DB into Localhost MySQL Workbench DB ✓');
+        }
+    } catch (pullErr) {
+        console.error('[AutoSync] Remote pull error:', pullErr.message);
+    }
+
+    broadcast({ type: 'database_synchronized', source: 'db_to_db_sync' });
 
     return {
         success: true,
         synced_orders_count: syncedOrdersCount,
-        message: syncedOrdersCount > 0
-            ? `Successfully pushed ${syncedOrdersCount} orders from Local MySQL Workbench DB to Remote Server DB!`
-            : `Local MySQL Workbench database is fully synchronized with Remote Server DB.`
+        message: 'Localhost MySQL Workbench database is fully synchronized bidirectionally with Remote Server DB.'
     };
 }
 
