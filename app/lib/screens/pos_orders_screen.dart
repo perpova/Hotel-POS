@@ -14,6 +14,7 @@ import 'package:printing/printing.dart';
 import 'package:barcode_widget/barcode_widget.dart';
 import '../controllers/pos_controller.dart';
 import '../controllers/dashboard_controller.dart';
+import '../controllers/app_settings_controller.dart';
 import '../theme.dart';
 import '../services/api_service.dart';
 import '../services/translation_service.dart';
@@ -1077,6 +1078,7 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
                               )
                             : Expanded(
                                 child: ListView.separated(
+                            physics: const AlwaysScrollableScrollPhysics(),
                             itemCount: order.items.length,
                             separatorBuilder: (context, index) => Divider(height: 1, color: AppTheme.dividerColor),
                             itemBuilder: (context, index) {
@@ -1460,6 +1462,20 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
                             onPressed: () async {
                               try {
                                 final bytes = await _generateInvoicePdfBytes(receiptData);
+                                final appSettings = Provider.of<AppSettingsController>(context, listen: false);
+                                if (appSettings.directPrint) {
+                                  final list = await Printing.listPrinters();
+                                  Printer? targetPrinter;
+                                  if (appSettings.selectedInvoicePrinter != null && appSettings.selectedInvoicePrinter!.isNotEmpty) {
+                                    final found = list.where((p) => p.name == appSettings.selectedInvoicePrinter).toList();
+                                    if (found.isNotEmpty) targetPrinter = found.first;
+                                  }
+                                  targetPrinter ??= list.where((p) => p.isDefault).firstOrNull ?? (list.isNotEmpty ? list.first : null);
+                                  if (targetPrinter != null) {
+                                    await Printing.directPrintPdf(printer: targetPrinter, onLayout: (format) async => bytes);
+                                    return;
+                                  }
+                                }
                                 await Printing.layoutPdf(
                                   onLayout: (format) async => bytes,
                                   name: 'Invoice_${receiptData.orderNumber}',
@@ -1581,10 +1597,13 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
     final int totalQty = data.items.fold(0, (sum, item) => sum + item.quantity);
     final dt = parseServerDateTime(data.createdAt);
 
+    final appSettings = Provider.of<AppSettingsController>(this.context, listen: false);
+    final receiptFormat = appSettings.receiptPageFormat;
+
     pdf.addPage(
       pw.Page(
-        pageFormat: PdfPageFormat.roll80,
-        margin: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+        pageFormat: receiptFormat,
+        margin: const pw.EdgeInsets.only(left: 2, right: 6, top: 0, bottom: 2),
         build: (pw.Context context) {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -1598,15 +1617,15 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
                     crossAxisAlignment: pw.CrossAxisAlignment.center,
                     children: [
                       if (logoImage != null) ...[
-                        pw.Image(logoImage, width: 28, height: 28),
-                        pw.SizedBox(width: 6),
+                        pw.Image(logoImage, width: 24, height: 24),
+                        pw.SizedBox(width: 4),
                       ],
                       pw.Column(
                         crossAxisAlignment: pw.CrossAxisAlignment.start,
                         children: [
                           pw.Text(
                              'v£ly »ƒ£Šfzx',
-                             style: pw.TextStyle(font: isiaginiFont, fontSize: 10, fontWeight: pw.FontWeight.bold),
+                             style: pw.TextStyle(font: isiaginiFont, fontSize: 16, fontWeight: pw.FontWeight.bold),
                            ),
                           pw.Text(
                             'නො: 04 මහා වීදිය, අකුරැස්ස',
@@ -1621,10 +1640,10 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
                     ],
                   ),
                   pw.Container(
-                    padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: pw.BoxDecoration(
                       border: pw.Border.all(color: PdfColors.black, width: 1),
-                      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(12)),
+                      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(10)),
                     ),
                     child: pw.Text(
                       _getOvalNumber(data),
@@ -1633,14 +1652,14 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
                   ),
                 ],
               ),
-              pw.SizedBox(height: 8),
+              pw.SizedBox(height: 4),
               pw.Center(
                 child: pw.Text(
                   'INVOICE',
                   style: pw.TextStyle(font: sinhalaFont, fontSize: 10, fontWeight: pw.FontWeight.bold, decoration: pw.TextDecoration.underline),
                 ),
               ),
-              pw.SizedBox(height: 4),
+              pw.SizedBox(height: 3),
               
               _buildPdfInfoRow('Receipt No', _getReceiptNumber(data), sinhalaFont),
               
@@ -1648,39 +1667,39 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
                   pw.Text(
-                    'Date  ${dt.day.toString().padLeft(2, '0')}-${_getMonthName(dt)}-${dt.year}',
-                    style: pw.TextStyle(font: sinhalaFont, fontSize: 8),
+                    'Date  ${dt.day.toString().padLeft(2, '0')}-${_getMonthName(dt)}-${dt.year.toString().substring(2)}',
+                    style: pw.TextStyle(font: sinhalaFont, fontSize: 7.5),
                   ),
                   pw.Text(
                     _formatTime(dt, includeSpace: false),
-                    style: pw.TextStyle(font: sinhalaFont, fontSize: 8),
+                    style: pw.TextStyle(font: sinhalaFont, fontSize: 7.5),
                   ),
                   pw.Text(
                     data.cashierName,
-                    style: pw.TextStyle(font: sinhalaFont, fontSize: 8),
+                    style: pw.TextStyle(font: sinhalaFont, fontSize: 7.5),
                   ),
                 ],
               ),
               
-              pw.SizedBox(height: 4),
+              pw.SizedBox(height: 3),
               _buildPdfDashedLine(),
-              pw.SizedBox(height: 4),
+              pw.SizedBox(height: 3),
 
               pw.Row(
                 children: [
-                  pw.Expanded(flex: 3, child: pw.Text('Description', style: pw.TextStyle(font: sinhalaFont, fontWeight: pw.FontWeight.bold, fontSize: 8))),
-                  pw.Expanded(flex: 1, child: pw.Align(alignment: pw.Alignment.center, child: pw.Text('Qty', style: pw.TextStyle(font: sinhalaFont, fontWeight: pw.FontWeight.bold, fontSize: 8)))),
-                  pw.Expanded(flex: 2, child: pw.Align(alignment: pw.Alignment.centerRight, child: pw.Text('Price', style: pw.TextStyle(font: sinhalaFont, fontWeight: pw.FontWeight.bold, fontSize: 8)))),
-                  pw.Expanded(flex: 2, child: pw.Align(alignment: pw.Alignment.centerRight, child: pw.Text('Amount', style: pw.TextStyle(font: sinhalaFont, fontWeight: pw.FontWeight.bold, fontSize: 8)))),
+                  pw.Expanded(flex: 7, child: pw.Text('Description', style: pw.TextStyle(font: sinhalaFont, fontWeight: pw.FontWeight.bold, fontSize: 8))),
+                  pw.Expanded(flex: 2, child: pw.Align(alignment: pw.Alignment.center, child: pw.Text('Qty', style: pw.TextStyle(font: sinhalaFont, fontWeight: pw.FontWeight.bold, fontSize: 8)))),
+                  pw.Expanded(flex: 4, child: pw.Align(alignment: pw.Alignment.centerRight, child: pw.Text('Price', style: pw.TextStyle(font: sinhalaFont, fontWeight: pw.FontWeight.bold, fontSize: 8)))),
+                  pw.Expanded(flex: 5, child: pw.Align(alignment: pw.Alignment.centerRight, child: pw.Text('Amount', style: pw.TextStyle(font: sinhalaFont, fontWeight: pw.FontWeight.bold, fontSize: 8)))),
                 ],
               ),
               pw.SizedBox(height: 2),
               pw.Divider(thickness: 0.5),
-              pw.SizedBox(height: 4),
+              pw.SizedBox(height: 3),
 
               ..._groupDuplicateOrderItems(data.items).map((item) {
                 return pw.Padding(
-                  padding: const pw.EdgeInsets.only(bottom: 4.0),
+                  padding: const pw.EdgeInsets.only(bottom: 3.0),
                   child: pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
@@ -1688,28 +1707,28 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
                         crossAxisAlignment: pw.CrossAxisAlignment.start,
                         children: [
                           pw.Expanded(
-                            flex: 3,
+                            flex: 7,
                             child: pw.Text(
                               isSinhala ? (item.productSinhalaName ?? item.productName) : item.productName,
                               style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold),
                             ),
                           ),
                           pw.Expanded(
-                            flex: 1,
+                            flex: 2,
                             child: pw.Align(
                               alignment: pw.Alignment.center,
                               child: pw.Text('${item.quantity}', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
                             ),
                           ),
                           pw.Expanded(
-                            flex: 2,
+                            flex: 4,
                             child: pw.Align(
                               alignment: pw.Alignment.centerRight,
                               child: pw.Text(item.price.toStringAsFixed(2), style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
                             ),
                           ),
                           pw.Expanded(
-                            flex: 2,
+                            flex: 5,
                             child: pw.Align(
                               alignment: pw.Alignment.centerRight,
                               child: pw.Text((item.price * item.quantity).toStringAsFixed(2), style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
@@ -1860,18 +1879,21 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
               _buildPdfDashedLine(),
               pw.SizedBox(height: 6),
               pw.Center(
-                child: pw.BarcodeWidget(
-                  barcode: pw.Barcode.code128(),
-                  data: 'INV-${data.orderNumber}',
-                  width: 150,
-                  height: 30,
-                  drawText: false,
+                child: pw.Padding(
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  child: pw.BarcodeWidget(
+                    barcode: pw.Barcode.code128(),
+                    data: _getShortInvoiceBarcode(data.orderNumber),
+                    width: 135,
+                    height: 42,
+                    drawText: false,
+                  ),
                 ),
               ),
               pw.SizedBox(height: 2),
               pw.Center(
                 child: pw.Text(
-                  'INV-${data.orderNumber}',
+                  _getShortInvoiceBarcode(data.orderNumber),
                   style: pw.TextStyle(font: sinhalaFont, fontSize: 6, color: PdfColors.grey700),
                 ),
               ),
@@ -1979,7 +2001,7 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Date  ${dt.day.toString().padLeft(2, '0')}-${_getMonthName(dt)}-${dt.year}',
+                'Date  ${dt.day.toString().padLeft(2, '0')}-${_getMonthName(dt)}-${dt.year.toString().substring(2)}',
                 style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF334155), fontWeight: FontWeight.w500),
               ),
               Text(
@@ -2192,18 +2214,21 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
           const SizedBox(height: 8),
           
           Center(
-            child: BarcodeWidget(
-              barcode: Barcode.code128(),
-              data: 'INV-${data.orderNumber}',
-              width: 180,
-              height: 40,
-              drawText: false,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              child: BarcodeWidget(
+                barcode: Barcode.code128(),
+                data: _getShortInvoiceBarcode(data.orderNumber),
+                width: 145,
+                height: 45,
+                drawText: false,
+              ),
             ),
           ),
           const SizedBox(height: 4),
           Center(
             child: Text(
-              'INV-${data.orderNumber}',
+              _getShortInvoiceBarcode(data.orderNumber),
               style: GoogleFonts.inter(fontSize: 8, color: const Color(0xFF64748B)),
             ),
           ),
@@ -2226,6 +2251,25 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
   }
 
   // Invoice Slip Preview Helpers
+  String _sanitizeYear2026(String text) {
+    return text.replaceAll('2026', '26');
+  }
+
+  String _getShortInvoiceBarcode(String orderNum) {
+    String clean = _sanitizeYear2026(orderNum.trim());
+    final upper = clean.toUpperCase();
+    if (upper.startsWith('O-')) {
+      return 'I-${clean.substring(2)}';
+    } else if (upper.startsWith('ORD-')) {
+      return 'I-${clean.substring(4)}';
+    } else if (upper.startsWith('PRE-')) {
+      return 'I-P-${clean.substring(4)}';
+    } else if (upper.startsWith('P-')) {
+      return 'I-$clean';
+    }
+    return 'I-$clean';
+  }
+
   String _getReceiptNumber(ReceiptData data) {
     final paddedId = data.orderId.toString().padLeft(9, '0');
     return '1$paddedId';

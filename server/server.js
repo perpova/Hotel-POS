@@ -2125,7 +2125,14 @@ app.get('/api/orders', authenticateToken, async (req, res) => {
 app.get('/api/orders/by-number/:orderNumber', authenticateToken, async (req, res) => {
     const { orderNumber } = req.params;
     try {
-        const orders = await db.query('SELECT * FROM orders WHERE order_number = ? LIMIT 1', [orderNumber]);
+        let orders = await db.query('SELECT * FROM orders WHERE order_number = ? LIMIT 1', [orderNumber]);
+        if (orders.length === 0) {
+            orders = await db.query('SELECT * FROM orders WHERE order_number = ? OR order_number = ? OR order_number LIKE ? LIMIT 1', [
+                `O-${orderNumber}`,
+                `ORD-${orderNumber}`,
+                `%${orderNumber}`
+            ]);
+        }
         if (orders.length === 0) return res.status(404).json({ error: 'Order not found' });
         const order = orders[0];
         const items = await db.query(`
@@ -2200,17 +2207,18 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
                 }
             }
             if (!orderNumber) {
-                // Generate unique order number (e.g. ORD-20260617-1004)
+                // Generate unique order number (e.g. O-260730-0004)
                 const localDate = new Date();
-                const year = localDate.getFullYear();
+                const fullYear = localDate.getFullYear();
+                const shortYear = String(fullYear).slice(-2);
                 const month = String(localDate.getMonth() + 1).padStart(2, '0');
                 const day = String(localDate.getDate()).padStart(2, '0');
-                const dateStr = `${year}${month}${day}`;
-                const queryDate = `${year}-${month}-${day}`;
+                const dateStr = `${shortYear}${month}${day}`;
+                const queryDate = `${fullYear}-${month}-${day}`;
          
                 const [countResult] = await conn.query('SELECT COUNT(*) as count FROM orders WHERE DATE(created_at) = ?', [queryDate]);
                 const nextNum = (countResult[0].count + 1).toString().padStart(4, '0');
-                orderNumber = `ORD-${dateStr}-${nextNum}`;
+                orderNumber = `O-${dateStr}-${nextNum}`;
             }
         }
         
@@ -3505,17 +3513,18 @@ app.post('/api/pre-orders', authenticateToken, async (req, res) => {
     try {
         await conn.beginTransaction();
         
-        // Generate pre-order number (PRE-20260713-0001)
+        // Generate pre-order number (P-260730-0001)
         const localDate = new Date();
-        const year = localDate.getFullYear();
+        const fullYear = localDate.getFullYear();
+        const shortYear = String(fullYear).slice(-2);
         const month = String(localDate.getMonth() + 1).padStart(2, '0');
         const day = String(localDate.getDate()).padStart(2, '0');
-        const dateStr = `${year}${month}${day}`;
-        const queryDate = `${year}-${month}-${day}`;
+        const dateStr = `${shortYear}${month}${day}`;
+        const queryDate = `${fullYear}-${month}-${day}`;
  
         const [countResult] = await conn.query('SELECT COUNT(*) as count FROM pre_orders WHERE DATE(created_at) = ?', [queryDate]);
         const nextNum = (countResult[0].count + 1).toString().padStart(4, '0');
-        const preOrderNumber = `PRE-${dateStr}-${nextNum}`;
+        const preOrderNumber = `P-${dateStr}-${nextNum}`;
         
         const [result] = await conn.query(`
             INSERT INTO pre_orders (pre_order_number, customer_id, customer_name, customer_phone, received_date, subtotal, discount, total, advance_payment, balance_amount)

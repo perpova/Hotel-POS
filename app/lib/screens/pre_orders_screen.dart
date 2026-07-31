@@ -613,7 +613,7 @@ class _PreOrdersScreenState extends State<PreOrdersScreen> {
             Divider(color: AppTheme.dividerColor),
             const SizedBox(height: 8),
             _buildTextRow('Estimate No:', po['pre_order_number'] ?? ''),
-            _buildTextRow('Due Date:', DateFormat('yyyy-MM-dd hh:mm a').format(date)),
+            _buildTextRow('Due Date:', DateFormat('yy-MM-dd hh:mm a').format(date)),
             _buildTextRow('Customer:', po['customer_name'] ?? ''),
             _buildTextRow('Phone:', po['customer_phone'] ?? ''),
             _buildTextRow('Status:', (po['status'] ?? 'pending').toString().toUpperCase()),
@@ -661,14 +661,24 @@ class _PreOrdersScreenState extends State<PreOrdersScreen> {
             ],
             const SizedBox(height: 12),
             Center(
-              child: SizedBox(
-                height: 40,
-                width: 180,
-                child: BarcodeWidget(
-                  barcode: Barcode.code128(),
-                  data: po['pre_order_number'] ?? '',
-                  drawText: false,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                child: SizedBox(
+                  height: 45,
+                  width: 145,
+                  child: BarcodeWidget(
+                    barcode: Barcode.code128(),
+                    data: _getShortPreOrderBarcode(po['pre_order_number'] ?? ''),
+                    drawText: false,
+                  ),
                 ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Center(
+              child: Text(
+                _getShortPreOrderBarcode(po['pre_order_number'] ?? ''),
+                style: GoogleFonts.inter(fontSize: 8, color: AppTheme.textLightSecondary),
               ),
             ),
             const SizedBox(height: 12),
@@ -733,7 +743,7 @@ class _PreOrdersScreenState extends State<PreOrdersScreen> {
               pw.Divider(thickness: 0.5),
               pw.SizedBox(height: 4),
               _buildPdfRow('Est No:', po['pre_order_number'] ?? '', sinhalaFont),
-              _buildPdfRow('Due Date:', DateFormat('yyyy-MM-dd hh:mm a').format(date), sinhalaFont),
+              _buildPdfRow('Due Date:', DateFormat('yy-MM-dd hh:mm a').format(date), sinhalaFont),
               _buildPdfRow('Customer:', po['customer_name'] ?? '', sinhalaFont),
               _buildPdfRow('Phone:', po['customer_phone'] ?? '', sinhalaFont),
               _buildPdfRow('Status:', (po['status'] ?? 'pending').toString().toUpperCase(), sinhalaFont),
@@ -778,12 +788,22 @@ class _PreOrdersScreenState extends State<PreOrdersScreen> {
               ],
               pw.SizedBox(height: 6),
               pw.Center(
-                child: pw.BarcodeWidget(
-                  barcode: pw.Barcode.code128(),
-                  data: po['pre_order_number'] ?? '',
-                  width: 150,
-                  height: 30,
-                  drawText: false,
+                child: pw.Padding(
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  child: pw.BarcodeWidget(
+                    barcode: pw.Barcode.code128(),
+                    data: _getShortPreOrderBarcode(po['pre_order_number'] ?? ''),
+                    width: 135,
+                    height: 42,
+                    drawText: false,
+                  ),
+                ),
+              ),
+              pw.SizedBox(height: 2),
+              pw.Center(
+                child: pw.Text(
+                  _getShortPreOrderBarcode(po['pre_order_number'] ?? ''),
+                  style: pw.TextStyle(font: sinhalaFont, fontSize: 6, color: PdfColors.grey700),
                 ),
               ),
               pw.SizedBox(height: 4),
@@ -799,6 +819,21 @@ class _PreOrdersScreenState extends State<PreOrdersScreen> {
       ),
     );
     return pdf.save();
+  }
+
+  String _sanitizeYear2026(String text) {
+    return text.replaceAll('2026', '26');
+  }
+
+  String _getShortPreOrderBarcode(String preOrderNum) {
+    String clean = _sanitizeYear2026(preOrderNum.trim());
+    final upper = clean.toUpperCase();
+    if (upper.startsWith('PRE-')) {
+      return 'P-${clean.substring(4)}';
+    } else if (upper.startsWith('P-')) {
+      return 'P-${clean.substring(2)}';
+    }
+    return 'P-$clean';
   }
 
   pw.Widget _buildPdfRow(String label, String value, pw.Font font, {bool isBold = false}) {

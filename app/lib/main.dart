@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'theme.dart';
@@ -8,6 +9,7 @@ import 'controllers/app_settings_controller.dart';
 import 'screens/login_screen.dart';
 import 'screens/main_layout.dart';
 import 'screens/order_queue_screen.dart';
+import 'widgets/global_barcode_listener.dart';
 
 import 'package:flutter/foundation.dart';
 import 'package:video_player_win/video_player_win_plugin.dart';
@@ -15,6 +17,17 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'services/window_helper.dart';
 import 'services/sync_service.dart';
+
+class AppScrollBehavior extends MaterialScrollBehavior {
+  @override
+  Set<PointerDeviceKind> get dragDevices => {
+        PointerDeviceKind.touch,
+        PointerDeviceKind.mouse,
+        PointerDeviceKind.stylus,
+        PointerDeviceKind.trackpad,
+        PointerDeviceKind.unknown,
+      };
+}
 
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -34,7 +47,7 @@ void main(List<String> args) async {
     final packageInfo = await PackageInfo.fromPlatform();
     POSController.appVersion = '${packageInfo.version}+${packageInfo.buildNumber}';
   } catch (e) {
-    print('Failed to load package info version: \$e');
+    print('Failed to load package info version: $e');
   }
 
   // Register Windows Video Player platform implementation
@@ -81,6 +94,8 @@ void main(List<String> args) async {
   }
 }
 
+final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
+
 class HotelPOSApp extends StatelessWidget {
   final bool isQueueScreenMode;
   const HotelPOSApp({Key? key, this.isQueueScreenMode = false}) : super(key: key);
@@ -100,16 +115,21 @@ class HotelPOSApp extends StatelessWidget {
               MediaQuery.of(context).platformBrightness == Brightness.dark);
     }
 
-    return MaterialApp(
-      title: 'Hotel POS System',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme,
-      darkTheme: AppTheme.darkTheme,
-      themeMode: isQueueScreenMode ? ThemeMode.light : settings.themeMode,
-      // Automatic initial route redirection based on Auth State
-      home: isQueueScreenMode
-          ? const OrderQueueScreen(isSeparateWindow: true)
-          : (api.isAuthenticated ? const MainLayout() : const LoginScreen()),
+    return GlobalBarcodeListener(
+      navigatorKey: appNavigatorKey,
+      child: MaterialApp(
+        scrollBehavior: AppScrollBehavior(),
+        navigatorKey: appNavigatorKey,
+        title: 'Hotel POS System',
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.lightTheme,
+        darkTheme: AppTheme.darkTheme,
+        themeMode: isQueueScreenMode ? ThemeMode.light : settings.themeMode,
+        // Automatic initial route redirection based on Auth State
+        home: isQueueScreenMode
+            ? const OrderQueueScreen(isSeparateWindow: true)
+            : (api.isAuthenticated ? const MainLayout() : const LoginScreen()),
+      ),
     );
   }
 }

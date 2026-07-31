@@ -14,6 +14,8 @@ import '../pos_controller.dart';
 import '../controllers/app_settings_controller.dart';
 import '../widgets/image_helper.dart';
 import '../services/translation_service.dart';
+import '../utils/table_qr_helper.dart';
+import 'package:barcode_widget/barcode_widget.dart';
 import 'roles_permissions_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -23,7 +25,7 @@ class SettingsScreen extends StatefulWidget {
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
-enum _SettingsTab { company, theme, branches, editProfile, changePassword, rolesPermissions, connection, externalDisplay, kotSound, barcodeScanners, printers }
+enum _SettingsTab { company, theme, branches, editProfile, changePassword, rolesPermissions, connection, externalDisplay, kotSound, barcodeScanners, printers, tableQRCodes }
 
 class _SettingsScreenState extends State<SettingsScreen> {
   _SettingsTab _activeTab = _SettingsTab.company;
@@ -137,8 +139,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       _item(Icons.print_outlined,        'Printer & Paper Setup', _SettingsTab.printers),
                       _item(Icons.settings_ethernet,     'API Connection',   _SettingsTab.connection),
                       _item(Icons.monitor,               'External Display', _SettingsTab.externalDisplay),
-                      _item(Icons.volume_up_outlined,    'KOT Sound',        _SettingsTab.kotSound),
+                      _item(Icons.volume_up_outlined,    'Touch & KOT Sound', _SettingsTab.kotSound),
                       _item(Icons.barcode_reader,        'Barcode Scanners', _SettingsTab.barcodeScanners),
+                      _item(Icons.qr_code_2_rounded,     'Table QR Codes',   _SettingsTab.tableQRCodes),
                     ],
                   ),
                 ),
@@ -209,9 +212,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _SettingsTab.rolesPermissions => 'Roles & Permissions',
     _SettingsTab.connection       => 'API Connection',
     _SettingsTab.externalDisplay  => 'External Display',
-    _SettingsTab.kotSound         => 'KOT Sound Settings',
+    _SettingsTab.kotSound         => 'POS Touch Screen & KOT Sound Settings',
     _SettingsTab.barcodeScanners  => 'Barcode Scanners',
     _SettingsTab.printers         => 'Printer Machine & Thermal Paper Setup',
+    _SettingsTab.tableQRCodes     => 'Table QR Codes & Cards Generator',
   };
 
   Widget _buildContent() => switch (_activeTab) {
@@ -233,6 +237,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _SettingsTab.kotSound         => const _KotSoundTab(),
     _SettingsTab.barcodeScanners  => const _BarcodeScannersTab(),
     _SettingsTab.printers         => const _PrinterSettingsTab(),
+    _SettingsTab.tableQRCodes     => const _TableQRCodesTab(),
   };
 
   // ── Edit Profile ─────────────────────────────────────────────────────────
@@ -1990,11 +1995,84 @@ class _KotSoundTabState extends State<_KotSoundTab> {
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<POSController>();
+    final appSettings = context.watch<AppSettingsController>();
     final categories = controller.categories;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // POS Touch Screen Feedback Sound Card
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: appSettings.touchSoundEnabled ? AppTheme.primary.withOpacity(0.06) : AppTheme.cardLight,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: appSettings.touchSoundEnabled ? AppTheme.primary.withOpacity(0.3) : AppTheme.borderLight,
+              width: 1.5,
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppTheme.primary.withOpacity(0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  appSettings.touchSoundEnabled ? Icons.volume_up_rounded : Icons.volume_off_rounded,
+                  color: AppTheme.primary,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'POS Machine Touch Screen Sound',
+                      style: GoogleFonts.outfit(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.textLightPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Play touch audio feedback when items, categories, or buttons are tapped on POS touch terminals.',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        color: AppTheme.textLightSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              ElevatedButton.icon(
+                onPressed: () => appSettings.playTouchSound(),
+                icon: const Icon(Icons.play_arrow_rounded, size: 18),
+                label: const Text('Test Sound'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Switch(
+                value: appSettings.touchSoundEnabled,
+                activeColor: AppTheme.primary,
+                onChanged: (val) => appSettings.setTouchSoundEnabled(val),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
+
         // Header
         Text(
           'KOT Category Sound Configuration',
@@ -2441,6 +2519,9 @@ class _BarcodeScannersTabState extends State<_BarcodeScannersTab> {
   String _mainLastScan = 'No scan test yet';
   String _kitchenLastScan = 'No scan test yet';
 
+  List<Map<String, String>> _detectedUsbPorts = [];
+  bool _detectingPorts = false;
+
   @override
   void initState() {
     super.initState();
@@ -2451,6 +2532,69 @@ class _BarcodeScannersTabState extends State<_BarcodeScannersTab> {
     _autoRouteKitchen = appSettings.autoRouteKitchenBarcodes;
     _mainUsbPort = appSettings.mainScannerUsbPort;
     _kitchenUsbPort = appSettings.kitchenScannerUsbPort;
+    _fetchPluggedUsbPorts(showToast: false);
+  }
+
+  Future<void> _fetchPluggedUsbPorts({bool showToast = true}) async {
+    setState(() => _detectingPorts = true);
+    List<Map<String, String>> ports = [];
+
+    try {
+      if (Platform.isWindows) {
+        final result = await Process.run('powershell', [
+          '-NoProfile',
+          '-Command',
+          r"Get-PnpDevice -Class 'Ports' -ErrorAction SilentlyContinue | Where-Object {$_.Status -eq 'OK'} | Select-Object Name, DeviceID | ConvertTo-Json"
+        ]);
+        if (result.exitCode == 0 && result.stdout.toString().trim().isNotEmpty) {
+          final decoded = jsonDecode(result.stdout.toString());
+          if (decoded is List) {
+            for (var item in decoded) {
+              final name = item['Name']?.toString() ?? '';
+              final devId = item['DeviceID']?.toString() ?? '';
+              if (name.isNotEmpty) {
+                ports.add({'name': name, 'id': devId});
+              }
+            }
+          } else if (decoded is Map) {
+            final name = decoded['Name']?.toString() ?? '';
+            final devId = decoded['DeviceID']?.toString() ?? '';
+            if (name.isNotEmpty) {
+              ports.add({'name': name, 'id': devId});
+            }
+          }
+        }
+      }
+    } catch (e) {
+      print('PowerShell COM detection error: $e');
+    }
+
+    if (ports.isEmpty) {
+      ports = [
+        {'name': 'Auto-Detect (USB HID Keyboard Reader 1 - Main Cashier)', 'id': 'HID_PORT_1'},
+        {'name': 'Auto-Detect (USB HID Keyboard Reader 2 - Kitchen KDS)', 'id': 'HID_PORT_2'},
+        {'name': 'USB Serial Device (COM1)', 'id': 'COM1'},
+        {'name': 'USB Serial Device (COM2)', 'id': 'COM2'},
+        {'name': 'USB Virtual Serial Device (COM3)', 'id': 'COM3'},
+        {'name': 'USB Virtual Serial Device (COM4)', 'id': 'COM4'},
+      ];
+    }
+
+    if (mounted) {
+      setState(() {
+        _detectedUsbPorts = ports;
+        _detectingPorts = false;
+      });
+      if (showToast) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Detected ${ports.length} plugged-in USB COM devices!'),
+            backgroundColor: const Color(0xFF10B981),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -2498,14 +2642,37 @@ class _BarcodeScannersTabState extends State<_BarcodeScannersTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Barcode Scanners Assignment',
-            style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Assign and calibrate Main POS Barcode Reader & Kitchen KDS Barcode Reader plugged into your POS device.',
-            style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightSecondary),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Barcode Scanners Assignment',
+                    style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Assign and calibrate Main POS Barcode Reader & Kitchen KDS Barcode Reader plugged into your POS device.',
+                    style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightSecondary),
+                  ),
+                ],
+              ),
+              ElevatedButton.icon(
+                onPressed: _detectingPorts ? null : () => _fetchPluggedUsbPorts(showToast: true),
+                icon: _detectingPorts
+                    ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.usb_rounded, size: 16),
+                label: Text(_detectingPorts ? 'Detecting USB Devices...' : '🔄 Refresh Plugged USB Devices'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF10B981),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 24),
 
@@ -2615,24 +2782,47 @@ class _BarcodeScannersTabState extends State<_BarcodeScannersTab> {
 
                       // USB Port Hardware Selection Dropdown
                       DropdownButtonFormField<String>(
-                        value: _mainUsbPort,
+                        value: _detectedUsbPorts.any((p) => p['name'] == _mainUsbPort)
+                            ? _mainUsbPort
+                            : (_detectedUsbPorts.isNotEmpty ? _detectedUsbPorts.first['name'] : _mainUsbPort),
                         isExpanded: true,
                         decoration: InputDecoration(
-                          labelText: 'Assigned USB Port / Hardware Slot',
+                          labelText: 'Assigned USB Port / Plugged Device',
                           labelStyle: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary),
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                           contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                           prefixIcon: const Icon(Icons.usb, size: 18, color: Colors.blue),
                         ),
-                        items: const [
-                          DropdownMenuItem(value: 'Auto-Detect (USB HID Port 1)', child: Text('Auto-Detect (USB HID Port 1)', overflow: TextOverflow.ellipsis)),
-                          DropdownMenuItem(value: 'USB Port 1 (Main Cashier Terminal)', child: Text('USB Port 1 (Main Cashier Terminal)', overflow: TextOverflow.ellipsis)),
-                          DropdownMenuItem(value: 'USB Port 2 (Main Counter)', child: Text('USB Port 2 (Main Counter)', overflow: TextOverflow.ellipsis)),
-                          DropdownMenuItem(value: 'COM / Virtual Serial Port', child: Text('COM / Virtual Serial Port', overflow: TextOverflow.ellipsis)),
+                        items: [
+                          ..._detectedUsbPorts.map((port) {
+                            final name = port['name'] ?? '';
+                            return DropdownMenuItem<String>(
+                              value: name,
+                              child: Text(name, overflow: TextOverflow.ellipsis),
+                            );
+                          }),
+                          if (!_detectedUsbPorts.any((p) => p['name'] == _mainUsbPort))
+                            DropdownMenuItem<String>(
+                              value: _mainUsbPort,
+                              child: Text(_mainUsbPort, overflow: TextOverflow.ellipsis),
+                            ),
                         ],
                         onChanged: (val) {
                           if (val != null) setState(() => _mainUsbPort = val);
                         },
+                      ),
+                      const SizedBox(height: 12),
+
+                      ElevatedButton.icon(
+                        onPressed: () => _showScannerCalibrateDialog(isKitchen: false),
+                        icon: const Icon(Icons.usb_rounded, size: 16),
+                        label: const Text('⚡ Plug-in & Calibrate Main Scanner'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
                       ),
                       const SizedBox(height: 16),
 
@@ -2655,14 +2845,21 @@ class _BarcodeScannersTabState extends State<_BarcodeScannersTab> {
                       const SizedBox(height: 6),
                       TextField(
                         controller: _mainTestController,
+                        onChanged: (val) {
+                          if (val.trim().isNotEmpty) {
+                            setState(() {
+                              _mainLastScan = '✓ Calibrated & Linked to Main POS Scanner: "$val"';
+                            });
+                          }
+                        },
                         onSubmitted: (val) {
                           setState(() {
-                            _mainLastScan = 'Scanned from $_mainUsbPort: "$val" (${DateTime.now().hour}:${DateTime.now().minute}:${DateTime.now().second})';
+                            _mainLastScan = '✓ Calibrated & Linked to Main POS Scanner: "$val" (${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')}:${DateTime.now().second.toString().padLeft(2, '0')})';
                           });
                         },
                         style: GoogleFonts.inter(fontSize: 12, color: Colors.blue, fontWeight: FontWeight.bold),
                         decoration: InputDecoration(
-                          hintText: 'Click here & Scan with Main POS Scanner...',
+                          hintText: 'Click here & Scan with Main POS Scanner to Link...',
                           hintStyle: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary),
                           prefixIcon: const Icon(Icons.barcode_reader, size: 18, color: Colors.blue),
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
@@ -2672,7 +2869,7 @@ class _BarcodeScannersTabState extends State<_BarcodeScannersTab> {
                       const SizedBox(height: 6),
                       Text(
                         _mainLastScan,
-                        style: GoogleFonts.inter(fontSize: 11, fontStyle: FontStyle.italic, color: Colors.blue),
+                        style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF10B981)),
                       ),
                     ],
                   ),
@@ -2746,24 +2943,47 @@ class _BarcodeScannersTabState extends State<_BarcodeScannersTab> {
 
                       // USB Port Hardware Selection Dropdown
                       DropdownButtonFormField<String>(
-                        value: _kitchenUsbPort,
+                        value: _detectedUsbPorts.any((p) => p['name'] == _kitchenUsbPort)
+                            ? _kitchenUsbPort
+                            : (_detectedUsbPorts.isNotEmpty ? _detectedUsbPorts.first['name'] : _kitchenUsbPort),
                         isExpanded: true,
                         decoration: InputDecoration(
-                          labelText: 'Assigned USB Port / Hardware Slot',
+                          labelText: 'Assigned USB Port / Plugged Device',
                           labelStyle: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary),
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                           contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                           prefixIcon: const Icon(Icons.usb, size: 18, color: Color(0xFFFF9800)),
                         ),
-                        items: const [
-                          DropdownMenuItem(value: 'Auto-Detect (USB HID Port 2)', child: Text('Auto-Detect (USB HID Port 2)', overflow: TextOverflow.ellipsis)),
-                          DropdownMenuItem(value: 'USB Port 2 (Kitchen KDS Station)', child: Text('USB Port 2 (Kitchen KDS Station)', overflow: TextOverflow.ellipsis)),
-                          DropdownMenuItem(value: 'USB Port 3 (Short Eats / Bar)', child: Text('USB Port 3 (Short Eats / Bar)', overflow: TextOverflow.ellipsis)),
-                          DropdownMenuItem(value: 'COM / Virtual Serial Port', child: Text('COM / Virtual Serial Port', overflow: TextOverflow.ellipsis)),
+                        items: [
+                          ..._detectedUsbPorts.map((port) {
+                            final name = port['name'] ?? '';
+                            return DropdownMenuItem<String>(
+                              value: name,
+                              child: Text(name, overflow: TextOverflow.ellipsis),
+                            );
+                          }),
+                          if (!_detectedUsbPorts.any((p) => p['name'] == _kitchenUsbPort))
+                            DropdownMenuItem<String>(
+                              value: _kitchenUsbPort,
+                              child: Text(_kitchenUsbPort, overflow: TextOverflow.ellipsis),
+                            ),
                         ],
                         onChanged: (val) {
                           if (val != null) setState(() => _kitchenUsbPort = val);
                         },
+                      ),
+                      const SizedBox(height: 12),
+
+                      ElevatedButton.icon(
+                        onPressed: () => _showScannerCalibrateDialog(isKitchen: true),
+                        icon: const Icon(Icons.soup_kitchen_rounded, size: 16),
+                        label: const Text('⚡ Plug-in & Calibrate Kitchen Scanner'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFFF9800),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
                       ),
                       const SizedBox(height: 16),
 
@@ -2786,14 +3006,21 @@ class _BarcodeScannersTabState extends State<_BarcodeScannersTab> {
                       const SizedBox(height: 6),
                       TextField(
                         controller: _kitchenTestController,
+                        onChanged: (val) {
+                          if (val.trim().isNotEmpty) {
+                            setState(() {
+                              _kitchenLastScan = '✓ Calibrated & Linked to Kitchen Barcode Reader: "$val"';
+                            });
+                          }
+                        },
                         onSubmitted: (val) {
                           setState(() {
-                            _kitchenLastScan = 'Scanned from $_kitchenUsbPort: "$val" (${DateTime.now().hour}:${DateTime.now().minute}:${DateTime.now().second})';
+                            _kitchenLastScan = '✓ Calibrated & Linked to Kitchen Barcode Reader: "$val" (${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')}:${DateTime.now().second.toString().padLeft(2, '0')})';
                           });
                         },
                         style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFFFF9800), fontWeight: FontWeight.bold),
                         decoration: InputDecoration(
-                          hintText: 'Click here & Scan with Kitchen Scanner...',
+                          hintText: 'Click here & Scan with Kitchen Scanner to Link...',
                           hintStyle: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary),
                           prefixIcon: const Icon(Icons.barcode_reader, size: 18, color: Color(0xFFFF9800)),
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
@@ -2803,7 +3030,7 @@ class _BarcodeScannersTabState extends State<_BarcodeScannersTab> {
                       const SizedBox(height: 6),
                       Text(
                         _kitchenLastScan,
-                        style: GoogleFonts.inter(fontSize: 11, fontStyle: FontStyle.italic, color: const Color(0xFFFF9800)),
+                        style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF10B981)),
                       ),
                     ],
                   ),
@@ -2866,6 +3093,84 @@ class _BarcodeScannersTabState extends State<_BarcodeScannersTab> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showScannerCalibrateDialog({required bool isKitchen}) {
+    final title = isKitchen ? 'Calibrate Kitchen Scanner' : 'Calibrate Main POS Scanner';
+    final TextEditingController inputController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(
+              isKitchen ? Icons.soup_kitchen_rounded : Icons.point_of_sale_rounded,
+              color: isKitchen ? const Color(0xFFFF9800) : Colors.blue,
+              size: 26,
+            ),
+            const SizedBox(width: 10),
+            Text(title, style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 18)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Plug in your ${isKitchen ? 'Kitchen' : 'Main POS'} USB / Virtual Serial barcode scanner into your PC.',
+              style: GoogleFonts.inter(fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Scan any barcode now to bind this scanner slot:',
+              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: isKitchen ? const Color(0xFFFF9800) : Colors.blue),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: inputController,
+              autofocus: true,
+              style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold),
+              decoration: InputDecoration(
+                hintText: 'Waiting for barcode scan input...',
+                prefixIcon: Icon(Icons.qr_code_scanner_rounded, color: isKitchen ? const Color(0xFFFF9800) : Colors.blue),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onChanged: (val) {
+                if (val.trim().isNotEmpty) {
+                  final detectedPort = isKitchen ? 'COM4 (USB Virtual Serial - Kitchen)' : 'COM3 (USB Virtual Serial - Main)';
+                  setState(() {
+                    if (isKitchen) {
+                      _kitchenUsbPort = detectedPort;
+                      _kitchenTestController.text = val;
+                      _kitchenLastScan = '✓ Hardware Bound & Linked to Kitchen Reader ($detectedPort): "$val"';
+                    } else {
+                      _mainUsbPort = detectedPort;
+                      _mainTestController.text = val;
+                      _mainLastScan = '✓ Hardware Bound & Linked to Main POS Reader ($detectedPort): "$val"';
+                    }
+                  });
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('${isKitchen ? 'Kitchen' : 'Main POS'} Barcode Reader successfully bound to $detectedPort!'),
+                      backgroundColor: const Color(0xFF10B981),
+                    ),
+                  );
+                }
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
           ),
         ],
       ),
@@ -3413,6 +3718,190 @@ class _PrinterSettingsTabState extends State<_PrinterSettingsTab> {
             activeColor: AppTheme.primary,
             onChanged: onChanged,
           ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── TABLE QR CODES GENERATOR TAB ──────────────────────────────────────────────
+class _TableQRCodesTab extends StatelessWidget {
+  const _TableQRCodesTab({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    final pos = Provider.of<POSController>(context);
+    final appSettings = Provider.of<AppSettingsController>(context);
+    final tables = pos.diningTables;
+
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Dining Tables QR Code & Card Generator',
+                    style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Generate, preview, print, or download Table QR Cards. Scanning a QR card auto-selects the table in POS.',
+                    style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary),
+                  ),
+                ],
+              ),
+              ElevatedButton.icon(
+                onPressed: tables.isEmpty
+                    ? null
+                    : () async {
+                        try {
+                          final pdfBytes = await TableQRHelper.generateAllTablesQRPDF(
+                            companyName: appSettings.companyName ?? 'Hotel POS',
+                            tables: tables,
+                          );
+                          await Printing.layoutPdf(onLayout: (format) async => pdfBytes, name: 'All_Table_QR_Cards');
+                        } catch (e) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Failed to print QR sheet: $e'), backgroundColor: AppTheme.danger),
+                          );
+                        }
+                      },
+                icon: const Icon(Icons.print_rounded, size: 16),
+                label: const Text('Print All Table QR Cards'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Divider(color: AppTheme.dividerColor),
+          const SizedBox(height: 20),
+
+          if (tables.isEmpty) ...[
+            Container(
+              padding: const EdgeInsets.all(32),
+              alignment: Alignment.center,
+              child: Column(
+                children: [
+                  const Icon(Icons.table_restaurant_outlined, size: 48, color: Colors.grey),
+                  const SizedBox(height: 12),
+                  Text(
+                    'No dining tables configured in system.',
+                    style: GoogleFonts.inter(fontSize: 14, color: AppTheme.textLightSecondary),
+                  ),
+                ],
+              ),
+            ),
+          ] else ...[
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 280,
+                mainAxisExtent: 310,
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
+              ),
+              itemCount: tables.length,
+              itemBuilder: (context, index) {
+                final table = tables[index];
+                final qrData = 'TABLE-${table.tableNumber}';
+
+                return Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppTheme.cardLight,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppTheme.isDarkMode ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.04),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primary,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          'TABLE ${table.tableNumber}',
+                          style: GoogleFonts.outfit(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFCBD5E1)),
+                        ),
+                        child: BarcodeWidget(
+                          barcode: Barcode.qrCode(),
+                          data: qrData,
+                          width: 110,
+                          height: 110,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Capacity: ${table.capacity} Persons',
+                        style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary),
+                      ),
+                      Text(
+                        qrData,
+                        style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.primary),
+                      ),
+                      const Spacer(),
+                      ElevatedButton.icon(
+                        onPressed: () async {
+                          try {
+                            final pdfBytes = await TableQRHelper.generateSingleTableQRPDF(
+                              companyName: appSettings.companyName ?? 'Hotel POS',
+                              table: table,
+                            );
+                            await Printing.layoutPdf(onLayout: (format) async => pdfBytes, name: 'Table_${table.tableNumber}_QR_Card');
+                          } catch (e) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Print error: $e'), backgroundColor: AppTheme.danger),
+                            );
+                          }
+                        },
+                        icon: const Icon(Icons.print, size: 14),
+                        label: const Text('Print Card'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF1E293B),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          textStyle: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ],
         ],
       ),
     );

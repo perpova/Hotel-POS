@@ -1,15 +1,49 @@
 import 'dart:convert';
+import 'dart:ffi' as ffi;
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:pdf/pdf.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hotel_pos/theme/theme.dart';
 import 'package:hotel_pos/services/api_service.dart';
 
+// ── Native Windows Hardware Beep / Sound FFI Signatures ─────────────────────
+typedef _BeepC = ffi.Int32 Function(ffi.Uint32 dwFreq, ffi.Uint32 dwDuration);
+typedef _BeepDart = int Function(int dwFreq, int dwDuration);
+
+typedef _MessageBeepC = ffi.Int32 Function(ffi.Uint32 uType);
+typedef _MessageBeepDart = int Function(int uType);
+
+_BeepDart? _winBeep;
+_MessageBeepDart? _winMessageBeep;
+bool _winFfiInitialized = false;
+
+void _initWinSoundFfi() {
+  if (_winFfiInitialized) return;
+  _winFfiInitialized = true;
+  if (!kIsWeb && Platform.isWindows) {
+    try {
+      final kernel32 = ffi.DynamicLibrary.open('kernel32.dll');
+      _winBeep = kernel32.lookupFunction<_BeepC, _BeepDart>('Beep');
+    } catch (e) {
+      debugPrint('Kernel32 Beep FFI init error: $e');
+    }
+    try {
+      final user32 = ffi.DynamicLibrary.open('user32.dll');
+      _winMessageBeep = user32.lookupFunction<_MessageBeepC, _MessageBeepDart>('MessageBeep');
+    } catch (e) {
+      debugPrint('User32 MessageBeep FFI init error: $e');
+    }
+  }
+}
+
 /// Holds company-wide settings that affect the entire app UI
 /// (sidebar logo text, primary color, logo image, branches list).
 class AppSettingsController extends ChangeNotifier {
   // ── Company ────────────────────────────────────────────────────────────────
-  String _companyName = 'FoodKing';
+  String _companyName = 'Perpova POS';
   String _companyEmail = '';
   String _companyPhone = '';
   String _companyWebsite = '';
@@ -18,6 +52,9 @@ class AppSettingsController extends ChangeNotifier {
   String _companyCountryCode = '';
   String _companyZipCode = '';
   String _companyAddress = '';
+
+  // ── Sound & Feedback ───────────────────────────────────────────────────────
+  bool _touchSoundEnabled = true;
 
   // ── Theme ──────────────────────────────────────────────────────────────────
   Color _primaryColor = const Color(0xFFFF1B6B);
@@ -41,8 +78,8 @@ class AppSettingsController extends ChangeNotifier {
 
   // ── Dual Barcode Scanners ───────────────────────────────────────────────────
   bool _enableDualBarcodeScanners = true;
-  String _mainScannerPrefix = 'ORD-,INV-';
-  String _kitchenScannerPrefix = 'KOT-';
+  String _mainScannerPrefix = 'O-,I-,P-,ORD-,INV-';
+  String _kitchenScannerPrefix = 'K-,KOT-';
   bool _autoRouteKitchenBarcodes = true;
   String _mainScannerUsbPort = 'Auto-Detect (USB HID Port 1)';
   String _kitchenScannerUsbPort = 'Auto-Detect (USB HID Port 2)';
@@ -54,7 +91,7 @@ class AppSettingsController extends ChangeNotifier {
   bool _autoPrintInvoice = true; // Auto print invoice on checkout
   bool _autoPrintKot = true; // Auto print KOT on order
   bool _autoPrintKotAfterInvoice = true; // Auto print KOT after cutting invoice bill
-  bool _directPrint = false; // Bypass system print dialog
+  bool _directPrint = true; // Bypass system print dialog
   int _invoiceCopies = 1;
   int _kotCopies = 1;
 
@@ -88,6 +125,8 @@ class AppSettingsController extends ChangeNotifier {
   String? get queueBgVideoPath => _queueBgVideoPath;
   double get queueBgOpacity => _queueBgOpacity;
 
+  bool get touchSoundEnabled => _touchSoundEnabled;
+
   bool get enableDualBarcodeScanners => _enableDualBarcodeScanners;
   String get mainScannerPrefix => _mainScannerPrefix;
   String get kitchenScannerPrefix => _kitchenScannerPrefix;
@@ -108,12 +147,12 @@ class AppSettingsController extends ChangeNotifier {
   PdfPageFormat get receiptPageFormat {
     switch (_receiptPaperSize) {
       case '58mm':
-        return const PdfPageFormat(58 * PdfPageFormat.mm, double.infinity, marginAll: 5);
+        return const PdfPageFormat(58 * PdfPageFormat.mm, double.infinity, marginAll: 2 * PdfPageFormat.mm);
       case 'A4':
         return PdfPageFormat.a4;
       case '80mm':
       default:
-        return PdfPageFormat.roll80;
+        return const PdfPageFormat(72 * PdfPageFormat.mm, double.infinity, marginAll: 2 * PdfPageFormat.mm);
     }
   }
 
@@ -132,9 +171,11 @@ class AppSettingsController extends ChangeNotifier {
     _companyZipCode  = prefs.getString('company_zip')      ?? '';
     _companyAddress  = prefs.getString('company_address')  ?? '';
 
+    _touchSoundEnabled = prefs.getBool('touch_sound_enabled') ?? true;
+
     _enableDualBarcodeScanners = prefs.getBool('enable_dual_barcode_scanners') ?? true;
-    _mainScannerPrefix = prefs.getString('main_scanner_prefix') ?? 'ORD-,INV-';
-    _kitchenScannerPrefix = prefs.getString('kitchen_scanner_prefix') ?? 'KOT-';
+    _mainScannerPrefix = prefs.getString('main_scanner_prefix') ?? 'O-,I-,P-,ORD-,INV-';
+    _kitchenScannerPrefix = prefs.getString('kitchen_scanner_prefix') ?? 'K-,KOT-';
     _autoRouteKitchenBarcodes = prefs.getBool('auto_route_kitchen_barcodes') ?? true;
     _mainScannerUsbPort = prefs.getString('main_scanner_usb_port') ?? 'Auto-Detect (USB HID Port 1)';
     _kitchenScannerUsbPort = prefs.getString('kitchen_scanner_usb_port') ?? 'Auto-Detect (USB HID Port 2)';
@@ -145,7 +186,7 @@ class AppSettingsController extends ChangeNotifier {
     _autoPrintInvoice = prefs.getBool('auto_print_invoice') ?? true;
     _autoPrintKot = prefs.getBool('auto_print_kot') ?? true;
     _autoPrintKotAfterInvoice = prefs.getBool('auto_print_kot_after_invoice') ?? true;
-    _directPrint = prefs.getBool('direct_print') ?? false;
+    _directPrint = prefs.getBool('direct_print') ?? true;
     _invoiceCopies = prefs.getInt('invoice_copies') ?? 1;
     _kotCopies = prefs.getInt('kot_copies') ?? 1;
 
@@ -302,6 +343,45 @@ class AppSettingsController extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ── Touch Sound Update ───────────────────────────────────────────────────
+  Future<void> setTouchSoundEnabled(bool enabled) async {
+    _touchSoundEnabled = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('touch_sound_enabled', _touchSoundEnabled);
+    if (_touchSoundEnabled) {
+      playTouchSound();
+    }
+    notifyListeners();
+  }
+
+  void playTouchSound() {
+    if (_touchSoundEnabled) {
+      try {
+        if (!kIsWeb && Platform.isWindows) {
+          _initWinSoundFfi();
+          if (_winBeep != null) {
+            Future.microtask(() {
+              try {
+                // Play crisp 2200Hz 35ms POS touchscreen audio beep
+                _winBeep!(2200, 35);
+              } catch (_) {
+                _winMessageBeep?.call(0xFFFFFFFF);
+              }
+            });
+          } else if (_winMessageBeep != null) {
+            _winMessageBeep!(0xFFFFFFFF);
+          } else {
+            SystemSound.play(SystemSoundType.click);
+          }
+        } else {
+          SystemSound.play(SystemSoundType.click);
+        }
+      } catch (e) {
+        debugPrint('playTouchSound error: $e');
+      }
+    }
+  }
+
   // ── Dual Barcode Scanners Settings Update ──────────────────────────────────
   Future<void> saveBarcodeSettings({
     required bool enableDual,
@@ -312,8 +392,8 @@ class AppSettingsController extends ChangeNotifier {
     String? kitchenUsbPort,
   }) async {
     _enableDualBarcodeScanners = enableDual;
-    _mainScannerPrefix = mainPrefix.trim().isEmpty ? 'ORD-,INV-' : mainPrefix.trim();
-    _kitchenScannerPrefix = kitchenPrefix.trim().isEmpty ? 'KOT-' : kitchenPrefix.trim();
+    _mainScannerPrefix = mainPrefix.trim().isEmpty ? 'O-,I-,P-,ORD-,INV-' : mainPrefix.trim();
+    _kitchenScannerPrefix = kitchenPrefix.trim().isEmpty ? 'K-,KOT-' : kitchenPrefix.trim();
     _autoRouteKitchenBarcodes = autoRouteKitchen;
     if (mainUsbPort != null) _mainScannerUsbPort = mainUsbPort;
     if (kitchenUsbPort != null) _kitchenScannerUsbPort = kitchenUsbPort;

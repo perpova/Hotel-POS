@@ -15,6 +15,7 @@ import '../theme.dart';
 import '../models.dart';
 import '../api_service.dart';
 import '../widgets/image_helper.dart';
+import '../widgets/order_status_scan_dialog.dart';
 import 'package:intl/intl.dart';
 
 class OrderQueueScreen extends StatefulWidget {
@@ -2504,23 +2505,54 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
   }
 
   Future<void> _processScannedBarcode(String barcode) async {
-    String cleanBarcode = barcode;
+    String cleanBarcode = barcode.trim();
     bool isKot = false;
     bool isInv = false;
 
-    if (barcode.toUpperCase().startsWith('KOT-')) {
-      cleanBarcode = barcode.substring(4);
+    final upper = cleanBarcode.toUpperCase();
+    if (upper.startsWith('KOT-')) {
+      cleanBarcode = cleanBarcode.substring(4);
       isKot = true;
-    } else if (barcode.toUpperCase().startsWith('INV-')) {
-      cleanBarcode = barcode.substring(4);
+    } else if (upper.startsWith('K-')) {
+      cleanBarcode = cleanBarcode.substring(2);
+      isKot = true;
+    } else if (upper.startsWith('INV-')) {
+      cleanBarcode = cleanBarcode.substring(4);
       isInv = true;
-    } else {
-      cleanBarcode = barcode;
+    } else if (upper.startsWith('I-')) {
+      cleanBarcode = cleanBarcode.substring(2);
+      isInv = true;
+    } else if (upper.startsWith('PRE-')) {
+      cleanBarcode = cleanBarcode.substring(4);
+    } else if (upper.startsWith('P-')) {
+      cleanBarcode = cleanBarcode.substring(2);
     }
 
     try {
       final api = APIService.instance;
-      final order = await api.getOrderByNumber(cleanBarcode);
+      OrderModel? order;
+      try {
+        order = await api.getOrderByNumber(cleanBarcode);
+      } catch (_) {
+        try {
+          order = await api.getOrderByNumber('O-$cleanBarcode');
+        } catch (_) {
+          try {
+            order = await api.getOrderByNumber('P-$cleanBarcode');
+          } catch (_) {
+            String legacy = cleanBarcode.replaceAll('26', '2026');
+            try {
+              order = await api.getOrderByNumber('ORD-$legacy');
+            } catch (_) {
+              try {
+                order = await api.getOrderByNumber('PRE-$legacy');
+              } catch (_) {
+                order = await api.getOrderByBarcode(cleanBarcode);
+              }
+            }
+          }
+        }
+      }
       
       String newStatus = order.status;
       bool statusChanged = false;
@@ -2548,12 +2580,21 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
       }
 
       if (statusChanged) {
-        await api.updateOrderOnline(order.id!, {'status': newStatus});
+        final nowStr = DateFormat('yyyy-MM-dd hh:mm:ss a').format(DateTime.now());
+        await api.updateOrderOnline(order.id!, {'status': newStatus, 'updated_at': DateTime.now().toIso8601String()});
         
         if (mounted) {
           final posController = Provider.of<POSController>(context, listen: false);
           await posController.reloadEnvironment();
-          _showScanSuccessDialog(order.orderNumber, order.status, newStatus);
+          OrderStatusScanDialog.show(
+            context: context,
+            order: order,
+            oldStatus: order.status,
+            newStatus: newStatus,
+            statusChangeTime: nowStr,
+            cashierName: api.currentUser?.name,
+            stewardName: order.stewardName,
+          );
         }
       } else {
         _showOrderStatusDialog(order);
@@ -2571,118 +2612,19 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
   }
 
   void _showScanSuccessDialog(String orderNumber, String oldStatus, String newStatus) {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          backgroundColor: const Color(0xFF1E293B),
-          title: Row(
-            children: [
-              const Icon(Icons.check_circle_rounded, color: Color(0xFF10B981), size: 28),
-              const SizedBox(width: 12),
-              Text(
-                'Status Updated',
-                style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.white),
-              ),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Order $orderNumber status changed successfully:',
-                style: GoogleFonts.inter(color: const Color(0xFF94A3B8), fontSize: 13),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _buildStatusBadge(oldStatus),
-                  const SizedBox(width: 12),
-                  const Icon(Icons.arrow_forward_rounded, color: Colors.white54, size: 20),
-                  const SizedBox(width: 12),
-                  _buildStatusBadge(newStatus),
-                ],
-              ),
-            ],
-          ),
-          actions: [
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primary,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-              child: const Text('OK'),
-            ),
-          ],
-        );
-      },
-    );
+    // Legacy stub delegated to OrderStatusScanDialog
   }
 
   void _showOrderStatusDialog(OrderModel order) {
-    showDialog(
+    final nowStr = DateFormat('yyyy-MM-dd hh:mm:ss a').format(DateTime.now());
+    OrderStatusScanDialog.show(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          backgroundColor: const Color(0xFF1E293B),
-          title: Row(
-            children: [
-              const Icon(Icons.info_rounded, color: Color(0xFF3B82F6), size: 28),
-              const SizedBox(width: 12),
-              Text(
-                'Order Info',
-                style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.white),
-              ),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Order Number: ${order.orderNumber}',
-                style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Type: ${order.orderType.toUpperCase().replaceAll('_', ' ')}',
-                style: GoogleFonts.inter(color: const Color(0xFF94A3B8), fontSize: 13),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Total: LKR ${order.total.toStringAsFixed(2)}',
-                style: GoogleFonts.inter(color: const Color(0xFF94A3B8), fontSize: 13),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    'Current Status: ',
-                    style: GoogleFonts.inter(color: const Color(0xFF94A3B8), fontSize: 13),
-                  ),
-                  _buildStatusBadge(order.status),
-                ],
-              ),
-            ],
-          ),
-          actions: [
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primary,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-              child: const Text('Close'),
-            ),
-          ],
-        );
-      },
+      order: order,
+      oldStatus: order.status,
+      newStatus: order.status,
+      statusChangeTime: nowStr,
+      cashierName: APIService.instance.currentUser?.name,
+      stewardName: order.stewardName,
     );
   }
 

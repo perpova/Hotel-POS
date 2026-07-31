@@ -50,6 +50,7 @@ class POSController extends ChangeNotifier {
   // Active POS Transaction Cart States
   List<OrderItemModel> cart = [];
   DiningTableModel? selectedTable;
+  DiningTableModel? pendingScannedTable;
   CustomerModel? selectedCustomer;
   double activePreOrderAdvance = 0.00;
   String? stewardName;
@@ -1306,9 +1307,13 @@ class POSController extends ChangeNotifier {
           return;
         }
 
-        final dateStr = DateTime.now().toIso8601String().substring(0, 10).replaceAll('-', '');
-        final timestamp = DateTime.now().millisecondsSinceEpoch.toString().substring(8);
-        final offlineOrderNum = 'ORD-$dateStr-$timestamp';
+        final now = DateTime.now();
+        final year = now.year.toString().substring(2);
+        final month = now.month.toString().padLeft(2, '0');
+        final day = now.day.toString().padLeft(2, '0');
+        final dateStr = '$year$month$day';
+        final timestamp = now.millisecondsSinceEpoch.toString().substring(8);
+        final offlineOrderNum = 'O-$dateStr-$timestamp';
 
         final order = OrderModel(
           orderNumber: offlineOrderNum,
@@ -1392,6 +1397,31 @@ class POSController extends ChangeNotifier {
     _triggerTableAutoSync();
   }
 
+  void handleScannedTable(DiningTableModel table) {
+    if (cart.isEmpty) {
+      pendingScannedTable = null;
+      orderType = 'dine_in';
+      selectTable(table);
+    } else {
+      pendingScannedTable = table;
+      notifyListeners();
+    }
+  }
+
+  void clearPendingScannedTable() {
+    pendingScannedTable = null;
+    notifyListeners();
+  }
+
+  void applyPendingScannedTable() {
+    if (pendingScannedTable != null) {
+      final t = pendingScannedTable!;
+      pendingScannedTable = null;
+      orderType = 'dine_in';
+      selectTable(t);
+    }
+  }
+
   void clearCart() {
     if (selectedTable != null) {
       final tid = selectedTable!.id;
@@ -1414,7 +1444,15 @@ class POSController extends ChangeNotifier {
     activeLankaQR = null;
     cardTerminalStatus = null;
     cardTerminalTxRef = null;
-    notifyListeners();
+
+    if (pendingScannedTable != null) {
+      final t = pendingScannedTable!;
+      pendingScannedTable = null;
+      orderType = 'dine_in';
+      selectTable(t);
+    } else {
+      notifyListeners();
+    }
   }
 
   // ----------------------------------------------------
@@ -1629,9 +1667,13 @@ class POSController extends ChangeNotifier {
     if (activeShift == null) throw Exception('No active shift. Please open a shift.');
     
     // Generate order number for offline fallback
-    final dateStr = DateTime.now().toIso8601String().substring(0, 10).replaceAll('-', '');
-    final timestamp = DateTime.now().millisecondsSinceEpoch.toString().substring(8);
-    final offlineOrderNum = 'ORD-$dateStr-$timestamp';
+    final now = DateTime.now();
+    final year = now.year.toString().substring(2);
+    final month = now.month.toString().padLeft(2, '0');
+    final day = now.day.toString().padLeft(2, '0');
+    final dateStr = '$year$month$day';
+    final timestamp = now.millisecondsSinceEpoch.toString().substring(8);
+    final offlineOrderNum = 'O-$dateStr-$timestamp';
 
     final order = OrderModel(
       orderNumber: offlineOrderNum,

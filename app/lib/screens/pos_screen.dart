@@ -41,6 +41,10 @@ class _POSScreenState extends State<POSScreen> {
   bool _isCustomerDropdownOpen = false;
   String _customerSearchQuery = '';
 
+  final ScrollController _productsScrollController = ScrollController();
+  final ScrollController _cartScrollController = ScrollController();
+  final ScrollController _categoryScrollController = ScrollController();
+
   String _discountType = 'percent';
 
   @override
@@ -55,6 +59,9 @@ class _POSScreenState extends State<POSScreen> {
     _barcodeInputController.dispose();
     _tokenNoController.dispose();
     _customerSearchController.dispose();
+    _productsScrollController.dispose();
+    _cartScrollController.dispose();
+    _categoryScrollController.dispose();
     super.dispose();
   }
 
@@ -159,6 +166,65 @@ class _POSScreenState extends State<POSScreen> {
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
+          // Pending Scanned Table Banner
+          if (controller.pendingScannedTable != null) ...[
+            Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppTheme.isDarkMode ? const Color(0xFF451A03).withOpacity(0.9) : const Color(0xFFFEF3C7),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppTheme.isDarkMode ? const Color(0xFFF59E0B) : const Color(0xFFD97706)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.qr_code_scanner_rounded, color: Color(0xFFF59E0B), size: 22),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Table ${controller.pendingScannedTable!.tableNumber} Scanned via QR!',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.isDarkMode ? const Color(0xFFFDE68A) : const Color(0xFF92400E),
+                          ),
+                        ),
+                        Text(
+                          'Will auto-select Table ${controller.pendingScannedTable!.tableNumber} when current bill completes.',
+                          style: GoogleFonts.inter(
+                            fontSize: 11,
+                            color: AppTheme.isDarkMode ? const Color(0xFFFCD34D) : const Color(0xFFB45309),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  ElevatedButton(
+                    onPressed: () {
+                      controller.applyPendingScannedTable();
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFD97706),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      elevation: 0,
+                    ),
+                    child: const Text('Switch Now', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                  ),
+                  const SizedBox(width: 4),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded, size: 18, color: Color(0xFFF59E0B)),
+                    onPressed: () => controller.clearPendingScannedTable(),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
           // FoodKing Custom Search and Barcode Scanner Row
           Row(
             children: [
@@ -249,18 +315,17 @@ class _POSScreenState extends State<POSScreen> {
           ),
           const SizedBox(height: 16),
 
-          // Category Tabs – wrap into multiple rows when many categories
+          // Category Tabs – multi-row wrap (no scrollbar)
           Wrap(
             spacing: 0,
             runSpacing: 10,
             children: [
               _buildCategoryTabWrapped(null, 'All Items', controller),
               ...controller.categories
-                  .map((cat) => _buildCategoryTabWrapped(cat, cat.name, controller))
-                  .toList(),
+                  .map((cat) => _buildCategoryTabWrapped(cat, cat.name, controller)),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
 
           // Products Grid
           Expanded(
@@ -278,18 +343,25 @@ class _POSScreenState extends State<POSScreen> {
                       ],
                     ),
                   )
-                : GridView.builder(
-                    gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                      maxCrossAxisExtent: 155,
-                      childAspectRatio: 0.8,
-                      crossAxisSpacing: 10,
-                      mainAxisSpacing: 10,
+                : Scrollbar(
+                    controller: _productsScrollController,
+                    thumbVisibility: true,
+                    trackVisibility: true,
+                    child: GridView.builder(
+                      controller: _productsScrollController,
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                        maxCrossAxisExtent: 155,
+                        childAspectRatio: 0.8,
+                        crossAxisSpacing: 10,
+                        mainAxisSpacing: 10,
+                      ),
+                      itemCount: controller.filteredProducts.length,
+                      itemBuilder: (context, index) {
+                        final product = controller.filteredProducts[index];
+                        return _buildProductCard(product, controller);
+                      },
                     ),
-                    itemCount: controller.filteredProducts.length,
-                    itemBuilder: (context, index) {
-                      final product = controller.filteredProducts[index];
-                      return _buildProductCard(product, controller);
-                    },
                   ),
           ),
         ],
@@ -298,13 +370,17 @@ class _POSScreenState extends State<POSScreen> {
   }
 
   Widget _buildCategoryTab(CategoryModel? cat, String title, POSController controller) {
+    final appSettings = Provider.of<AppSettingsController>(context, listen: false);
     final id = cat?.id;
     final isSelected = controller.activeCategoryId == id;
     final icon = _getCategoryIcon(title);
     final base64Str = cat?.imageBase64;
 
     return GestureDetector(
-      onTap: () => controller.filterCategory(id),
+      onTap: () {
+        appSettings.playTouchSound();
+        controller.filterCategory(id);
+      },
       child: Container(
         width: 95,
         margin: const EdgeInsets.only(right: 12),
@@ -377,13 +453,17 @@ class _POSScreenState extends State<POSScreen> {
 
   /// Same design as [_buildCategoryTab] but sized for use inside a [Wrap].
   Widget _buildCategoryTabWrapped(CategoryModel? cat, String title, POSController controller) {
+    final appSettings = Provider.of<AppSettingsController>(context, listen: false);
     final id = cat?.id;
     final isSelected = controller.activeCategoryId == id;
     final icon = _getCategoryIcon(title);
     final base64Str = cat?.imageBase64;
 
     return GestureDetector(
-      onTap: () => controller.filterCategory(id),
+      onTap: () {
+        appSettings.playTouchSound();
+        controller.filterCategory(id);
+      },
       child: Container(
         width: 95,
         height: 78,
@@ -456,6 +536,7 @@ class _POSScreenState extends State<POSScreen> {
   }
 
   Widget _buildProductCard(ProductModel product, POSController controller) {
+    final appSettings = Provider.of<AppSettingsController>(context, listen: false);
     final isLowStock = product.trackStock && (product.stockQty <= product.minStockLevel);
 
     return Card(
@@ -471,6 +552,7 @@ class _POSScreenState extends State<POSScreen> {
       child: InkWell(
         onTap: (!product.trackStock || product.stockQty > 0)
             ? () {
+                appSettings.playTouchSound();
                 if (product.hasSizes || product.hasExtras || product.hasAddons) {
                   _showProductOptionsModal(product, controller);
                 } else {
@@ -982,12 +1064,19 @@ class _POSScreenState extends State<POSScreen> {
                         style: GoogleFonts.inter(color: AppTheme.textLightSecondary, fontSize: 13),
                       ),
                     )
-                  : ListView.builder(
-                      itemCount: controller.cart.length,
-                      itemBuilder: (context, index) {
-                        final item = controller.cart[index];
-                        return _buildCartRow(item, index, controller);
-                      },
+                  : Scrollbar(
+                      controller: _cartScrollController,
+                      thumbVisibility: true,
+                      trackVisibility: true,
+                      child: ListView.builder(
+                        controller: _cartScrollController,
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        itemCount: controller.cart.length,
+                        itemBuilder: (context, index) {
+                          final item = controller.cart[index];
+                          return _buildCartRow(item, index, controller);
+                        },
+                      ),
                     ),
             ),
             Divider(height: 1, color: AppTheme.dividerColor),
@@ -1459,9 +1548,13 @@ class _POSScreenState extends State<POSScreen> {
   }
 
   Widget _buildFoodKingTypeButton(String type, String label, POSController controller) {
+    final appSettings = Provider.of<AppSettingsController>(context, listen: false);
     final isSel = controller.orderType == type;
     return GestureDetector(
-      onTap: () => controller.setOrderType(type),
+      onTap: () {
+        appSettings.playTouchSound();
+        controller.setOrderType(type);
+      },
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
         decoration: BoxDecoration(
@@ -2958,8 +3051,8 @@ class _POSScreenState extends State<POSScreen> {
                   final bool shouldAutoPrintKot = hasKotItems && (appSettings.autoPrintKot || appSettings.autoPrintKotAfterInvoice);
                   final bool shouldAutoPrintInvoice = appSettings.autoPrintInvoice;
 
-                  // 1. Direct Print to thermal printer if enabled
-                  if (appSettings.directPrint && (shouldAutoPrintKot || shouldAutoPrintInvoice)) {
+                  // 1. Auto print thermal receipts directly to printer
+                  if (shouldAutoPrintKot || shouldAutoPrintInvoice) {
                     if (shouldAutoPrintKot) {
                       try {
                         final kotBytes = await _generateKOTPdfBytes(receiptData, controller);
@@ -3753,17 +3846,25 @@ class _POSScreenState extends State<POSScreen> {
     int copies = 1,
   }) async {
     final appSettings = Provider.of<AppSettingsController>(context, listen: false);
-    if (appSettings.directPrint && printerName != null && printerName.isNotEmpty) {
+    if (appSettings.directPrint) {
       try {
         final list = await Printing.listPrinters();
-        final found = list.where((p) => p.name == printerName).toList();
-        if (found.isNotEmpty) {
+        Printer? targetPrinter;
+        if (printerName != null && printerName.isNotEmpty) {
+          final found = list.where((p) => p.name == printerName).toList();
+          if (found.isNotEmpty) targetPrinter = found.first;
+        }
+        targetPrinter ??= list.where((p) => p.isDefault).firstOrNull ?? (list.isNotEmpty ? list.first : null);
+
+        if (targetPrinter != null) {
           for (int i = 0; i < copies; i++) {
-            await Printing.directPrintPdf(printer: found.first, onLayout: (format) async => bytes);
+            await Printing.directPrintPdf(printer: targetPrinter, onLayout: (format) async => bytes);
           }
           return;
         }
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('Direct print error: $e');
+      }
     }
     for (int i = 0; i < copies; i++) {
       await Printing.layoutPdf(onLayout: (format) async => bytes, name: name);
@@ -3828,7 +3929,7 @@ class _POSScreenState extends State<POSScreen> {
     pdf.addPage(
       pw.Page(
         pageFormat: receiptFormat,
-        margin: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+        margin: const pw.EdgeInsets.only(left: 2, right: 6, top: 0, bottom: 2),
         build: (pw.Context context) {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -3859,7 +3960,7 @@ class _POSScreenState extends State<POSScreen> {
                     child: pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
-                        _buildPdfInfoRow(TranslationService.translateRaw('Date:', lang), '${DateTime.now().day.toString().padLeft(2, '0')}/${DateTime.now().month.toString().padLeft(2, '0')}/${DateTime.now().year}', sinhalaFont),
+                        _buildPdfInfoRow(TranslationService.translateRaw('Date:', lang), '${DateTime.now().day.toString().padLeft(2, '0')}/${DateTime.now().month.toString().padLeft(2, '0')}/${DateTime.now().year.toString().substring(2)}', sinhalaFont),
                         _buildPdfInfoRow(TranslationService.translateRaw('Time:', lang), _formatTime(DateTime.now(), includeSpace: true), sinhalaFont),
                       ],
                     ),
@@ -3934,18 +4035,21 @@ class _POSScreenState extends State<POSScreen> {
               _buildPdfDashedLine(),
               pw.SizedBox(height: 6),
               pw.Center(
-                child: pw.BarcodeWidget(
-                  barcode: pw.Barcode.code128(),
-                  data: 'KOT-${data.orderNumber}',
-                  width: 150,
-                  height: 30,
-                  drawText: false,
+                child: pw.Padding(
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  child: pw.BarcodeWidget(
+                    barcode: pw.Barcode.code128(),
+                    data: _getShortKotBarcode(data.orderNumber),
+                    width: 135,
+                    height: 42,
+                    drawText: false,
+                  ),
                 ),
               ),
               pw.SizedBox(height: 2),
               pw.Center(
                 child: pw.Text(
-                  'KOT-${data.orderNumber}',
+                  _getShortKotBarcode(data.orderNumber),
                   style: pw.TextStyle(font: sinhalaFont, fontSize: 6, color: PdfColors.grey700),
                 ),
               ),
@@ -4016,7 +4120,7 @@ class _POSScreenState extends State<POSScreen> {
     pdf.addPage(
       pw.Page(
         pageFormat: receiptFormat,
-        margin: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+        margin: const pw.EdgeInsets.only(left: 2, right: 6, top: 0, bottom: 2),
         build: (pw.Context context) {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -4030,15 +4134,15 @@ class _POSScreenState extends State<POSScreen> {
                     crossAxisAlignment: pw.CrossAxisAlignment.center,
                     children: [
                       if (logoImage != null) ...[
-                        pw.Image(logoImage, width: 28, height: 28),
-                        pw.SizedBox(width: 6),
+                        pw.Image(logoImage, width: 24, height: 24),
+                        pw.SizedBox(width: 4),
                       ],
                       pw.Column(
                         crossAxisAlignment: pw.CrossAxisAlignment.start,
                         children: [
                           pw.Text(
                              'v£ly »ƒ£Šfzx',
-                             style: pw.TextStyle(font: isiaginiFont, fontSize: 18, fontWeight: pw.FontWeight.bold),
+                             style: pw.TextStyle(font: isiaginiFont, fontSize: 16, fontWeight: pw.FontWeight.bold),
                            ),
                           pw.Text(
                             'නො: 04 මහා වීදිය, අකුරැස්ස',
@@ -4053,10 +4157,10 @@ class _POSScreenState extends State<POSScreen> {
                     ],
                   ),
                   pw.Container(
-                    padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: pw.BoxDecoration(
                       border: pw.Border.all(color: PdfColors.black, width: 1),
-                      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(12)),
+                      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(10)),
                     ),
                     child: pw.Text(
                       _getOvalNumber(data),
@@ -4065,14 +4169,14 @@ class _POSScreenState extends State<POSScreen> {
                   ),
                 ],
               ),
-              pw.SizedBox(height: 8),
+              pw.SizedBox(height: 4),
               pw.Center(
                 child: pw.Text(
                   TranslationService.translateRaw('INVOICE', lang),
                   style: pw.TextStyle(font: sinhalaFont, fontSize: 10, fontWeight: pw.FontWeight.bold, decoration: pw.TextDecoration.underline),
                 ),
               ),
-              pw.SizedBox(height: 4),
+              pw.SizedBox(height: 3),
               
               _buildPdfInfoRow(TranslationService.translateRaw('Receipt No', lang), _getReceiptNumber(data), sinhalaFont),
               
@@ -4080,35 +4184,35 @@ class _POSScreenState extends State<POSScreen> {
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
                   pw.Text(
-                    '${TranslationService.translateRaw('Date:', lang)}  ${DateTime.now().day.toString().padLeft(2, '0')}-${_getMonthName(DateTime.now())}-${DateTime.now().year}',
-                    style: pw.TextStyle(font: sinhalaFont, fontSize: 8),
+                    '${TranslationService.translateRaw('Date:', lang)}  ${DateTime.now().day.toString().padLeft(2, '0')}-${_getMonthName(DateTime.now())}-${DateTime.now().year.toString().substring(2)}',
+                    style: pw.TextStyle(font: sinhalaFont, fontSize: 7.5),
                   ),
                   pw.Text(
                     _formatTime(DateTime.now(), includeSpace: false),
-                    style: pw.TextStyle(font: sinhalaFont, fontSize: 8),
+                    style: pw.TextStyle(font: sinhalaFont, fontSize: 7.5),
                   ),
                   pw.Text(
                     data.cashierName,
-                    style: pw.TextStyle(font: sinhalaFont, fontSize: 8),
+                    style: pw.TextStyle(font: sinhalaFont, fontSize: 7.5),
                   ),
                 ],
               ),
               
-              pw.SizedBox(height: 4),
+              pw.SizedBox(height: 3),
               _buildPdfDashedLine(),
-              pw.SizedBox(height: 4),
+              pw.SizedBox(height: 3),
 
               pw.Row(
                 children: [
-                  pw.Expanded(flex: 3, child: pw.Text(TranslationService.translateRaw('Description', lang), style: pw.TextStyle(font: sinhalaFont, fontWeight: pw.FontWeight.bold, fontSize: 8))),
-                  pw.Expanded(flex: 1, child: pw.Align(alignment: pw.Alignment.center, child: pw.Text(TranslationService.translateRaw('Qty', lang), style: pw.TextStyle(font: sinhalaFont, fontWeight: pw.FontWeight.bold, fontSize: 8)))),
-                  pw.Expanded(flex: 2, child: pw.Align(alignment: pw.Alignment.centerRight, child: pw.Text(TranslationService.translateRaw('Price', lang), style: pw.TextStyle(font: sinhalaFont, fontWeight: pw.FontWeight.bold, fontSize: 8)))),
-                  pw.Expanded(flex: 2, child: pw.Align(alignment: pw.Alignment.centerRight, child: pw.Text(TranslationService.translateRaw('Amount', lang), style: pw.TextStyle(font: sinhalaFont, fontWeight: pw.FontWeight.bold, fontSize: 8)))),
+                  pw.Expanded(flex: 7, child: pw.Text(TranslationService.translateRaw('Description', lang), style: pw.TextStyle(font: sinhalaFont, fontWeight: pw.FontWeight.bold, fontSize: 8))),
+                  pw.Expanded(flex: 2, child: pw.Align(alignment: pw.Alignment.center, child: pw.Text(TranslationService.translateRaw('Qty', lang), style: pw.TextStyle(font: sinhalaFont, fontWeight: pw.FontWeight.bold, fontSize: 8)))),
+                  pw.Expanded(flex: 4, child: pw.Align(alignment: pw.Alignment.centerRight, child: pw.Text(TranslationService.translateRaw('Price', lang), style: pw.TextStyle(font: sinhalaFont, fontWeight: pw.FontWeight.bold, fontSize: 8)))),
+                  pw.Expanded(flex: 5, child: pw.Align(alignment: pw.Alignment.centerRight, child: pw.Text(TranslationService.translateRaw('Amount', lang), style: pw.TextStyle(font: sinhalaFont, fontWeight: pw.FontWeight.bold, fontSize: 8)))),
                 ],
               ),
               pw.SizedBox(height: 2),
               pw.Divider(thickness: 0.5),
-              pw.SizedBox(height: 4),
+              pw.SizedBox(height: 3),
 
               ..._groupDuplicateOrderItems(data.items).map((item) {
                 final productList = controller.products.where((p) => p.id == item.productId).toList();
@@ -4135,7 +4239,7 @@ class _POSScreenState extends State<POSScreen> {
                 final isDiscounted = originalPrice > item.price;
 
                 return pw.Padding(
-                  padding: const pw.EdgeInsets.only(bottom: 4.0),
+                  padding: const pw.EdgeInsets.only(bottom: 3.0),
                   child: pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
@@ -4143,28 +4247,28 @@ class _POSScreenState extends State<POSScreen> {
                         crossAxisAlignment: pw.CrossAxisAlignment.start,
                         children: [
                           pw.Expanded(
-                            flex: 3,
+                            flex: 7,
                             child: pw.Text(
                               isSinhala ? (item.productSinhalaName ?? item.productName) : item.productName,
                               style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold),
                             ),
                           ),
                           pw.Expanded(
-                            flex: 1,
+                            flex: 2,
                             child: pw.Align(
                               alignment: pw.Alignment.center,
                               child: pw.Text('${item.quantity}', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
                             ),
                           ),
                           pw.Expanded(
-                            flex: 2,
+                            flex: 4,
                             child: pw.Align(
                               alignment: pw.Alignment.centerRight,
                               child: pw.Text(item.price.toStringAsFixed(2), style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
                             ),
                           ),
                           pw.Expanded(
-                            flex: 2,
+                            flex: 5,
                             child: pw.Align(
                               alignment: pw.Alignment.centerRight,
                               child: pw.Text((item.price * item.quantity).toStringAsFixed(2), style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
@@ -4193,26 +4297,26 @@ class _POSScreenState extends State<POSScreen> {
               
               pw.SizedBox(height: 3),
               _buildPdfDashedLine(),
-              pw.SizedBox(height: 4),
+              pw.SizedBox(height: 3),
               
-              // Summary
+              // Summary in 2-column layout (Left: Items & Payment; Right: Amounts)
               pw.Row(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  // Column 1: Items & Payment Method
+                  // Left Column: Items count & Payment method
                   pw.Expanded(
-                    flex: 4,
+                    flex: 5,
                     child: pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
                         pw.Row(
                           children: [
                             pw.Text(TranslationService.translateRaw('Items', lang), style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
-                            pw.SizedBox(width: 6),
+                            pw.SizedBox(width: 4),
                             pw.Text('$totalQty', style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold)),
                           ],
                         ),
-                        pw.SizedBox(height: 4),
+                        pw.SizedBox(height: 3),
                         pw.Text(
                           TranslationService.translateRaw('PAID BY ${data.paymentMethod.toUpperCase()}', lang),
                           style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold),
@@ -4220,9 +4324,9 @@ class _POSScreenState extends State<POSScreen> {
                       ],
                     ),
                   ),
-                  // Column 2: Total & Discounts
+                  // Right Column: Sub Total, Discount, Total, Paid, Balance
                   pw.Expanded(
-                    flex: 4,
+                    flex: 7,
                     child: pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.end,
                       children: [
@@ -4230,87 +4334,79 @@ class _POSScreenState extends State<POSScreen> {
                           mainAxisAlignment: pw.MainAxisAlignment.end,
                           children: [
                             pw.Text(TranslationService.translateRaw('Sub Total', lang), style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
-                            pw.SizedBox(width: 4),
+                            pw.SizedBox(width: 3),
                             pw.Text(':', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
-                            pw.SizedBox(width: 4),
+                            pw.SizedBox(width: 3),
                             pw.Text(data.subtotal.toStringAsFixed(2), style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold)),
                           ],
                         ),
                         if (data.discount > 0) ...[
-                          pw.SizedBox(height: 4),
+                          pw.SizedBox(height: 2),
                           pw.Row(
                             mainAxisAlignment: pw.MainAxisAlignment.end,
                             children: [
                               pw.Text(TranslationService.translateRaw('Discount', lang), style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
-                              pw.SizedBox(width: 4),
+                              pw.SizedBox(width: 3),
                               pw.Text(':', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
-                              pw.SizedBox(width: 4),
+                              pw.SizedBox(width: 3),
                               pw.Text('-${data.discount.toStringAsFixed(2)}', style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold)),
                             ],
                           ),
                         ],
-                        pw.SizedBox(height: 4),
+                        pw.SizedBox(height: 2),
                         pw.Row(
                           mainAxisAlignment: pw.MainAxisAlignment.end,
                           children: [
                             pw.Text(TranslationService.translateRaw('Total', lang), style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
-                            pw.SizedBox(width: 4),
+                            pw.SizedBox(width: 3),
                             pw.Text(':', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
-                            pw.SizedBox(width: 4),
+                            pw.SizedBox(width: 3),
                             pw.Text(data.total.toStringAsFixed(2), style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold)),
                           ],
                         ),
-                      ],
-                    ),
-                  ),
-                  // Column 3: Paid Amount & Balance
-                  pw.Expanded(
-                    flex: 4,
-                    child: pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.end,
-                      children: [
                         if (data.advancePayment > 0) ...[
+                          pw.SizedBox(height: 2),
                           pw.Row(
                             mainAxisAlignment: pw.MainAxisAlignment.end,
                             children: [
                               pw.Text(TranslationService.translateRaw('Adv Paid', lang), style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
-                              pw.SizedBox(width: 4),
+                              pw.SizedBox(width: 3),
                               pw.Text(':', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
-                              pw.SizedBox(width: 4),
+                              pw.SizedBox(width: 3),
                               pw.Text(data.advancePayment.toStringAsFixed(2), style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold)),
                             ],
                           ),
-                          pw.SizedBox(height: 4),
+                          pw.SizedBox(height: 2),
                           pw.Row(
                             mainAxisAlignment: pw.MainAxisAlignment.end,
                             children: [
                               pw.Text(TranslationService.translateRaw('Bal Due', lang), style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
-                              pw.SizedBox(width: 4),
+                              pw.SizedBox(width: 3),
                               pw.Text(':', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
-                              pw.SizedBox(width: 4),
+                              pw.SizedBox(width: 3),
                               pw.Text(data.balanceAmount.toStringAsFixed(2), style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold)),
                             ],
                           ),
-                          pw.SizedBox(height: 4),
                         ],
+                        pw.SizedBox(height: 2),
                         pw.Row(
                           mainAxisAlignment: pw.MainAxisAlignment.end,
                           children: [
                             pw.Text(TranslationService.translateRaw('Paid', lang), style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
-                            pw.SizedBox(width: 4),
+                            pw.SizedBox(width: 3),
                             pw.Text(':', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
-                            pw.SizedBox(width: 4),
+                            pw.SizedBox(width: 3),
                             pw.Text(data.receivedAmount.toStringAsFixed(2), style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold)),
                           ],
                         ),
-                        pw.SizedBox(height: 4),
+                        pw.SizedBox(height: 2),
                         pw.Row(
                           mainAxisAlignment: pw.MainAxisAlignment.end,
                           children: [
                             pw.Text(TranslationService.translateRaw('Balance', lang), style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
-                            pw.SizedBox(width: 4),
+                            pw.SizedBox(width: 3),
                             pw.Text(':', style: pw.TextStyle(font: sinhalaFont, fontSize: 8)),
-                            pw.SizedBox(width: 4),
+                            pw.SizedBox(width: 3),
                             pw.Text(data.changeAmount.toStringAsFixed(2), style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold)),
                           ],
                         ),
@@ -4320,28 +4416,31 @@ class _POSScreenState extends State<POSScreen> {
                 ],
               ),
               
-              pw.SizedBox(height: 4),
+              pw.SizedBox(height: 3),
               _buildPdfDashedLine(),
-              pw.SizedBox(height: 6),
+              pw.SizedBox(height: 4),
               pw.Center(
-                child: pw.BarcodeWidget(
-                  barcode: pw.Barcode.code128(),
-                  data: 'INV-${data.orderNumber}',
-                  width: 150,
-                  height: 30,
-                  drawText: false,
+                child: pw.Padding(
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  child: pw.BarcodeWidget(
+                    barcode: pw.Barcode.code128(),
+                    data: _getShortInvoiceBarcode(data.orderNumber),
+                    width: 135,
+                    height: 42,
+                    drawText: false,
+                  ),
                 ),
               ),
               pw.SizedBox(height: 2),
               pw.Center(
                 child: pw.Text(
-                  'INV-${data.orderNumber}',
+                  _getShortInvoiceBarcode(data.orderNumber),
                   style: pw.TextStyle(font: sinhalaFont, fontSize: 6, color: PdfColors.grey700),
                 ),
               ),
-              pw.SizedBox(height: 4),
+              pw.SizedBox(height: 3),
               _buildPdfDashedLine(),
-              pw.SizedBox(height: 5),
+              pw.SizedBox(height: 4),
               
               pw.Center(
                 child: pw.Text(TranslationService.translateRaw('Thank you & Come Again', lang), style: pw.TextStyle(font: sinhalaFont, fontSize: 8, fontWeight: pw.FontWeight.bold)),
@@ -4393,6 +4492,40 @@ class _POSScreenState extends State<POSScreen> {
         ],
       ),
     );
+  }
+
+  String _sanitizeYear2026(String text) {
+    return text.replaceAll('2026', '26');
+  }
+
+  String _getShortKotBarcode(String orderNum) {
+    String clean = _sanitizeYear2026(orderNum.trim());
+    final upper = clean.toUpperCase();
+    if (upper.startsWith('O-')) {
+      return 'K-${clean.substring(2)}';
+    } else if (upper.startsWith('ORD-')) {
+      return 'K-${clean.substring(4)}';
+    } else if (upper.startsWith('PRE-')) {
+      return 'K-P-${clean.substring(4)}';
+    } else if (upper.startsWith('P-')) {
+      return 'K-$clean';
+    }
+    return 'K-$clean';
+  }
+
+  String _getShortInvoiceBarcode(String orderNum) {
+    String clean = _sanitizeYear2026(orderNum.trim());
+    final upper = clean.toUpperCase();
+    if (upper.startsWith('O-')) {
+      return 'I-${clean.substring(2)}';
+    } else if (upper.startsWith('ORD-')) {
+      return 'I-${clean.substring(4)}';
+    } else if (upper.startsWith('PRE-')) {
+      return 'I-P-${clean.substring(4)}';
+    } else if (upper.startsWith('P-')) {
+      return 'I-$clean';
+    }
+    return 'I-$clean';
   }
 
   String _getKOTNumber(ReceiptData data) {
@@ -4539,7 +4672,7 @@ class _POSScreenState extends State<POSScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildInfoRow('Date:', '${DateTime.now().day.toString().padLeft(2, '0')}/${DateTime.now().month.toString().padLeft(2, '0')}/${DateTime.now().year}'),
+                    _buildInfoRow('Date:', '${DateTime.now().day.toString().padLeft(2, '0')}/${DateTime.now().month.toString().padLeft(2, '0')}/${DateTime.now().year.toString().substring(2)}'),
                     _buildInfoRow('Time:', _formatTime(DateTime.now(), includeSpace: true)),
                   ],
                 ),
@@ -4614,18 +4747,21 @@ class _POSScreenState extends State<POSScreen> {
           _buildDashedLine(),
           const SizedBox(height: 8),
           Center(
-            child: BarcodeWidget(
-              barcode: Barcode.code128(),
-              data: 'KOT-${data.orderNumber}',
-              width: 180,
-              height: 40,
-              drawText: false,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              child: BarcodeWidget(
+                barcode: Barcode.code128(),
+                data: _getShortKotBarcode(data.orderNumber),
+                width: 145,
+                height: 45,
+                drawText: false,
+              ),
             ),
           ),
           const SizedBox(height: 4),
           Center(
             child: Text(
-              'KOT-${data.orderNumber}',
+              _getShortKotBarcode(data.orderNumber),
               style: GoogleFonts.inter(fontSize: 8, color: AppTheme.textLightSecondary),
             ),
           ),
@@ -4745,7 +4881,7 @@ class _POSScreenState extends State<POSScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Date  ${DateTime.now().day.toString().padLeft(2, '0')}-${_getMonthName(DateTime.now())}-${DateTime.now().year}',
+                'Date  ${DateTime.now().day.toString().padLeft(2, '0')}-${_getMonthName(DateTime.now())}-${DateTime.now().year.toString().substring(2)}',
                 style: GoogleFonts.inter(fontSize: 9, color: AppTheme.textLightPrimary, fontWeight: FontWeight.w500),
               ),
               Text(
@@ -4991,18 +5127,21 @@ class _POSScreenState extends State<POSScreen> {
           _buildDashedLine(),
           const SizedBox(height: 8),
           Center(
-            child: BarcodeWidget(
-              barcode: Barcode.code128(),
-              data: 'INV-${data.orderNumber}',
-              width: 180,
-              height: 40,
-              drawText: false,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              child: BarcodeWidget(
+                barcode: Barcode.code128(),
+                data: _getShortInvoiceBarcode(data.orderNumber),
+                width: 145,
+                height: 45,
+                drawText: false,
+              ),
             ),
           ),
           const SizedBox(height: 4),
           Center(
             child: Text(
-              'INV-${data.orderNumber}',
+              _getShortInvoiceBarcode(data.orderNumber),
               style: GoogleFonts.inter(fontSize: 8, color: AppTheme.textLightSecondary),
             ),
           ),
