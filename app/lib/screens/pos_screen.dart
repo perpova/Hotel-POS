@@ -1245,15 +1245,25 @@ class _POSScreenState extends State<POSScreen> {
                     Expanded(
                       flex: 3,
                       child: ElevatedButton(
-                        onPressed: controller.cart.isEmpty ? null : () => _showOrderPaymentDialog(controller),
+                        onPressed: controller.cart.isEmpty
+                            ? null
+                            : () {
+                                if (controller.orderType == 'staff_meal') {
+                                  _handleStaffMealOrder(controller);
+                                } else {
+                                  _showOrderPaymentDialog(controller);
+                                }
+                              },
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF10B981), // Green
+                          backgroundColor: controller.orderType == 'staff_meal' ? const Color(0xFF9333EA) : const Color(0xFF10B981),
                           foregroundColor: Colors.white,
                           minimumSize: const Size(double.infinity, 48),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
                         child: Text(
-                          controller.orderType == 'dine_in' && controller.selectedTable != null ? 'Pay Bill' : 'Order',
+                          controller.orderType == 'staff_meal'
+                              ? 'Issue Staff Meal (LKR 0.00)'
+                              : (controller.orderType == 'dine_in' && controller.selectedTable != null ? 'Pay Bill' : 'Order'),
                           style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold),
                         ),
                       ),
@@ -1537,12 +1547,72 @@ class _POSScreenState extends State<POSScreen> {
         Row(
           children: [
             Expanded(child: _buildFoodKingTypeButton('takeaway', 'Takeaway', controller)),
-            const SizedBox(width: 8),
+            const SizedBox(width: 6),
             Expanded(child: _buildFoodKingTypeButton('dine_in', 'Dine-In', controller)),
-            const SizedBox(width: 8),
+            const SizedBox(width: 6),
             Expanded(child: _buildFoodKingTypeButton('delivery', 'Delivery', controller)),
+            const SizedBox(width: 6),
+            Expanded(child: _buildFoodKingTypeButton('staff_meal', 'Staff Meal', controller)),
           ],
         ),
+        if (controller.orderType == 'staff_meal') ...[
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF3E8FF), // Light purple bg
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFA855F7), width: 1.5),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.badge_outlined, color: Color(0xFF9333EA), size: 18),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Staff Member (Recipient) *',
+                      style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF7E22CE)),
+                    ),
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF9333EA),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        'Selling Price: LKR 0.00',
+                        style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<UserModel>(
+                  value: controller.selectedStaffUser,
+                  isExpanded: true,
+                  decoration: InputDecoration(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    fillColor: Colors.white,
+                    filled: true,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFD8B4FE))),
+                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFD8B4FE))),
+                  ),
+                  style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary, fontWeight: FontWeight.w600),
+                  items: controller.allUsers.map((u) {
+                    return DropdownMenuItem<UserModel>(
+                      value: u,
+                      child: Text('${u.name} (${u.role.toUpperCase()})'),
+                    );
+                  }).toList(),
+                  onChanged: (user) => controller.setSelectedStaffUser(user),
+                ),
+              ],
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -1791,8 +1861,45 @@ class _POSScreenState extends State<POSScreen> {
   }
 
   // ----------------------------------------------------
-  // FLOW IMPLEMENTATIONS (KOT, ACK, MOCK TICKET PRINT)
+  // FLOW IMPLEMENTATIONS (KOT, ACK, STAFF MEAL, MOCK TICKET PRINT)
   // ----------------------------------------------------
+  void _handleStaffMealOrder(POSController controller) async {
+    if (controller.cart.isEmpty) {
+      _showErrorSnackBar('Cart is empty');
+      return;
+    }
+    if (controller.selectedStaffUser == null) {
+      _showErrorSnackBar('Please select a staff member from the dropdown');
+      return;
+    }
+    try {
+      final staffName = controller.selectedStaffUser?.name ?? 'Staff';
+      final hasKotItems = controller.cart.any((item) {
+        final p = controller.products.firstWhere(
+          (prod) => prod.id == item.productId,
+          orElse: () => ProductModel(id: 0, name: '', categoryId: 0, price: 0, cost: 0, activePrice: 0, isHappyHour: false, stockQty: 0, minStockLevel: 0, isShortEat: false, isKotItem: false),
+        );
+        return p.id != 0 && p.isKotItem;
+      });
+
+      final res = await controller.placeOrder(
+        printKOT: hasKotItems,
+        printAck: false,
+        status: 'delivered',
+        paymentStatus: 'paid',
+        paymentMethod: 'staff_meal',
+      );
+
+      controller.clearCart();
+
+      if (mounted) {
+        context.showSuccessToast('Staff Meal issued to $staffName successfully (LKR 0.00)');
+      }
+    } catch (e) {
+      _showErrorSnackBar('Failed to place staff meal order: $e');
+    }
+  }
+
   void _handlePrintKOTFlow(POSController controller) async {
     try {
       await controller.placeOrder(

@@ -223,7 +223,15 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
   }
 
   // Helpers: Resolve names
-  String _getCustomerName(int? id, List<CustomerModel> customers) {
+  String _getCustomerName(OrderModel order, List<CustomerModel> customers) {
+    if (order.orderType == 'staff_meal' || order.paymentMethod == 'staff_meal') {
+      final name = order.staffName ?? order.stewardName;
+      if (name != null && name.isNotEmpty) {
+        return '$name (Staff)';
+      }
+      return 'Staff Member';
+    }
+    final id = order.customerId;
     if (id == null) return 'Walking Customer';
     final customer = customers.firstWhere(
       (c) => c.id == id,
@@ -314,7 +322,7 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
   List<OrderModel> get _filteredOrders {
     return _allOrders.where((order) {
       final posController = Provider.of<POSController>(context, listen: false);
-      final custName = _getCustomerName(order.customerId, posController.customers).toLowerCase();
+      final custName = _getCustomerName(order, posController.customers).toLowerCase();
       final orderNum = order.orderNumber.toLowerCase();
       final matchesSearch = orderNum.contains(_searchQuery.toLowerCase()) || custName.contains(_searchQuery.toLowerCase());
 
@@ -486,6 +494,8 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
                 _buildFilterChip('Takeaway', 'takeaway', isType: true),
                 const SizedBox(width: 8),
                 _buildFilterChip('Delivery', 'delivery', isType: true),
+                const SizedBox(width: 8),
+                _buildFilterChip('Staff Meal', 'staff_meal', isType: true),
               ],
             ),
           ),
@@ -611,14 +621,18 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
   }
 
   Widget _buildOrderRow(OrderModel order, POSController posController) {
-    final custName = _getCustomerName(order.customerId, posController.customers);
+    final custName = _getCustomerName(order, posController.customers);
     
     // Order Type badging
     Color typeBg = AppTheme.isDarkMode ? const Color(0xFF831843).withOpacity(0.3) : const Color(0xFFFFF0F5);
     Color typeText = AppTheme.isDarkMode ? const Color(0xFFF472B6) : AppTheme.primary;
     String typeLabel = 'Dining Table';
 
-    if (order.orderType == 'takeaway') {
+    if (order.orderType == 'staff_meal' || order.paymentMethod == 'staff_meal') {
+      typeBg = const Color(0xFFF3E8FF);
+      typeText = const Color(0xFF9333EA);
+      typeLabel = 'Staff Meal';
+    } else if (order.orderType == 'takeaway') {
       typeBg = AppTheme.isDarkMode ? const Color(0xFF7C2D12).withOpacity(0.3) : const Color(0xFFFFF7ED);
       typeText = AppTheme.isDarkMode ? const Color(0xFFFB923C) : const Color(0xFFEA580C);
       typeLabel = 'Takeaway';
@@ -1281,22 +1295,54 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('Customer Information', style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
+                              Text(
+                                (order.orderType == 'staff_meal' || order.paymentMethod == 'staff_meal')
+                                    ? 'Staff Member (Recipient)'
+                                    : 'Customer Information',
+                                style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+                              ),
                               const SizedBox(height: 16),
                               Row(
                                 children: [
                                   CircleAvatar(
-                                    backgroundColor: AppTheme.primary.withOpacity(0.1),
-                                    child: Icon(Icons.person, color: AppTheme.primary),
+                                    backgroundColor: (order.orderType == 'staff_meal' || order.paymentMethod == 'staff_meal')
+                                        ? const Color(0xFFF3E8FF)
+                                        : AppTheme.primary.withOpacity(0.1),
+                                    child: Icon(
+                                      (order.orderType == 'staff_meal' || order.paymentMethod == 'staff_meal')
+                                          ? Icons.badge
+                                          : Icons.person,
+                                      color: (order.orderType == 'staff_meal' || order.paymentMethod == 'staff_meal')
+                                          ? const Color(0xFF9333EA)
+                                          : AppTheme.primary,
+                                    ),
                                   ),
                                   const SizedBox(width: 12),
                                   Expanded(
                                     child: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        Text(customer.name, style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
+                                        Text(
+                                          (order.orderType == 'staff_meal' || order.paymentMethod == 'staff_meal')
+                                              ? (order.staffName ?? order.stewardName ?? 'Staff Member')
+                                              : customer.name,
+                                          style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+                                        ),
                                         const SizedBox(height: 2),
-                                        Text(customer.phone.isNotEmpty ? customer.phone : 'No Phone Number', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
+                                        Text(
+                                          (order.orderType == 'staff_meal' || order.paymentMethod == 'staff_meal')
+                                              ? 'Staff Member (Price LKR 0.00)'
+                                              : (customer.phone.isNotEmpty ? customer.phone : 'No Phone Number'),
+                                          style: GoogleFonts.inter(
+                                            fontSize: 12,
+                                            color: (order.orderType == 'staff_meal' || order.paymentMethod == 'staff_meal')
+                                                ? const Color(0xFF9333EA)
+                                                : AppTheme.textLightSecondary,
+                                            fontWeight: (order.orderType == 'staff_meal' || order.paymentMethod == 'staff_meal')
+                                                ? FontWeight.w600
+                                                : FontWeight.normal,
+                                          ),
+                                        ),
                                       ],
                                     ),
                                   ),

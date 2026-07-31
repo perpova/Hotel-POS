@@ -540,13 +540,15 @@ class OrderModel {
   final int? id;
   final String orderNumber;
   final int? tableId;
-  final String orderType; // 'dine_in', 'takeaway', 'delivery'
+  final String orderType; // 'dine_in', 'takeaway', 'delivery', 'staff_meal'
   final String? deliveryPlatform; // 'uber_eats', 'pickme', 'phone', 'direct'
   final int? customerId;
   final String? stewardName;
+  final int? staffUserId;
+  final String? staffName;
   final String status; // 'pending', 'preparing', 'prepared', 'out_for_delivery', 'delivered', 'cancelled'
   final String paymentStatus; // 'unpaid', 'paid'
-  final String? paymentMethod; // 'cash', 'credit', 'card', 'qr'
+  final String? paymentMethod; // 'cash', 'credit', 'card', 'qr', 'staff_meal'
   final double subtotal;
   final double discount;
   final double total;
@@ -573,6 +575,8 @@ class OrderModel {
     this.deliveryPlatform,
     this.customerId,
     this.stewardName,
+    this.staffUserId,
+    this.staffName,
     this.status = 'pending',
     this.paymentStatus = 'unpaid',
     this.paymentMethod,
@@ -607,6 +611,8 @@ class OrderModel {
       deliveryPlatform: json['delivery_platform'],
       customerId: json['customer_id'],
       stewardName: json['steward_name'],
+      staffUserId: json['staff_user_id'],
+      staffName: json['staff_name'],
       status: json['status'] ?? 'pending',
       paymentStatus: json['payment_status'] ?? 'unpaid',
       paymentMethod: json['payment_method'],
@@ -638,6 +644,8 @@ class OrderModel {
     'delivery_platform': deliveryPlatform,
     'customer_id': customerId,
     'steward_name': stewardName,
+    'staff_user_id': staffUserId,
+    'staff_name': staffName,
     'status': status,
     'payment_status': paymentStatus,
     'payment_method': paymentMethod,

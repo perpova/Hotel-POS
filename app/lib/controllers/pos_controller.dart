@@ -22,6 +22,7 @@ class POSController extends ChangeNotifier {
   List<DiningTableModel> diningTables = [];
   List<CustomerModel> customers = [];
   List<UserModel> waiters = [];
+  List<UserModel> allUsers = [];
   List<IngredientModel> ingredients = [];
 
   int get lowStockIngredientsCount {
@@ -52,10 +53,16 @@ class POSController extends ChangeNotifier {
   DiningTableModel? selectedTable;
   DiningTableModel? pendingScannedTable;
   CustomerModel? selectedCustomer;
+  UserModel? selectedStaffUser;
   double activePreOrderAdvance = 0.00;
   String? stewardName;
-  String orderType = 'takeaway'; // 'dine_in', 'takeaway', 'delivery'
+  String orderType = 'takeaway'; // 'dine_in', 'takeaway', 'delivery', 'staff_meal'
   String? deliveryPlatform;     // 'uber_eats', 'pickme', 'phone', 'direct'
+
+  void setSelectedStaffUser(UserModel? user) {
+    selectedStaffUser = user;
+    notifyListeners();
+  }
   
   // Discount States
   double rawDiscountValue = 0.00;
@@ -657,8 +664,11 @@ class POSController extends ChangeNotifier {
         products = await _api.getProducts();
         diningTables = await _api.getTables();
         customers = await _api.getCustomers();
-        final allUsers = await _api.getUsers();
+        allUsers = await _api.getUsers();
         waiters = allUsers.where((u) => u.role.toLowerCase() == 'waiter' || u.role.toLowerCase() == 'steward').toList();
+        if (selectedStaffUser == null && allUsers.isNotEmpty) {
+          selectedStaffUser = allUsers.first;
+        }
         activeShift = await _api.getCurrentShift();
         offers = await _api.getOffers();
         happyHours = await _api.getHappyHours();
@@ -687,8 +697,11 @@ class POSController extends ChangeNotifier {
         ingredients = await LocalDB.instance.getCachedIngredients();
         happyHours = await LocalDB.instance.getCachedHappyHours();
         offers = await LocalDB.instance.getCachedOffers();
-        final cachedUsers = await LocalDB.instance.getCachedUsers();
-        waiters = cachedUsers.where((u) => u.role.toLowerCase() == 'waiter' || u.role.toLowerCase() == 'steward').toList();
+        allUsers = await LocalDB.instance.getCachedUsers();
+        waiters = allUsers.where((u) => u.role.toLowerCase() == 'waiter' || u.role.toLowerCase() == 'steward').toList();
+        if (selectedStaffUser == null && allUsers.isNotEmpty) {
+          selectedStaffUser = allUsers.first;
+        }
         final cachedShifts = await LocalDB.instance.getCachedShifts();
         if (cachedShifts.isNotEmpty) {
           ShiftModel? openShift;
@@ -939,6 +952,7 @@ class POSController extends ChangeNotifier {
   // ----------------------------------------------------
 
   double get cartSubtotal {
+    if (orderType == 'staff_meal') return 0.00;
     return cart.fold(0.00, (sum, item) {
       if (activePreOrderId != null) {
         return sum + (item.price * item.quantity);
@@ -963,6 +977,7 @@ class POSController extends ChangeNotifier {
   }
 
   double get discount {
+    if (orderType == 'staff_meal') return 0.00;
     if (activePreOrderId != null) {
       double manualDiscountValue = 0.00;
       if (discountType == 'percent') {
@@ -1005,6 +1020,7 @@ class POSController extends ChangeNotifier {
   }
 
   double get cartTotal {
+    if (orderType == 'staff_meal') return 0.00;
     final sub = cartSubtotal;
     final tot = sub - discount;
     return tot < 0 ? 0.00 : tot;
@@ -1675,16 +1691,19 @@ class POSController extends ChangeNotifier {
     final timestamp = now.millisecondsSinceEpoch.toString().substring(8);
     final offlineOrderNum = 'O-$dateStr-$timestamp';
 
+    final isStaffMeal = orderType == 'staff_meal';
     final order = OrderModel(
       orderNumber: offlineOrderNum,
       tableId: selectedTable?.id,
       orderType: orderType,
       deliveryPlatform: deliveryPlatform,
       customerId: customerId ?? selectedCustomer?.id ?? 1, // Default walking customer
-      stewardName: stewardName,
-      status: status,
-      paymentStatus: paymentStatus,
-      paymentMethod: paymentMethod,
+      stewardName: isStaffMeal ? selectedStaffUser?.name : stewardName,
+      staffUserId: isStaffMeal ? selectedStaffUser?.id : null,
+      staffName: isStaffMeal ? selectedStaffUser?.name : null,
+      status: isStaffMeal ? 'delivered' : status,
+      paymentStatus: isStaffMeal ? 'paid' : paymentStatus,
+      paymentMethod: isStaffMeal ? 'staff_meal' : paymentMethod,
       subtotal: cartSubtotal,
       discount: discount,
       total: cartTotal,

@@ -212,6 +212,7 @@ class _ItemsReportScreenState extends State<ItemsReportScreen> {
   List<Map<String, dynamic>> get _aggregatedSales {
     Map<String, Map<String, dynamic>> salesMap = {};
     for (var o in _orders) {
+      if (o.orderType == 'staff_meal' || o.paymentMethod == 'staff_meal') continue;
       if (!_isWithinDateRange(o.createdAt)) continue;
 
       for (var item in o.items) {

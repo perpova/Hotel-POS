@@ -38,6 +38,7 @@ import 'pos_stock_screen.dart';
 import 'edit_profile_screen.dart';
 import 'change_password_screen.dart';
 import 'roles_permissions_screen.dart';
+import 'staff_meal_report_screen.dart';
 import 'pre_orders_screen.dart';
 import 'staff_attendance_salary_screen.dart';
 
@@ -177,6 +178,7 @@ class _MainLayoutState extends State<MainLayout> {
     'Pre Orders',
     'Short Eats Cabin',
     'Staff Attendance & Salary',
+    'Staff Meal Report',
   ];
 
   Widget _getScreen(int index) {
@@ -237,6 +239,8 @@ class _MainLayoutState extends State<MainLayout> {
         return const UsersScreen(userType: 'Short Eats Cabin');
       case 27:
         return const StaffAttendanceSalaryScreen();
+      case 28:
+        return const StaffMealReportScreen();
       default:
         return const DashboardScreen();
     }
@@ -871,6 +875,7 @@ class _MainLayoutState extends State<MainLayout> {
         [
           _SidebarItem(Icons.bar_chart_outlined, 'Sales Report', 17),
           _SidebarItem(Icons.inventory_2_outlined, 'Items Report', 18),
+          _SidebarItem(Icons.restaurant_menu_outlined, 'Staff Meal Report', 28),
           _SidebarItem(Icons.account_balance_wallet_outlined, 'Credit Balance Report', 19),
           _SidebarItem(Icons.monetization_on_outlined, 'Shifts & Cash', 5),
           _SidebarItem(Icons.analytics_outlined, 'Reports & Logs', 6),

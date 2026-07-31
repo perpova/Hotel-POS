@@ -1182,6 +1182,27 @@ class APIService {
     );
   }
 
+  Future<List<OrderModel>> getStaffMealOrders({String? from, String? to, String? staffId}) async {
+    String url = '$_baseUrl/api/reports/staff-meals';
+    List<String> params = [];
+    if (from != null && to != null) {
+      params.add('from=$from');
+      params.add('to=$to');
+    }
+    if (staffId != null && staffId.isNotEmpty) {
+      params.add('staff_id=$staffId');
+    }
+    if (params.isNotEmpty) {
+      url += '?${params.join('&')}';
+    }
+    final response = await http.get(Uri.parse(url), headers: _getHeaders());
+    if (response.statusCode == 200) {
+      final List data = jsonDecode(response.body);
+      return data.map((o) => OrderModel.fromJson(o)).toList();
+    }
+    throw Exception('Failed to load staff meal report');
+  }
+
   Future<OrderModel> getOrderByBarcode(String barcode) async {
     final response = await http.get(Uri.parse('$_baseUrl/api/orders/barcode/$barcode'), headers: _getHeaders());
     if (response.statusCode == 200) {

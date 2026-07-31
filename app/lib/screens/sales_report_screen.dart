@@ -165,6 +165,9 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
   // Filtered Orders List
   List<OrderModel> get _filteredOrders {
     return _orders.where((o) {
+      // Exclude staff meal orders from standard sales report
+      if (o.orderType == 'staff_meal' || o.paymentMethod == 'staff_meal') return false;
+
       final orderIdStr = o.orderNumber.toLowerCase();
       
       final matchId = _appliedId.isEmpty || orderIdStr.contains(_appliedId);

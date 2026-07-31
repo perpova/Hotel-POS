@@ -123,6 +123,17 @@ async function checkLowStockNotification(productId) {
     }
 }
 
+// Migration Helper for Staff Meal Columns
+async function ensureStaffMealColumnsExist() {
+    try {
+        await db.query("ALTER TABLE orders ADD COLUMN staff_user_id INT NULL").catch(() => {});
+        await db.query("ALTER TABLE orders MODIFY COLUMN order_type VARCHAR(50) NOT NULL").catch(() => {});
+    } catch (err) {
+        console.error('Staff meal DB migration notice:', err.message);
+    }
+}
+ensureStaffMealColumnsExist();
+
 
 // ----------------------------------------------------
 // AUTHENTICATION ENDPOINTS
@@ -2115,7 +2126,12 @@ app.delete('/api/addresses/:id', authenticateToken, async (req, res) => {
 
 app.get('/api/orders', authenticateToken, async (req, res) => {
     try {
-        const orders = await db.query('SELECT * FROM orders ORDER BY created_at DESC');
+        const orders = await db.query(`
+            SELECT o.*, su.name as staff_name
+            FROM orders o
+            LEFT JOIN users su ON o.staff_user_id = su.id
+            ORDER BY o.created_at DESC
+        `);
         res.json(orders);
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -2163,10 +2179,10 @@ app.get('/api/orders/:id/items', authenticateToken, async (req, res) => {
     }
 });
 
-// Create Order (Dine-in / Takeaway / Delivery)
+// Create Order (Dine-in / Takeaway / Delivery / Staff Meal)
 app.post('/api/orders', authenticateToken, async (req, res) => {
     const {
-        table_id, order_type, delivery_platform, customer_id, steward_name,
+        table_id, order_type, delivery_platform, customer_id, steward_name, staff_user_id,
         payment_method, subtotal, discount, total, items, status, payment_status,
         kot_printed, ack_printed, card_tx_reference, received_amount, change_amount,
         advance_payment, balance_amount, pre_order_id
@@ -2230,14 +2246,14 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
             // Insert new order
             const [orderResult] = await conn.query(`
                 INSERT INTO orders (
-                    order_number, table_id, order_type, delivery_platform, customer_id, steward_name,
+                    order_number, table_id, order_type, delivery_platform, customer_id, steward_name, staff_user_id,
                     status, payment_status, payment_method, subtotal, discount, total, cashier_id,
                     shift_id, kot_printed, ack_printed, card_tx_reference, barcode, received_amount, change_amount,
                     advance_payment, balance_amount, pre_order_id
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `, [
                 orderNumber, table_id || null, order_type, delivery_platform || null, customer_id || null,
-                steward_name || null, status || 'pending', payment_status || 'unpaid', payment_method || null,
+                steward_name || null, staff_user_id || null, status || 'pending', payment_status || 'unpaid', payment_method || null,
                 subtotal, discount, total, req.user.id, activeShiftId, kot_printed || false,
                 ack_printed || false, card_tx_reference || null, barcode, received_amount || 0.00, change_amount || 0.00,
                 advance_payment || 0.00, balance_amount || 0.00, pre_order_id || null
@@ -4072,7 +4088,7 @@ app.get('/api/admin/transactions', authenticateToken, async (req, res) => {
     const fromDate = from || today;
     const toDate   = to   || today;
     try {
-        // All paid orders in range
+        // All paid orders in range (excluding staff_meal)
         const orders = await db.query(`
             SELECT o.id, o.order_number, o.total, o.payment_method, o.payment_status,
                    o.order_type, o.created_at, o.cashier_id,
@@ -4083,6 +4099,7 @@ app.get('/api/admin/transactions', authenticateToken, async (req, res) => {
             LEFT JOIN dining_tables dt ON o.table_id = dt.id
             WHERE DATE(o.created_at) >= ? AND DATE(o.created_at) <= ?
               AND o.payment_status = 'paid'
+              AND o.order_type != 'staff_meal'
             ORDER BY o.created_at DESC
         `, [fromDate, toDate]);
 
@@ -4102,6 +4119,53 @@ app.get('/api/admin/transactions', authenticateToken, async (req, res) => {
             count: orders.length,
             transactions: orders
         });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET Staff Meal Report
+app.get('/api/reports/staff-meals', authenticateToken, async (req, res) => {
+    try {
+        const { from, to, staff_id } = req.query;
+        let query = `
+            SELECT o.*,
+                   dt.table_number,
+                   u.name as cashier_name,
+                   su.name as staff_name,
+                   su.role as staff_role
+            FROM orders o
+            LEFT JOIN dining_tables dt ON o.table_id = dt.id
+            LEFT JOIN users u ON o.cashier_id = u.id
+            LEFT JOIN users su ON o.staff_user_id = su.id
+            WHERE o.order_type = 'staff_meal'
+        `;
+        let params = [];
+
+        if (from && to) {
+            query += ` AND DATE(o.created_at) >= ? AND DATE(o.created_at) <= ?`;
+            params.push(from, to);
+        }
+        if (staff_id && staff_id !== 'all') {
+            query += ` AND o.staff_user_id = ?`;
+            params.push(staff_id);
+        }
+
+        query += ` ORDER BY o.id DESC`;
+
+        const orders = await db.query(query, params);
+
+        for (const order of orders) {
+            const items = await db.query(`
+                SELECT oi.*, p.name as product_name, p.sinhala_name as product_sinhala_name, p.price as regular_price, p.cost as item_cost
+                FROM order_items oi
+                LEFT JOIN products p ON oi.product_id = p.id
+                WHERE oi.order_id = ?
+            `, [order.id]);
+            order.items = items;
+        }
+
+        res.json(orders);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

@@ -148,18 +148,19 @@ CREATE TABLE IF NOT EXISTS pre_orders (
     FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 10. Orders (Supports Dine-In, Takeaway, Delivery, Pre-orders and Credit settlements)
+-- 10. Orders (Supports Dine-In, Takeaway, Delivery, Staff Meals, Pre-orders and Credit settlements)
 CREATE TABLE IF NOT EXISTS orders (
     id INT AUTO_INCREMENT PRIMARY KEY,
     order_number VARCHAR(50) UNIQUE NOT NULL,
     table_id INT DEFAULT NULL,
-    order_type ENUM('dine_in', 'takeaway', 'delivery') NOT NULL,
+    order_type ENUM('dine_in', 'takeaway', 'delivery', 'staff_meal') NOT NULL,
     delivery_platform ENUM('uber_eats', 'pickme', 'phone', 'direct') DEFAULT NULL,
     customer_id INT DEFAULT NULL,
     steward_name VARCHAR(100) DEFAULT NULL,
+    staff_user_id INT DEFAULT NULL,
     status ENUM('pending', 'preparing', 'prepared', 'out_for_delivery', 'delivered', 'cancelled', 'returned', 'rejected') DEFAULT 'pending',
     payment_status ENUM('unpaid', 'paid') DEFAULT 'unpaid',
-    payment_method ENUM('cash', 'credit', 'card', 'qr') DEFAULT NULL,
+    payment_method ENUM('cash', 'credit', 'card', 'qr', 'staff_meal') DEFAULT NULL,
     subtotal DECIMAL(10,2) NOT NULL,
     discount DECIMAL(10,2) DEFAULT 0.00,
     total DECIMAL(10,2) NOT NULL,
@@ -181,6 +182,7 @@ CREATE TABLE IF NOT EXISTS orders (
     FOREIGN KEY (customer_id) REFERENCES customers(id),
     FOREIGN KEY (cashier_id) REFERENCES users(id),
     FOREIGN KEY (shift_id) REFERENCES shifts(id),
+    FOREIGN KEY (staff_user_id) REFERENCES users(id),
     FOREIGN KEY (pre_order_id) REFERENCES pre_orders(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
