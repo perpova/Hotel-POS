@@ -134,6 +134,384 @@ async function ensureStaffMealColumnsExist() {
 }
 ensureStaffMealColumnsExist();
 
+// Migration Helper for POS Stock Sessions
+async function ensurePosStockSessionTablesExist() {
+    try {
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS pos_stock_sessions (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                session_date DATE NOT NULL,
+                login_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                logout_at DATETIME NULL,
+                status ENUM('active','closed') DEFAULT 'active',
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        `).catch(() => {});
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS pos_stock_session_entries (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                session_id INT NOT NULL,
+                product_id INT NOT NULL,
+                added_qty INT NOT NULL DEFAULT 0,
+                added_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (session_id) REFERENCES pos_stock_sessions(id) ON DELETE CASCADE,
+                FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        `).catch(() => {});
+        // Add manual remaining snapshot column (for physical count at session close)
+        await db.query("ALTER TABLE pos_stock_sessions ADD COLUMN remaining_snapshot TEXT NULL").catch(() => {});
+        console.log('POS Stock Session tables ensured.');
+    } catch (err) {
+        console.error('POS Stock Session DB migration notice:', err.message);
+    }
+}
+ensurePosStockSessionTablesExist();
+
+
+// ----------------------------------------------------
+// POS STOCK SESSION ENDPOINTS
+// ----------------------------------------------------
+
+// POST /api/pos-stock/session/open — Open a new session for current user
+app.post('/api/pos-stock/session/open', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const sessionDate = new Date().toISOString().slice(0, 10);
+
+        // Check for already active session for this user today
+        const existing = await db.query(
+            `SELECT id FROM pos_stock_sessions WHERE user_id = ? AND session_date = ? AND status = 'active' LIMIT 1`,
+            [userId, sessionDate]
+        );
+        if (existing.length > 0) {
+            return res.json({ session_id: existing[0].id, already_open: true });
+        }
+
+        const result = await db.query(
+            `INSERT INTO pos_stock_sessions (user_id, session_date, login_at, status) VALUES (?, ?, NOW(), 'active')`,
+            [userId, sessionDate]
+        );
+        broadcast({ type: 'pos_stock_session_opened', data: { sessionId: result.insertId, userId } });
+        res.json({ session_id: result.insertId, already_open: false });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/pos-stock/session/close — Close the current user's active session
+app.post('/api/pos-stock/session/close', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const sessionDate = new Date().toISOString().slice(0, 10);
+
+        const sessions = await db.query(
+            `SELECT id FROM pos_stock_sessions WHERE user_id = ? AND session_date = ? AND status = 'active' ORDER BY login_at DESC LIMIT 1`,
+            [userId, sessionDate]
+        );
+        if (sessions.length === 0) {
+            return res.json({ success: false, message: 'No active session found.' });
+        }
+        const sessionId = sessions[0].id;
+        await db.query(
+            `UPDATE pos_stock_sessions SET logout_at = NOW(), status = 'closed' WHERE id = ?`,
+            [sessionId]
+        );
+        broadcast({ type: 'pos_stock_session_closed', data: { sessionId, userId } });
+        res.json({ success: true, session_id: sessionId });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/pos-stock/session/add — Add qty for a product into active session
+app.post('/api/pos-stock/session/add', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { product_id, qty } = req.body;
+        if (!product_id || !qty || qty <= 0) {
+            return res.status(400).json({ error: 'product_id and qty (>0) are required.' });
+        }
+        const sessionDate = new Date().toISOString().slice(0, 10);
+
+        // Find or create active session
+        let sessions = await db.query(
+            `SELECT id FROM pos_stock_sessions WHERE user_id = ? AND session_date = ? AND status = 'active' ORDER BY login_at DESC LIMIT 1`,
+            [userId, sessionDate]
+        );
+        let sessionId;
+        if (sessions.length === 0) {
+            const result = await db.query(
+                `INSERT INTO pos_stock_sessions (user_id, session_date, login_at, status) VALUES (?, ?, NOW(), 'active')`,
+                [userId, sessionDate]
+            );
+            sessionId = result.insertId;
+        } else {
+            sessionId = sessions[0].id;
+        }
+
+        // Insert entry
+        await db.query(
+            `INSERT INTO pos_stock_session_entries (session_id, product_id, added_qty, added_at) VALUES (?, ?, ?, NOW())`,
+            [sessionId, product_id, qty]
+        );
+
+        broadcast({ type: 'pos_stock_session_updated', data: { sessionId, userId, productId: product_id } });
+        res.json({ success: true, session_id: sessionId });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/pos-stock/session/current — Get current user's active session with full item data
+app.get('/api/pos-stock/session/current', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const sessionDate = new Date().toISOString().slice(0, 10);
+
+        const sessions = await db.query(
+            `SELECT * FROM pos_stock_sessions WHERE user_id = ? AND session_date = ? AND status = 'active' ORDER BY login_at DESC LIMIT 1`,
+            [userId, sessionDate]
+        );
+
+        if (sessions.length === 0) {
+            return res.json({ session: null, items: [] });
+        }
+
+        const session = sessions[0];
+        const sessionId = session.id;
+
+        // Get all entries for this session grouped by product
+        const entries = await db.query(`
+            SELECT psse.product_id, p.name as product_name, p.sinhala_name,
+                   psse.added_qty, psse.added_at, psse.id as entry_id
+            FROM pos_stock_session_entries psse
+            JOIN products p ON psse.product_id = p.id
+            WHERE psse.session_id = ?
+            ORDER BY psse.product_id, psse.added_at ASC
+        `, [sessionId]);
+
+        // Get POS sales since session start for each product
+        const salesData = await db.query(`
+            SELECT oi.product_id, SUM(oi.quantity) as sold_qty
+            FROM order_items oi
+            JOIN orders o ON oi.order_id = o.id
+            WHERE o.created_at >= ? AND o.payment_status = 'paid'
+            GROUP BY oi.product_id
+        `, [session.login_at]);
+
+        const salesMap = {};
+        salesData.forEach(s => { salesMap[s.product_id] = Number(s.sold_qty); });
+
+        // Group entries by product
+        const productMap = {};
+        entries.forEach(e => {
+            if (!productMap[e.product_id]) {
+                productMap[e.product_id] = {
+                    product_id: e.product_id,
+                    product_name: e.product_name,
+                    sinhala_name: e.sinhala_name,
+                    additions: [],
+                    total_added: 0,
+                };
+            }
+            productMap[e.product_id].additions.push({ qty: e.added_qty, at: e.added_at, entry_id: e.entry_id });
+            productMap[e.product_id].total_added += Number(e.added_qty);
+        });
+
+        const items = Object.values(productMap).map(item => ({
+            ...item,
+            sold_qty: salesMap[item.product_id] || 0,
+            remaining: item.total_added - (salesMap[item.product_id] || 0),
+            count_string: item.additions.map(a => a.qty).join('+'),
+        }));
+
+        res.json({ session, items });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/pos-stock/sessions — Admin only: get all sessions (with optional date/user filter)
+app.get('/api/pos-stock/sessions', authenticateToken, async (req, res) => {
+    const userRole = (req.user && req.user.role ? req.user.role : '').toLowerCase();
+    const isAdmin = userRole === 'admin' || userRole === 'owner';
+
+    try {
+        const { date, user_id } = req.query;
+        const targetDate = date || new Date().toISOString().slice(0, 10);
+
+        let query = `
+            SELECT pss.*, u.name as user_name, u.username, u.role as user_role
+            FROM pos_stock_sessions pss
+            JOIN users u ON pss.user_id = u.id
+            WHERE pss.session_date = ?
+        `;
+        const params = [targetDate];
+
+        if (!isAdmin) {
+            // Non-admins only see their own sessions
+            query += ' AND pss.user_id = ?';
+            params.push(req.user.id);
+        } else if (user_id) {
+            query += ' AND pss.user_id = ?';
+            params.push(user_id);
+        }
+
+        query += ' ORDER BY pss.login_at DESC';
+        const sessions = await db.query(query, params);
+
+        // For each session, get its items + sales
+        const result = await Promise.all(sessions.map(async (session) => {
+            const entries = await db.query(`
+                SELECT psse.product_id, p.name as product_name, p.sinhala_name,
+                       psse.added_qty, psse.added_at
+                FROM pos_stock_session_entries psse
+                JOIN products p ON psse.product_id = p.id
+                WHERE psse.session_id = ?
+                ORDER BY psse.product_id, psse.added_at ASC
+            `, [session.id]);
+
+            // POS sales during session time range
+            const endTime = session.logout_at || new Date().toISOString().replace('T', ' ').slice(0, 19);
+            const salesData = await db.query(`
+                SELECT oi.product_id, SUM(oi.quantity) as sold_qty
+                FROM order_items oi
+                JOIN orders o ON oi.order_id = o.id
+                WHERE o.created_at >= ? AND o.created_at <= ? AND o.payment_status = 'paid'
+                GROUP BY oi.product_id
+            `, [session.login_at, endTime]);
+
+            const salesMap = {};
+            salesData.forEach(s => { salesMap[s.product_id] = Number(s.sold_qty); });
+
+            const productMap = {};
+            entries.forEach(e => {
+                if (!productMap[e.product_id]) {
+                    productMap[e.product_id] = {
+                        product_id: e.product_id,
+                        product_name: e.product_name,
+                        sinhala_name: e.sinhala_name,
+                        additions: [],
+                        total_added: 0,
+                    };
+                }
+                productMap[e.product_id].additions.push({ qty: e.added_qty, at: e.added_at });
+                productMap[e.product_id].total_added += Number(e.added_qty);
+            });
+
+            const items = Object.values(productMap).map(item => ({
+                ...item,
+                sold_qty: salesMap[item.product_id] || 0,
+                remaining: item.total_added - (salesMap[item.product_id] || 0),
+                count_string: item.additions.map(a => a.qty).join('+'),
+            }));
+
+            return { ...session, items };
+        }));
+
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/pos-stock/session/:id — Get specific session detail
+app.get('/api/pos-stock/session/:id', authenticateToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const userRole = (req.user && req.user.role ? req.user.role : '').toLowerCase();
+        const isAdmin = userRole === 'admin' || userRole === 'owner';
+
+        const sessions = await db.query(`
+            SELECT pss.*, u.name as user_name, u.username
+            FROM pos_stock_sessions pss JOIN users u ON pss.user_id = u.id
+            WHERE pss.id = ?
+        `, [id]);
+
+        if (sessions.length === 0) return res.status(404).json({ error: 'Session not found.' });
+        const session = sessions[0];
+
+        // Only allow own session unless admin
+        if (!isAdmin && session.user_id !== req.user.id) {
+            return res.status(403).json({ error: 'Unauthorized.' });
+        }
+
+        const entries = await db.query(`
+            SELECT psse.product_id, p.name as product_name, p.sinhala_name,
+                   psse.added_qty, psse.added_at
+            FROM pos_stock_session_entries psse
+            JOIN products p ON psse.product_id = p.id
+            WHERE psse.session_id = ?
+            ORDER BY psse.product_id, psse.added_at ASC
+        `, [id]);
+
+        const endTime = session.logout_at || new Date().toISOString().replace('T', ' ').slice(0, 19);
+        const salesData = await db.query(`
+            SELECT oi.product_id, SUM(oi.quantity) as sold_qty
+            FROM order_items oi
+            JOIN orders o ON oi.order_id = o.id
+            WHERE o.created_at >= ? AND o.created_at <= ? AND o.payment_status = 'paid'
+            GROUP BY oi.product_id
+        `, [session.login_at, endTime]);
+
+        const salesMap = {};
+        salesData.forEach(s => { salesMap[s.product_id] = Number(s.sold_qty); });
+
+        const productMap = {};
+        entries.forEach(e => {
+            if (!productMap[e.product_id]) {
+                productMap[e.product_id] = {
+                    product_id: e.product_id,
+                    product_name: e.product_name,
+                    sinhala_name: e.sinhala_name,
+                    additions: [],
+                    total_added: 0,
+                };
+            }
+            productMap[e.product_id].additions.push({ qty: e.added_qty, at: e.added_at });
+            productMap[e.product_id].total_added += Number(e.added_qty);
+        });
+
+        const items = Object.values(productMap).map(item => ({
+            ...item,
+            sold_qty: salesMap[item.product_id] || 0,
+            remaining: item.total_added - (salesMap[item.product_id] || 0),
+            count_string: item.additions.map(a => a.qty).join('+'),
+        }));
+
+        res.json({ session, items });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/pos-stock/session/:id/snapshot — Save physical count at session close
+app.post('/api/pos-stock/session/:id/snapshot', authenticateToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { manual_remaining } = req.body; // { "product_id": actual_count }
+
+        const sessions = await db.query('SELECT * FROM pos_stock_sessions WHERE id = ?', [id]);
+        if (sessions.length === 0) return res.status(404).json({ error: 'Session not found' });
+        const session = sessions[0];
+
+        const userRole = (req.user && req.user.role ? req.user.role : '').toLowerCase();
+        const isAdmin = userRole === 'admin' || userRole === 'owner';
+        if (!isAdmin && session.user_id !== req.user.id) return res.status(403).json({ error: 'Unauthorized' });
+
+        await db.query(
+            "UPDATE pos_stock_sessions SET remaining_snapshot = ?, logout_at = NOW(), status = 'closed' WHERE id = ?",
+            [JSON.stringify(manual_remaining || {}), id]
+        );
+
+        broadcast({ type: 'pos_stock_session_closed', data: { sessionId: id, userId: session.user_id } });
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 
 // ----------------------------------------------------
 // AUTHENTICATION ENDPOINTS

@@ -1663,37 +1663,37 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
                     crossAxisAlignment: pw.CrossAxisAlignment.center,
                     children: [
                       if (logoImage != null) ...[
-                        pw.Image(logoImage, width: 24, height: 24),
-                        pw.SizedBox(width: 4),
+                        pw.Image(logoImage, width: 34, height: 34),
+                        pw.SizedBox(width: 6),
                       ],
                       pw.Column(
                         crossAxisAlignment: pw.CrossAxisAlignment.start,
                         children: [
                           pw.Text(
                              'v£ly »ƒ£Šfzx',
-                             style: pw.TextStyle(font: isiaginiFont, fontSize: 16, fontWeight: pw.FontWeight.bold),
+                             style: pw.TextStyle(font: isiaginiFont, fontSize: 22, fontWeight: pw.FontWeight.bold),
                            ),
                           pw.Text(
-                            'නො: 04 මහා වීදිය, අකුරැස්ස',
-                            style: pw.TextStyle(font: sinhalaFont, fontSize: 7, color: PdfColors.grey700),
+                            '04, මහා වීදිය, අකුරැස්ස',
+                            style: pw.TextStyle(font: sinhalaFont, fontSize: 8),
                           ),
                           pw.Text(
                             '041 2283857',
-                            style: pw.TextStyle(font: sinhalaFont, fontSize: 7, color: PdfColors.grey700),
+                            style: pw.TextStyle(font: sinhalaFont, fontSize: 8.5, color: PdfColors.grey800),
                           ),
                         ],
                       ),
                     ],
                   ),
                   pw.Container(
-                    padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 14, vertical: 4),
                     decoration: pw.BoxDecoration(
-                      border: pw.Border.all(color: PdfColors.black, width: 1),
-                      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(10)),
+                      border: pw.Border.all(color: PdfColors.black, width: 2),
+                      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(16)),
                     ),
                     child: pw.Text(
                       _getOvalNumber(data),
-                      style: pw.TextStyle(font: sinhalaFont, fontSize: 10, fontWeight: pw.FontWeight.bold),
+                      style: pw.TextStyle(font: sinhalaFont, fontSize: 18, fontWeight: pw.FontWeight.bold),
                     ),
                   ),
                 ],
@@ -1995,39 +1995,39 @@ class _POSOrdersScreenState extends State<POSOrdersScreen> {
                 children: [
                   Image.asset(
                     'assets/images/mhb_logo.png',
-                    width: 32,
-                    height: 32,
-                    errorBuilder: (context, error, stackTrace) => const Icon(Icons.restaurant_menu, size: 32, color: Color(0xFF1E293B)),
+                    width: 48,
+                    height: 48,
+                    errorBuilder: (context, error, stackTrace) => const Icon(Icons.restaurant_menu, size: 40, color: Color(0xFF1E293B)),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 10),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                            'v£ly »ƒ£Šfzx',
-                            style: const TextStyle(fontFamily: 'Isiagni',fontSize: 12,fontWeight: FontWeight.bold,color: Color(0xFF1E293B),),
+                            style: const TextStyle(fontFamily: 'Isiagni', fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
                       ),
                       Text(
-                        'නො: 04 මහා වීදිය, අකුරැස්ස',
-                        style: GoogleFonts.inter(fontSize: 8, color: const Color(0xFF64748B)),
+                        '04, මහා වීදිය, අකුරැස්ස',
+                        style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF64748B)),
                       ),
                       Text(
                         '041 2283857',
-                        style: GoogleFonts.inter(fontSize: 8, color: const Color(0xFF64748B)),
+                        style: GoogleFonts.inter(fontSize: 9, color: const Color(0xFF64748B)),
                       ),
                     ],
                   ),
                 ],
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                 decoration: BoxDecoration(
-                  border: Border.all(color: const Color(0xFF1E293B), width: 1),
-                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFF1E293B), width: 2),
+                  borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
                   _getOvalNumber(data),
-                  style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)),
+                  style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)),
                 ),
               ),
             ],

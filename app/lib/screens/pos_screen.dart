@@ -11,6 +11,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import '../pos_controller.dart';
 import '../theme.dart';
 import '../models.dart';
@@ -19,6 +20,21 @@ import '../widgets/image_helper.dart';
 import '../controllers/app_settings_controller.dart';
 import '../controllers/dashboard_controller.dart';
 import '../services/translation_service.dart';
+
+class _StripLeadingZeroFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
+    if (newValue.text.length > 1 && newValue.text.startsWith('0')) {
+      final cleaned = newValue.text.replaceFirst(RegExp(r'^0+'), '');
+      final text = cleaned.isEmpty ? '0' : cleaned;
+      return TextEditingValue(
+        text: text,
+        selection: TextSelection.collapsed(offset: text.length),
+      );
+    }
+    return newValue;
+  }
+}
 
 class POSScreen extends StatefulWidget {
   const POSScreen({Key? key}) : super(key: key);
@@ -47,6 +63,26 @@ class _POSScreenState extends State<POSScreen> {
 
   String _discountType = 'percent';
 
+  final Map<String, TextEditingController> _cartQtyControllers = {};
+  final Map<String, FocusNode> _cartFocusNodes = {};
+
+  void _focusCartItemForProduct(POSController controller, int productId) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final index = controller.cart.indexWhere((i) => i.productId == productId);
+      if (index != -1) {
+        final itemKey = '${productId}_$index';
+        final fn = _cartFocusNodes[itemKey];
+        final ctrl = _cartQtyControllers[itemKey];
+        if (fn != null) {
+          fn.requestFocus();
+          if (ctrl != null && ctrl.text.isNotEmpty) {
+            ctrl.selection = TextSelection(baseOffset: 0, extentOffset: ctrl.text.length);
+          }
+        }
+      }
+    });
+  }
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -62,6 +98,10 @@ class _POSScreenState extends State<POSScreen> {
     _productsScrollController.dispose();
     _cartScrollController.dispose();
     _categoryScrollController.dispose();
+    for (final c in _cartQtyControllers.values) c.dispose();
+    for (final fn in _cartFocusNodes.values) fn.dispose();
+    _cartQtyControllers.clear();
+    _cartFocusNodes.clear();
     super.dispose();
   }
 
@@ -117,28 +157,28 @@ class _POSScreenState extends State<POSScreen> {
           ? Row(
               children: appSettings.cartOnLeft
                   ? [
-                      // Left: Bill / Checkout Details (28.6% width)
+                      // Left: Bill / Checkout Details (larger width: 37.5%)
                       Expanded(
-                        flex: 2,
+                        flex: 3,
                         child: _buildBillingArea(controller),
                       ),
                       VerticalDivider(width: 1, color: AppTheme.borderLight),
-                      // Right: Products Grid (71.4% width)
+                      // Right: Products Grid (62.5% width)
                       Expanded(
                         flex: 5,
                         child: _buildProductsArea(controller),
                       ),
                     ]
                   : [
-                      // Left: Products Grid (71.4% width)
+                      // Left: Products Grid (62.5% width)
                       Expanded(
                         flex: 5,
                         child: _buildProductsArea(controller),
                       ),
                       VerticalDivider(width: 1, color: AppTheme.borderLight),
-                      // Right: Bill / Checkout Details (28.6% width)
+                      // Right: Bill / Checkout Details (larger width: 37.5%)
                       Expanded(
-                        flex: 2,
+                        flex: 3,
                         child: _buildBillingArea(controller),
                       ),
                     ],
@@ -557,6 +597,7 @@ class _POSScreenState extends State<POSScreen> {
                   _showProductOptionsModal(product, controller);
                 } else {
                   controller.addToCart(product, quantity: 1);
+                  _focusCartItemForProduct(controller, product.id);
                   context.showSuccessToast('${product.name} successfully added to cart');
                 }
               }
@@ -689,6 +730,7 @@ class _POSScreenState extends State<POSScreen> {
                             } else {
                               final activePrice = controller.getProductActivePrice(product);
                               controller.addToCart(product, quantity: 1, customPrice: activePrice);
+                              _focusCartItemForProduct(controller, product.id);
                               context.showSuccessToast('${product.name} successfully added to cart');
                             }
                           }
@@ -1207,64 +1249,113 @@ class _POSScreenState extends State<POSScreen> {
               children: [
                 Row(
                   children: [
+                    // 1. Cancel Button (Red)
                     Expanded(
                       flex: 2,
-                      child: ElevatedButton(
-                        onPressed: controller.cart.isEmpty ? null : () {
-                          controller.clearCart();
-                          _tokenNoController.clear();
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFEF4444), // Red
-                          foregroundColor: Colors.white,
-                          minimumSize: const Size(double.infinity, 48),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      child: SizedBox(
+                        height: 54,
+                        child: ElevatedButton.icon(
+                          onPressed: controller.cart.isEmpty
+                              ? null
+                              : () {
+                                  controller.clearCart();
+                                  _tokenNoController.clear();
+                                },
+                          icon: const Icon(Icons.close_rounded, size: 18),
+                          label: Text('Cancel', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFEF4444),
+                            foregroundColor: Colors.white,
+                            elevation: 2,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
                         ),
-                        child: Text('Cancel', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold)),
                       ),
                     ),
                     if (controller.orderType == 'dine_in' && controller.selectedTable != null) ...[
                       const SizedBox(width: 8),
+                      // 2. Print KOT Button (Blue)
                       Expanded(
                         flex: 3,
-                        child: ElevatedButton(
-                          onPressed: !controller.cart.any((item) => item.status == 'pending')
-                              ? null
-                              : () => _handleDineInPrintKOT(controller),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blue,
-                            foregroundColor: Colors.white,
-                            minimumSize: const Size(double.infinity, 48),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        child: SizedBox(
+                          height: 54,
+                          child: ElevatedButton.icon(
+                            onPressed: !controller.cart.any((item) => item.status == 'pending')
+                                ? null
+                                : () => _handleDineInPrintKOT(controller),
+                            icon: const Icon(Icons.print_rounded, size: 18),
+                            label: Text('Print KOT', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF3B82F6),
+                              foregroundColor: Colors.white,
+                              elevation: 2,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
                           ),
-                          child: Text('Print KOT', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // 3. Print Ack Bill Button (Amber/Orange)
+                      Expanded(
+                        flex: 3,
+                        child: SizedBox(
+                          height: 54,
+                          child: ElevatedButton.icon(
+                            onPressed: controller.cart.isEmpty
+                                ? null
+                                : () => _showAcknowledgeBillDialog(controller),
+                            icon: const Icon(Icons.receipt_long_rounded, size: 18),
+                            label: Text('Ack Bill', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFF59E0B),
+                              foregroundColor: Colors.white,
+                              elevation: 2,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                          ),
                         ),
                       ),
                     ],
                     const SizedBox(width: 8),
+                    // 3. Primary Action Button: Order / Pay Bill (Green/Purple)
                     Expanded(
-                      flex: 3,
-                      child: ElevatedButton(
-                        onPressed: controller.cart.isEmpty
-                            ? null
-                            : () {
-                                if (controller.orderType == 'staff_meal') {
-                                  _handleStaffMealOrder(controller);
-                                } else {
-                                  _showOrderPaymentDialog(controller);
-                                }
-                              },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: controller.orderType == 'staff_meal' ? const Color(0xFF9333EA) : const Color(0xFF10B981),
-                          foregroundColor: Colors.white,
-                          minimumSize: const Size(double.infinity, 48),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        child: Text(
-                          controller.orderType == 'staff_meal'
-                              ? 'Issue Staff Meal (LKR 0.00)'
-                              : (controller.orderType == 'dine_in' && controller.selectedTable != null ? 'Pay Bill' : 'Order'),
-                          style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold),
+                      flex: 4,
+                      child: SizedBox(
+                        height: 54,
+                        child: ElevatedButton.icon(
+                          onPressed: controller.cart.isEmpty
+                              ? null
+                              : () {
+                                  if (controller.orderType == 'staff_meal') {
+                                    _handleStaffMealOrder(controller);
+                                  } else {
+                                    _showOrderPaymentDialog(controller);
+                                  }
+                                },
+                          icon: Icon(
+                            controller.orderType == 'staff_meal'
+                                ? Icons.badge_outlined
+                                : (controller.orderType == 'dine_in' && controller.selectedTable != null
+                                    ? Icons.payments_outlined
+                                    : Icons.check_circle_outline_rounded),
+                            size: 20,
+                          ),
+                          label: Text(
+                            controller.orderType == 'staff_meal'
+                                ? 'Issue Staff Meal'
+                                : (controller.orderType == 'dine_in' && controller.selectedTable != null
+                                    ? 'Pay Bill'
+                                    : 'Order'),
+                            style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.bold),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: controller.orderType == 'staff_meal'
+                                ? const Color(0xFF9333EA)
+                                : const Color(0xFF10B981),
+                            foregroundColor: Colors.white,
+                            elevation: 3,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
                         ),
                       ),
                     ),
@@ -1753,6 +1844,20 @@ class _POSScreenState extends State<POSScreen> {
   }
 
   Widget _buildCartRow(OrderItemModel item, int index, POSController controller) {
+    final itemKey = '${item.productId}_$index';
+    final focusNode = _cartFocusNodes.putIfAbsent(itemKey, () => FocusNode());
+    final ctrl = _cartQtyControllers.putIfAbsent(itemKey, () => TextEditingController(text: '${item.quantity}'));
+
+    if (ctrl.text != '${item.quantity}' && !focusNode.hasFocus) {
+      ctrl.text = '${item.quantity}';
+    }
+
+    focusNode.addListener(() {
+      if (focusNode.hasFocus && ctrl.text.isNotEmpty) {
+        ctrl.selection = TextSelection(baseOffset: 0, extentOffset: ctrl.text.length);
+      }
+    });
+
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
       decoration: BoxDecoration(
@@ -1810,20 +1915,38 @@ class _POSScreenState extends State<POSScreen> {
                   ),
                 ),
                 const SizedBox(width: 6),
-                InkWell(
-                  onTap: () => _showTypeQuantityDialog(context, item, index, controller),
-                  borderRadius: BorderRadius.circular(6),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: AppTheme.primary.withOpacity(0.08),
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: AppTheme.primary.withOpacity(0.3)),
+                SizedBox(
+                  width: 52,
+                  height: 32,
+                  child: TextField(
+                    controller: ctrl,
+                    focusNode: focusNode,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      _StripLeadingZeroFormatter(),
+                    ],
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.primary),
+                    textInputAction: TextInputAction.done,
+                    decoration: InputDecoration(
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 6, horizontal: 2),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: AppTheme.primary.withOpacity(0.3))),
+                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: AppTheme.primary.withOpacity(0.3))),
+                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: AppTheme.primary, width: 1.5)),
+                      filled: true,
+                      fillColor: AppTheme.primary.withOpacity(0.08),
                     ),
-                    child: Text(
-                      '${item.quantity}',
-                      style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primary),
-                    ),
+                    onTap: () {
+                      if (ctrl.text.isNotEmpty) {
+                        ctrl.selection = TextSelection(baseOffset: 0, extentOffset: ctrl.text.length);
+                      }
+                    },
+                    onSubmitted: (val) {
+                      final newQty = int.tryParse(val.trim()) ?? item.quantity;
+                      controller.updateCartQuantity(index, newQty);
+                    },
                   ),
                 ),
                 const SizedBox(width: 6),
@@ -4241,37 +4364,37 @@ class _POSScreenState extends State<POSScreen> {
                     crossAxisAlignment: pw.CrossAxisAlignment.center,
                     children: [
                       if (logoImage != null) ...[
-                        pw.Image(logoImage, width: 24, height: 24),
-                        pw.SizedBox(width: 4),
+                        pw.Image(logoImage, width: 34, height: 34),
+                        pw.SizedBox(width: 6),
                       ],
                       pw.Column(
                         crossAxisAlignment: pw.CrossAxisAlignment.start,
                         children: [
                           pw.Text(
                              'v£ly »ƒ£Šfzx',
-                             style: pw.TextStyle(font: isiaginiFont, fontSize: 16, fontWeight: pw.FontWeight.bold),
+                             style: pw.TextStyle(font: isiaginiFont, fontSize: 22, fontWeight: pw.FontWeight.bold),
                            ),
                           pw.Text(
-                            'නො: 04 මහා වීදිය, අකුරැස්ස',
-                            style: pw.TextStyle(font: sinhalaFont, fontSize: 7, color: PdfColors.grey700),
+                            '04, මහා වීදිය, අකුරැස්ස',
+                            style: pw.TextStyle(font: sinhalaFont, fontSize: 8),
                           ),
                           pw.Text(
                             '041 2283857',
-                            style: pw.TextStyle(font: sinhalaFont, fontSize: 7, color: PdfColors.grey700),
+                            style: pw.TextStyle(font: sinhalaFont, fontSize: 8.5, color: PdfColors.grey800),
                           ),
                         ],
                       ),
                     ],
                   ),
                   pw.Container(
-                    padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 14, vertical: 4),
                     decoration: pw.BoxDecoration(
-                      border: pw.Border.all(color: PdfColors.black, width: 1),
-                      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(10)),
+                      border: pw.Border.all(color: PdfColors.black, width: 2),
+                      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(16)),
                     ),
                     child: pw.Text(
                       _getOvalNumber(data),
-                      style: pw.TextStyle(font: sinhalaFont, fontSize: 10, fontWeight: pw.FontWeight.bold),
+                      style: pw.TextStyle(font: sinhalaFont, fontSize: 18, fontWeight: pw.FontWeight.bold),
                     ),
                   ),
                 ],
@@ -4703,9 +4826,12 @@ class _POSScreenState extends State<POSScreen> {
   }
 
   pw.Widget _buildPdfDashedLine() {
-    return pw.Text(
-      '-' * 45,
-      style: pw.TextStyle(fontSize: 8, color: PdfColors.grey),
+    return pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(vertical: 2),
+      child: pw.Divider(
+        thickness: 0.8,
+        color: PdfColors.black,
+      ),
     );
   }
 
@@ -4804,7 +4930,7 @@ class _POSScreenState extends State<POSScreen> {
 
           ...kotItems.map((item) {
             return Padding(
-              padding: const EdgeInsets.only(bottom: 6.0),
+              padding: const EdgeInsets.only(bottom: 2.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -4936,39 +5062,39 @@ class _POSScreenState extends State<POSScreen> {
                 children: [
                   Image.asset(
                     'assets/images/mhb_logo.png',
-                    width: 40,
-                    height: 40,
-                    errorBuilder: (context, error, stackTrace) => Icon(Icons.restaurant_menu, size: 32, color: AppTheme.textLightPrimary),
+                    width: 48,
+                    height: 48,
+                    errorBuilder: (context, error, stackTrace) => Icon(Icons.restaurant_menu, size: 40, color: AppTheme.textLightPrimary),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 10),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                        Text(
                            'v£ly »ƒ£Šfzx',
-                            style: TextStyle(fontFamily: 'Isiagni',fontSize: 18,fontWeight: FontWeight.bold,color: AppTheme.textLightPrimary),
+                            style: TextStyle(fontFamily: 'Isiagni', fontSize: 22, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
                        ),
                       Text(
-                        'නො: 04 මහා වීදිය, අකුරැස්ස',
-                        style: GoogleFonts.inter(fontSize: 8, color: AppTheme.textLightSecondary),
+                        '04, මහා වීදිය, අකුරැස්ස',
+                        style: GoogleFonts.inter(fontSize: 9, color: AppTheme.textLightSecondary),
                       ),
                       Text(
                         '041 2283857',
-                        style: GoogleFonts.inter(fontSize: 8, color: AppTheme.textLightSecondary),
+                        style: GoogleFonts.inter(fontSize: 9, color: AppTheme.textLightSecondary),
                       ),
                     ],
                   ),
                 ],
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                 decoration: BoxDecoration(
-                  border: Border.all(color: AppTheme.textLightPrimary, width: 1),
-                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppTheme.textLightPrimary, width: 2),
+                  borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
                   _getOvalNumber(data),
-                  style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+                  style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
                 ),
               ),
             ],
@@ -5043,7 +5169,7 @@ class _POSScreenState extends State<POSScreen> {
             final isDiscounted = originalPrice > item.price;
 
             return Padding(
-              padding: const EdgeInsets.only(bottom: 6.0),
+              padding: const EdgeInsets.only(bottom: 2.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -5271,27 +5397,7 @@ class _POSScreenState extends State<POSScreen> {
   }
 
   Widget _buildDashedLine() {
-    return LayoutBuilder(
-      builder: (BuildContext context, BoxConstraints constraints) {
-        final boxWidth = constraints.constrainWidth();
-        const dashWidth = 4.0;
-        const dashHeight = 1.0;
-        final dashCount = (boxWidth / (2 * dashWidth)).floor();
-        return Flex(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          direction: Axis.horizontal,
-          children: List.generate(dashCount, (_) {
-            return SizedBox(
-              width: dashWidth,
-              height: dashHeight,
-              child: DecoratedBox(
-                decoration: BoxDecoration(color: AppTheme.dividerColor),
-              ),
-            );
-          }),
-        );
-      },
-    );
+    return const Divider(height: 6, thickness: 1, color: Colors.black45);
   }
 
   Widget _buildPrintJobItem(String title, String desc) {
@@ -5336,10 +5442,312 @@ class _POSScreenState extends State<POSScreen> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label, style: GoogleFonts.inter(fontSize: 10, color: AppTheme.textLightSecondary)),
-          Text(val, style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600, color: AppTheme.textLightPrimary)),
+          Text(val, style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
         ],
       ),
     );
+  }
+
+  // ─────────────────────────────────────────────────────
+  // ACKNOWLEDGEMENT BILL DIALOG & PRINTING
+  // ─────────────────────────────────────────────────────
+  void _showAcknowledgeBillDialog(POSController controller) {
+    if (controller.cart.isEmpty) return;
+
+    final DateTime now = DateTime.now();
+    final String cashierName = APIService.instance.currentUser?.name ?? APIService.instance.currentUser?.username ?? 'Cashier';
+    String orderNum = '${now.month}${now.day.toString().padLeft(2, '0')}-${(controller.activeOrders.length + 1).toString().padLeft(4, '0')}';
+    if (controller.selectedTable != null) {
+      final matchingOrders = controller.activeOrders.where((o) => o.tableId == controller.selectedTable!.id).toList();
+      if (matchingOrders.isNotEmpty) {
+        final rawNum = matchingOrders.last.orderNumber;
+        orderNum = rawNum.length > 10 ? rawNum.substring(rawNum.length - 8) : rawNum;
+      }
+    }
+    final String stewardName = controller.stewardName ?? 'None';
+    final String tableName = controller.selectedTable?.tableNumber ?? 'N/A';
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) {
+        return AlertDialog(
+          backgroundColor: AppTheme.cardLight,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          contentPadding: const EdgeInsets.all(20),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: const Color(0xFFF59E0B).withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                child: const Icon(Icons.receipt_long_rounded, color: Color(0xFFF59E0B), size: 22),
+              ),
+              const SizedBox(width: 10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Print Acknowledgement Bill', style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
+                  Text('Pre-Bill Receipt prior to payment', style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary)),
+                ],
+              ),
+              const Spacer(),
+              IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(dialogCtx)),
+            ],
+          ),
+          content: SizedBox(
+            width: 440,
+            child: SingleChildScrollView(
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppTheme.bgLight,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppTheme.borderLight),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Header
+                    Center(
+                      child: Text('MATARA HOTEL & RESTAURANT',
+                          style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
+                    ),
+                    const SizedBox(height: 2),
+                    Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                        decoration: BoxDecoration(color: const Color(0xFFF59E0B).withOpacity(0.15), borderRadius: BorderRadius.circular(6)),
+                        child: Text('*** ACKNOWLEDGEMENT BILL ***',
+                            style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFFD97706))),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    const Divider(height: 8, thickness: 1, color: Colors.black45),
+                    const SizedBox(height: 4),
+
+                    // Details Grid
+                    _buildInfoRow('Cashier:', cashierName),
+                    _buildInfoRow('Order No:', orderNum),
+                    _buildInfoRow('Date:', '${now.day.toString().padLeft(2, '0')}-${_getMonthName(now)}-${now.year}'),
+                    _buildInfoRow('Time:', _formatTime(now, includeSpace: true)),
+                    _buildInfoRow('Steward:', stewardName),
+                    _buildInfoRow('Table:', tableName),
+
+                    const SizedBox(height: 4),
+                    const Divider(height: 8, thickness: 1, color: Colors.black45),
+                    const SizedBox(height: 4),
+
+                    // Itemized Table Header
+                    Row(
+                      children: [
+                        Expanded(flex: 4, child: Text('Description', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary))),
+                        Expanded(flex: 1, child: Text('Qty', textAlign: TextAlign.center, style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary))),
+                        Expanded(flex: 2, child: Text('Price', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary))),
+                        Expanded(flex: 2, child: Text('Amount', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary))),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    const Divider(height: 6, thickness: 1, color: Colors.black45),
+                    const SizedBox(height: 2),
+
+                    // Item Rows
+                    ...controller.cart.map((item) {
+                      final lineAmount = item.price * item.quantity;
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 1.5),
+                        child: Row(
+                          children: [
+                            Expanded(flex: 4, child: Text(item.productName, style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w600, color: AppTheme.textLightPrimary))),
+                            Expanded(flex: 1, child: Text('${item.quantity}', textAlign: TextAlign.center, style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.bold))),
+                            Expanded(flex: 2, child: Text(item.price.toStringAsFixed(2), textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 10.5))),
+                            Expanded(flex: 2, child: Text(lineAmount.toStringAsFixed(2), textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.bold))),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+
+                    const SizedBox(height: 4),
+                    const Divider(height: 8, thickness: 1, color: Colors.black45),
+                    const SizedBox(height: 4),
+
+                    // Totals
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Sub Total:', style: GoogleFonts.inter(fontSize: 11.5, color: AppTheme.textLightSecondary)),
+                        Text('LKR ${controller.cartSubtotal.toStringAsFixed(2)}', style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                    if (controller.discount > 0) ...[
+                      const SizedBox(height: 2),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('Discount:', style: GoogleFonts.inter(fontSize: 11.5, color: AppTheme.textLightSecondary)),
+                          Text('-LKR ${controller.discount.toStringAsFixed(2)}', style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.bold, color: Colors.red)),
+                        ],
+                      ),
+                    ],
+                    const SizedBox(height: 4),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Total Amount:', style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
+                        Text('LKR ${controller.cartTotal.toStringAsFixed(2)}', style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.primary)),
+                      ],
+                    ),
+
+                    const SizedBox(height: 6),
+                    const Divider(height: 8, thickness: 1, color: Colors.black45),
+                    const SizedBox(height: 4),
+                    Center(
+                      child: Text('This is an Acknowledgement Bill prior to payment.',
+                          style: GoogleFonts.inter(fontSize: 8.5, fontStyle: FontStyle.italic, color: AppTheme.textLightSecondary)),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogCtx),
+              child: Text('Close', style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary)),
+            ),
+            ElevatedButton.icon(
+              onPressed: () async {
+                Navigator.pop(dialogCtx);
+                await _printAcknowledgeBillDirect(controller, cashierName, orderNum, stewardName, tableName, now);
+              },
+              icon: const Icon(Icons.print, size: 18),
+              label: Text('Print Bill', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFF59E0B),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _printAcknowledgeBillDirect(
+    POSController controller,
+    String cashierName,
+    String orderNum,
+    String stewardName,
+    String tableName,
+    DateTime now,
+  ) async {
+    try {
+      final pdf = pw.Document();
+      final font = await PdfGoogleFonts.interRegular();
+      final fontBold = await PdfGoogleFonts.interBold();
+
+      final cartItems = List<OrderItemModel>.from(controller.cart);
+      final subtotal = controller.cartSubtotal;
+      final discount = controller.discount;
+      final total = controller.cartTotal;
+
+      pdf.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat.roll80,
+          margin: const pw.EdgeInsets.all(8),
+          build: (pw.Context ctx) {
+            return pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Center(
+                  child: pw.Text('MATARA HOTEL & RESTAURANT', style: pw.TextStyle(font: fontBold, fontSize: 11)),
+                ),
+                pw.SizedBox(height: 1),
+                pw.Center(
+                  child: pw.Text('*** ACKNOWLEDGEMENT BILL ***', style: pw.TextStyle(font: fontBold, fontSize: 9)),
+                ),
+                pw.SizedBox(height: 3),
+                _buildPdfDashedLine(),
+
+                _buildPdfInfoRow('Cashier:', cashierName, fontBold),
+                _buildPdfInfoRow('Order No:', orderNum, fontBold),
+                _buildPdfInfoRow('Date:', '${now.day.toString().padLeft(2, '0')}-${now.month.toString().padLeft(2, '0')}-${now.year}', font),
+                _buildPdfInfoRow('Time:', _formatTime(now, includeSpace: true), font),
+                _buildPdfInfoRow('Steward:', stewardName, font),
+                _buildPdfInfoRow('Table:', tableName, fontBold),
+
+                _buildPdfDashedLine(),
+
+                pw.Row(
+                  children: [
+                    pw.Expanded(flex: 4, child: pw.Text('Description', style: pw.TextStyle(font: fontBold, fontSize: 8))),
+                    pw.Expanded(flex: 1, child: pw.Text('Qty', textAlign: pw.TextAlign.center, style: pw.TextStyle(font: fontBold, fontSize: 8))),
+                    pw.Expanded(flex: 2, child: pw.Text('Price', textAlign: pw.TextAlign.right, style: pw.TextStyle(font: fontBold, fontSize: 8))),
+                    pw.Expanded(flex: 2, child: pw.Text('Amount', textAlign: pw.TextAlign.right, style: pw.TextStyle(font: fontBold, fontSize: 8))),
+                  ],
+                ),
+                _buildPdfDashedLine(),
+
+                ...cartItems.map((item) {
+                  return pw.Padding(
+                    padding: const pw.EdgeInsets.symmetric(vertical: 1),
+                    child: pw.Row(
+                      children: [
+                        pw.Expanded(flex: 4, child: pw.Text(item.productName, style: pw.TextStyle(font: font, fontSize: 8))),
+                        pw.Expanded(flex: 1, child: pw.Text('${item.quantity}', textAlign: pw.TextAlign.center, style: pw.TextStyle(font: fontBold, fontSize: 8))),
+                        pw.Expanded(flex: 2, child: pw.Text(item.price.toStringAsFixed(2), textAlign: pw.TextAlign.right, style: pw.TextStyle(font: font, fontSize: 8))),
+                        pw.Expanded(flex: 2, child: pw.Text((item.price * item.quantity).toStringAsFixed(2), textAlign: pw.TextAlign.right, style: pw.TextStyle(font: fontBold, fontSize: 8))),
+                      ],
+                    ),
+                  );
+                }).toList(),
+
+                _buildPdfDashedLine(),
+
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text('Sub Total:', style: pw.TextStyle(font: font, fontSize: 8)),
+                    pw.Text(subtotal.toStringAsFixed(2), style: pw.TextStyle(font: fontBold, fontSize: 8)),
+                  ],
+                ),
+                if (discount > 0) ...[
+                  pw.SizedBox(height: 1),
+                  pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      pw.Text('Discount:', style: pw.TextStyle(font: font, fontSize: 8)),
+                      pw.Text('-${discount.toStringAsFixed(2)}', style: pw.TextStyle(font: fontBold, fontSize: 8)),
+                    ],
+                  ),
+                ],
+                pw.SizedBox(height: 2),
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text('Total Amount:', style: pw.TextStyle(font: fontBold, fontSize: 10)),
+                    pw.Text(total.toStringAsFixed(2), style: pw.TextStyle(font: fontBold, fontSize: 10)),
+                  ],
+                ),
+
+                _buildPdfDashedLine(),
+                pw.Center(
+                  child: pw.Text('Acknowledgement Bill - Not an Invoice', style: pw.TextStyle(font: font, fontSize: 7)),
+                ),
+              ],
+            );
+          },
+        ),
+      );
+
+      await Printing.layoutPdf(onLayout: (format) async => pdf.save());
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to print Acknowledge Bill: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 
   void _showErrorSnackBar(String msg) {

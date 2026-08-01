@@ -310,6 +310,96 @@ class APIService {
     return false;
   }
 
+  bool canCreateInPage(String pageName) {
+    if (currentUser == null) return false;
+    for (final p in currentUserPermissions) {
+      if (p['page']?.toString().toLowerCase() == pageName.toLowerCase()) {
+        return p['can_create'] == 1 || p['can_create'] == true;
+      }
+    }
+    final role = currentUser!.role.toLowerCase();
+    if (role == 'admin' || role == 'owner') return true;
+    return false;
+  }
+
+  bool canUpdateInPage(String pageName) {
+    if (currentUser == null) return false;
+    for (final p in currentUserPermissions) {
+      if (p['page']?.toString().toLowerCase() == pageName.toLowerCase()) {
+        return p['can_update'] == 1 || p['can_update'] == true;
+      }
+    }
+    final role = currentUser!.role.toLowerCase();
+    if (role == 'admin' || role == 'owner') return true;
+    return false;
+  }
+
+  bool canDeleteInPage(String pageName) {
+    if (currentUser == null) return false;
+    for (final p in currentUserPermissions) {
+      if (p['page']?.toString().toLowerCase() == pageName.toLowerCase()) {
+        return p['can_delete'] == 1 || p['can_delete'] == true;
+      }
+    }
+    final role = currentUser!.role.toLowerCase();
+    if (role == 'admin' || role == 'owner') return true;
+    return false;
+  }
+
+  bool isPosStockAllSessionsAllowed() {
+    if (currentUser == null) return false;
+    for (final p in currentUserPermissions) {
+      if (p['page']?.toString().toLowerCase() == 'pos stock: all sessions tab') {
+        return p['can_view'] == 1 || p['can_view'] == true;
+      }
+    }
+    for (final p in currentUserPermissions) {
+      if (p['page']?.toString().toLowerCase() == 'pos stock') {
+        return p['can_update'] == 1 || p['can_update'] == true;
+      }
+    }
+    final role = currentUser!.role.toLowerCase();
+    if (role == 'admin' || role == 'owner') return true;
+    return false;
+  }
+
+  bool isPosStockAdjustmentAllowed() {
+    if (currentUser == null) return false;
+    for (final p in currentUserPermissions) {
+      if (p['page']?.toString().toLowerCase() == 'pos stock: stock adjustment tab') {
+        return p['can_view'] == 1 || p['can_view'] == true;
+      }
+    }
+    for (final p in currentUserPermissions) {
+      if (p['page']?.toString().toLowerCase() == 'pos stock') {
+        return p['can_delete'] == 1 || p['can_delete'] == true;
+      }
+    }
+    final role = currentUser!.role.toLowerCase();
+    if (role == 'admin' || role == 'owner') return true;
+    return false;
+  }
+
+  bool isPosStockCalculatedDetailsAllowed() {
+    if (currentUser == null) return false;
+    for (final p in currentUserPermissions) {
+      if (p['page']?.toString().toLowerCase() == 'pos stock: show remaining & sold') {
+        return p['can_view'] == 1 || p['can_view'] == true;
+      }
+    }
+    for (final p in currentUserPermissions) {
+      if (p['page']?.toString().toLowerCase() == 'pos stock') {
+        return p['can_update'] == 1 || p['can_update'] == true;
+      }
+    }
+    final role = currentUser!.role.toLowerCase();
+    if (role == 'admin' || role == 'owner') return true;
+    return false;
+  }
+
+
+
+
   Map<String, String> _getHeaders() {
     return {
       'Content-Type': 'application/json',
@@ -690,6 +780,89 @@ class APIService {
       return List<Map<String, dynamic>>.from(data);
     }
     throw Exception('Failed to load product stock logs');
+  }
+
+  // ----------------------------------------------------
+  // POS STOCK SESSION APIs
+  // ----------------------------------------------------
+
+  /// Open a new POS stock session for the current user (idempotent - returns existing if already open)
+  Future<Map<String, dynamic>> openStockSession() async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/api/pos-stock/session/open'),
+      headers: _getHeaders(),
+    );
+    if (response.statusCode == 200) {
+      return Map<String, dynamic>.from(jsonDecode(response.body));
+    }
+    throw Exception('Failed to open stock session');
+  }
+
+  /// Close the current user's active POS stock session
+  Future<void> closeStockSession() async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/api/pos-stock/session/close'),
+      headers: _getHeaders(),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to close stock session');
+    }
+  }
+
+  /// Add qty for a product into the current user's active session
+  Future<void> addToStockSession(int productId, int qty) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/api/pos-stock/session/add'),
+      headers: _getHeaders(),
+      body: jsonEncode({'product_id': productId, 'qty': qty}),
+    );
+    if (response.statusCode != 200) {
+      final errData = jsonDecode(response.body);
+      throw Exception(errData['error'] ?? 'Failed to add to stock session');
+    }
+  }
+
+  /// Get the current user's active session with items and remaining calc
+  Future<Map<String, dynamic>> getCurrentStockSession() async {
+    final response = await http.get(
+      Uri.parse('$_baseUrl/api/pos-stock/session/current'),
+      headers: _getHeaders(),
+    );
+    if (response.statusCode == 200) {
+      return Map<String, dynamic>.from(jsonDecode(response.body));
+    }
+    throw Exception('Failed to load current stock session');
+  }
+
+  /// Get all sessions for a date (admin sees all, cashier sees own only)
+  Future<List<Map<String, dynamic>>> getAllStockSessions({String? date, int? userId}) async {
+    String url = '$_baseUrl/api/pos-stock/sessions';
+    final params = <String, String>{};
+    if (date != null) params['date'] = date;
+    if (userId != null) params['user_id'] = userId.toString();
+    if (params.isNotEmpty) url += '?${params.entries.map((e) => '${e.key}=${e.value}').join('&')}';
+
+    final response = await http.get(Uri.parse(url), headers: _getHeaders());
+    if (response.statusCode == 200) {
+      final List data = jsonDecode(response.body);
+      return List<Map<String, dynamic>>.from(data);
+    }
+    throw Exception('Failed to load stock sessions');
+  }
+
+  /// Save physical remaining counts at session close (for shortage calculation)
+  Future<void> saveSessionSnapshot(int sessionId, Map<int, int> manualRemaining) async {
+    // Convert int keys to string for JSON
+    final payload = manualRemaining.map((k, v) => MapEntry(k.toString(), v));
+    final response = await http.post(
+      Uri.parse('$_baseUrl/api/pos-stock/session/$sessionId/snapshot'),
+      headers: _getHeaders(),
+      body: jsonEncode({'manual_remaining': payload}),
+    );
+    if (response.statusCode != 200) {
+      final errData = jsonDecode(response.body);
+      throw Exception(errData['error'] ?? 'Failed to save session snapshot');
+    }
   }
 
   // Raw Ingredients Stock
