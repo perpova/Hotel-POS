@@ -8,6 +8,56 @@ const multer = require('multer');
 const xlsx = require('xlsx');
 require('dotenv').config();
 
+const promClient = require('prom-client');
+
+// Collect default Node.js metrics (CPU, memory, event loop lag, GC, etc.)
+promClient.collectDefaultMetrics({ prefix: 'pos_' });
+
+// --- HTTP Metrics ---
+const httpRequestDuration = new promClient.Histogram({
+  name: 'pos_http_request_duration_seconds',
+  help: 'Duration of HTTP requests in seconds',
+  labelNames: ['method', 'route', 'status_code'],
+  buckets: [0.01, 0.05, 0.1, 0.3, 0.5, 1, 2, 5]
+});
+
+const httpRequestsTotal = new promClient.Counter({
+  name: 'pos_http_requests_total',
+  help: 'Total number of HTTP requests',
+  labelNames: ['method', 'route', 'status_code']
+});
+
+// --- WebSocket Metrics ---
+const wsActiveConnections = new promClient.Gauge({
+  name: 'pos_websocket_active_connections',
+  help: 'Number of active WebSocket connections'
+});
+
+const wsMessagesTotal = new promClient.Counter({
+  name: 'pos_websocket_messages_total',
+  help: 'Total WebSocket messages received',
+  labelNames: ['direction']  // 'inbound' or 'broadcast'
+});
+
+// --- Business Metrics ---
+const ordersCreatedTotal = new promClient.Counter({
+  name: 'pos_orders_created_total',
+  help: 'Total number of orders created'
+});
+
+const loginAttemptsTotal = new promClient.Counter({
+  name: 'pos_login_attempts_total',
+  help: 'Total login attempts',
+  labelNames: ['result']  // 'success' or 'failure'
+});
+
+const dbQueryDuration = new promClient.Histogram({
+  name: 'pos_db_query_duration_seconds',
+  help: 'Duration of database queries',
+  labelNames: ['operation'],
+  buckets: [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5]
+});
+
 const db = require('./db');
 
 const path = require('path');
@@ -23,6 +73,23 @@ const JWT_SECRET = process.env.JWT_SECRET || 'hotel_pos_super_secret_key_123';
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+// Prometheus HTTP metrics middleware
+app.use((req, res, next) => {
+  const end = httpRequestDuration.startTimer();
+  res.on('finish', () => {
+    const route = req.route ? req.route.path : req.path;
+    const labels = {
+      method: req.method,
+      route: route,
+      status_code: res.statusCode
+    };
+    end(labels);
+    httpRequestsTotal.inc(labels);
+  });
+  next();
+});
+
 app.use('/order', express.static(path.join(__dirname, 'public/customer_order')));
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -31,14 +98,17 @@ const clients = new Set();
 
 wss.on('connection', (ws) => {
     clients.add(ws);
+    wsActiveConnections.set(clients.size);
     console.log(`New WebSocket client connected. Total clients: ${clients.size}`);
     
     ws.on('close', () => {
         clients.delete(ws);
+        wsActiveConnections.set(clients.size);
         console.log(`WebSocket client disconnected. Total clients: ${clients.size}`);
     });
     
     ws.on('message', (message) => {
+        wsMessagesTotal.inc({ direction: 'inbound' });
         try {
             const data = JSON.parse(message);
             console.log('Received WebSocket message:', data);
@@ -55,6 +125,7 @@ function broadcast(data, excludeWs = null) {
     clients.forEach((client) => {
         if (client !== excludeWs && client.readyState === WebSocket.OPEN) {
             client.send(messageStr);
+            wsMessagesTotal.inc({ direction: 'broadcast' });
         }
     });
 }
@@ -548,6 +619,16 @@ app.get('/api/logs', (req, res) => {
     });
 });
 
+// Prometheus metrics endpoint
+app.get('/metrics', async (req, res) => {
+  try {
+    res.set('Content-Type', promClient.register.contentType);
+    res.end(await promClient.register.metrics());
+  } catch (err) {
+    res.status(500).end(err.message);
+  }
+});
+
 app.get('/api/diagnostic', async (req, res) => {
     try {
         const tables = await db.query("SHOW TABLES");
@@ -578,16 +659,19 @@ app.post('/api/auth/login', async (req, res) => {
     try {
         const users = await db.query('SELECT * FROM users WHERE username = ?', [username]);
         if (users.length === 0) {
+            loginAttemptsTotal.inc({ result: 'failure' });
             return res.status(400).json({ error: 'User not found' });
         }
         
         const user = users[0];
         if (user.status !== 'active') {
+            loginAttemptsTotal.inc({ result: 'failure' });
             return res.status(403).json({ error: 'User account is inactive' });
         }
         
         const validPassword = await bcrypt.compare(password, user.password_hash);
         if (!validPassword) {
+            loginAttemptsTotal.inc({ result: 'failure' });
             return res.status(400).json({ error: 'Invalid password' });
         }
         
@@ -595,11 +679,13 @@ app.post('/api/auth/login', async (req, res) => {
         
         await logAudit('login', 'users', user.id, `User ${username} logged in.`, user.id);
         
+        loginAttemptsTotal.inc({ result: 'success' });
         res.json({
             token,
             user: { id: user.id, name: user.name, username: user.username, role: user.role, image_base64: user.image_base64 }
         });
     } catch (err) {
+        loginAttemptsTotal.inc({ result: 'failure' });
         res.status(500).json({ error: err.message });
     }
 });
@@ -2856,6 +2942,7 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
             });
         }
         
+        ordersCreatedTotal.inc();
         res.json({ success: true, orderId: newOrderId, order_number: orderNumber });
     } catch (err) {
         await conn.rollback();
