@@ -1862,6 +1862,98 @@ class APIService {
   }
 
   // ----------------------------------------------------
+  // LEFTOVER STOCK (DAY-END CARRY-OVER FOOD) APIs
+  // ----------------------------------------------------
+  Future<List<LeftoverFoodModel>> getLeftoverFoods() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$_baseUrl/api/pos-stock/leftovers'),
+        headers: _getHeaders(),
+      );
+      if (response.statusCode == 200) {
+        final List data = jsonDecode(response.body);
+        return data.map((l) => LeftoverFoodModel.fromJson(l)).toList();
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  Future<void> addLeftoverFood(int productId, int quantity, String? notes) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/api/pos-stock/leftovers'),
+      headers: _getHeaders(),
+      body: jsonEncode({
+        'product_id': productId,
+        'quantity': quantity,
+        'notes': notes,
+      }),
+    );
+    if (response.statusCode != 200) {
+      String msg = 'Failed to add leftover food item (HTTP ${response.statusCode})';
+      try {
+        final err = jsonDecode(response.body);
+        if (err['error'] != null) msg = err['error'];
+      } catch (_) {}
+      throw Exception(msg);
+    }
+  }
+
+  Future<void> decreaseLeftoverFood(int id, int decreaseQty) async {
+    final response = await http.put(
+      Uri.parse('$_baseUrl/api/pos-stock/leftovers/$id/decrease'),
+      headers: _getHeaders(),
+      body: jsonEncode({
+        'decrease_qty': decreaseQty,
+      }),
+    );
+    if (response.statusCode != 200) {
+      String msg = 'Failed to decrease leftover quantity (HTTP ${response.statusCode})';
+      try {
+        final err = jsonDecode(response.body);
+        if (err['error'] != null) msg = err['error'];
+      } catch (_) {}
+      throw Exception(msg);
+    }
+  }
+
+  Future<void> updateLeftoverFoodStatus(int id, String status) async {
+    final response = await http.put(
+      Uri.parse('$_baseUrl/api/pos-stock/leftovers/$id/status'),
+      headers: _getHeaders(),
+      body: jsonEncode({
+        'status': status,
+      }),
+    );
+    if (response.statusCode != 200) {
+      String msg = 'Failed to update leftover status (HTTP ${response.statusCode})';
+      try {
+        final err = jsonDecode(response.body);
+        if (err['error'] != null) msg = err['error'];
+      } catch (_) {}
+      throw Exception(msg);
+    }
+  }
+
+  Future<void> clearLeftoverFoods({String clearType = 'expired', int? id}) async {
+    String url = '$_baseUrl/api/pos-stock/leftovers?clear_type=$clearType';
+    if (id != null) {
+      url += '&id=$id';
+    }
+    final response = await http.delete(
+      Uri.parse(url),
+      headers: _getHeaders(),
+    );
+    if (response.statusCode != 200) {
+      String msg = 'Failed to clear leftover food items (HTTP ${response.statusCode})';
+      try {
+        final err = jsonDecode(response.body);
+        if (err['error'] != null) msg = err['error'];
+      } catch (_) {}
+      throw Exception(msg);
+    }
+  }
+
+  // ----------------------------------------------------
   // NOTIFICATIONS APIs
   // ----------------------------------------------------
   Future<List<dynamic>> getNotifications() async {

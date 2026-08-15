@@ -168,6 +168,33 @@ async function ensurePosStockSessionTablesExist() {
 }
 ensurePosStockSessionTablesExist();
 
+// Migration Helper for Leftover Stock Table
+async function ensureLeftoverStockTableExist() {
+    try {
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS leftover_stock (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                product_id INT NOT NULL,
+                product_name VARCHAR(255) NOT NULL,
+                quantity INT NOT NULL DEFAULT 0,
+                date_added DATE NOT NULL,
+                added_by_user_id INT NOT NULL,
+                added_by_user_name VARCHAR(255) NOT NULL,
+                status ENUM('pending_admin', 'admin_approved', 'discarded') DEFAULT 'pending_admin',
+                notes TEXT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+                FOREIGN KEY (added_by_user_id) REFERENCES users(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        `).catch(() => {});
+        console.log('Leftover Stock table ensured.');
+    } catch (err) {
+        console.error('Leftover Stock DB migration notice:', err.message);
+    }
+}
+ensureLeftoverStockTableExist();
+
 
 // ----------------------------------------------------
 // POS STOCK SESSION ENDPOINTS
@@ -256,8 +283,42 @@ app.post('/api/pos-stock/session/add', authenticateToken, async (req, res) => {
             [sessionId, product_id, qty]
         );
 
+        // Calculate total added today for this product across sessions
+        const totalAddedRes = await db.query(`
+            SELECT SUM(psse.added_qty) as total_added
+            FROM pos_stock_session_entries psse
+            JOIN pos_stock_sessions pss ON psse.session_id = pss.id
+            WHERE psse.product_id = ? AND pss.session_date = ?
+        `, [product_id, sessionDate]);
+        const totalAddedToday = Number(totalAddedRes[0]?.total_added || 0);
+
+        // Calculate total sold today for this product
+        const totalSoldRes = await db.query(`
+            SELECT SUM(oi.quantity) as sold_qty
+            FROM order_items oi
+            JOIN orders o ON oi.order_id = o.id
+            WHERE oi.product_id = ? AND DATE(o.created_at) = ? AND o.payment_status = 'paid'
+        `, [product_id, sessionDate]);
+        const totalSoldToday = Number(totalSoldRes[0]?.sold_qty || 0);
+
+        const newStockQty = Math.max(0, totalAddedToday - totalSoldToday);
+
+        // Update product's current stock level permanently in products table
+        await db.query(
+            `UPDATE products SET stock_qty = ? WHERE id = ?`,
+            [newStockQty, product_id]
+        );
+
+        // Record stock log entry
+        await db.query(
+            `INSERT INTO stock_logs (product_id, change_qty, type, reason, user_id) VALUES (?, ?, 'purchase', 'POS Session stock entry', ?)`,
+            [product_id, qty, userId]
+        );
+
+        broadcast({ type: 'stock_updated', data: { productId: product_id, stock_qty: newStockQty } });
         broadcast({ type: 'pos_stock_session_updated', data: { sessionId, userId, productId: product_id } });
-        res.json({ success: true, session_id: sessionId });
+        broadcast({ type: 'database_synchronized' });
+        res.json({ success: true, session_id: sessionId, new_stock_qty: newStockQty });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -506,6 +567,151 @@ app.post('/api/pos-stock/session/:id/snapshot', authenticateToken, async (req, r
         );
 
         broadcast({ type: 'pos_stock_session_closed', data: { sessionId: id, userId: session.user_id } });
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ----------------------------------------------------
+// LEFTOVER STOCK ENDPOINTS (Day-End Carry-Over Food)
+// ----------------------------------------------------
+
+// GET /api/pos-stock/leftovers — Fetch active leftover food items
+app.get('/api/pos-stock/leftovers', authenticateToken, async (req, res) => {
+    try {
+        const leftovers = await db.query(`
+            SELECT ls.*, p.sinhala_name, p.price as menu_price
+            FROM leftover_stock ls
+            JOIN products p ON ls.product_id = p.id
+            WHERE ls.status != 'discarded' AND ls.quantity > 0
+            ORDER BY ls.date_added DESC, ls.created_at DESC
+        `);
+
+        const now = new Date();
+        const todayStr = now.toISOString().slice(0, 10);
+        const yestObj = new Date(now);
+        yestObj.setDate(yestObj.getDate() - 1);
+        const yesterdayStr = yestObj.toISOString().slice(0, 10);
+
+        const result = leftovers.map(item => {
+            let itemDateStr = '';
+            if (item.date_added) {
+                if (typeof item.date_added === 'string') {
+                    itemDateStr = item.date_added.slice(0, 10);
+                } else if (item.date_added instanceof Date) {
+                    itemDateStr = item.date_added.toISOString().slice(0, 10);
+                } else {
+                    itemDateStr = String(item.date_added).slice(0, 10);
+                }
+            }
+            const isToday = itemDateStr === todayStr;
+            const isYesterday = itemDateStr === yesterdayStr;
+            const isExpired = !isToday && !isYesterday;
+            return {
+                ...item,
+                is_today: isToday,
+                is_yesterday: isYesterday,
+                is_expired: isExpired
+            };
+        });
+
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/pos-stock/leftovers — Add a new leftover food entry at Day End
+app.post('/api/pos-stock/leftovers', authenticateToken, async (req, res) => {
+    try {
+        const { product_id, quantity, notes } = req.body;
+        const qty = parseInt(quantity) || 0;
+        if (!product_id || qty <= 0) {
+            return res.status(400).json({ error: 'product_id and valid quantity (>0) are required.' });
+        }
+
+        const products = await db.query('SELECT name FROM products WHERE id = ?', [product_id]);
+        if (products.length === 0) return res.status(404).json({ error: 'Product not found.' });
+        const productName = products[0].name;
+
+        const userId = req.user.id;
+        const users = await db.query('SELECT name FROM users WHERE id = ?', [userId]);
+        const userName = users.length > 0 ? users[0].name : 'Staff';
+
+        const dateAdded = new Date().toISOString().slice(0, 10);
+
+        const result = await db.query(
+            `INSERT INTO leftover_stock (product_id, product_name, quantity, date_added, added_by_user_id, added_by_user_name, status, notes)
+             VALUES (?, ?, ?, ?, ?, ?, 'pending_admin', ?)`,
+            [product_id, productName, qty, dateAdded, userId, userName, notes || null]
+        );
+
+        broadcast({ type: 'leftover_stock_updated', data: { action: 'created', id: result.insertId } });
+        res.json({ success: true, id: result.insertId });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// PUT /api/pos-stock/leftovers/:id/decrease — Decrease leftover food quantity when sold/consumed
+app.put('/api/pos-stock/leftovers/:id/decrease', authenticateToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { decrease_qty } = req.body;
+        const decQty = parseInt(decrease_qty) || 1;
+
+        const leftovers = await db.query('SELECT * FROM leftover_stock WHERE id = ?', [id]);
+        if (leftovers.length === 0) return res.status(404).json({ error: 'Leftover item not found.' });
+        const item = leftovers[0];
+
+        const newQty = Math.max(0, item.quantity - decQty);
+        if (newQty === 0) {
+            await db.query("UPDATE leftover_stock SET quantity = 0, status = 'discarded' WHERE id = ?", [id]);
+        } else {
+            await db.query("UPDATE leftover_stock SET quantity = ? WHERE id = ?", [newQty, id]);
+        }
+
+        broadcast({ type: 'leftover_stock_updated', data: { action: 'decreased', id, newQty } });
+        res.json({ success: true, new_quantity: newQty });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// PUT /api/pos-stock/leftovers/:id/status — Admin check/approve or discard leftover item
+app.put('/api/pos-stock/leftovers/:id/status', authenticateToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { status } = req.body; // 'admin_approved' or 'discarded'
+        if (!['pending_admin', 'admin_approved', 'discarded'].includes(status)) {
+            return res.status(400).json({ error: 'Invalid status.' });
+        }
+
+        await db.query('UPDATE leftover_stock SET status = ? WHERE id = ?', [status, id]);
+        broadcast({ type: 'leftover_stock_updated', data: { action: 'status_changed', id, status } });
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// DELETE /api/pos-stock/leftovers — Clear/discard expired or all leftover items
+app.delete('/api/pos-stock/leftovers', authenticateToken, async (req, res) => {
+    try {
+        const { clear_type, id } = req.query; // 'expired', 'all', or specific item id
+        if (id) {
+            await db.query("UPDATE leftover_stock SET status = 'discarded' WHERE id = ?", [id]);
+        } else if (clear_type === 'all') {
+            await db.query("UPDATE leftover_stock SET status = 'discarded'");
+        } else {
+            const yestObj = new Date();
+            yestObj.setDate(yestObj.getDate() - 1);
+            const yesterdayStr = yestObj.toISOString().slice(0, 10);
+            await db.query("UPDATE leftover_stock SET status = 'discarded' WHERE date_added < ?", [yesterdayStr]);
+        }
+
+        broadcast({ type: 'leftover_stock_updated', data: { action: 'cleared', clear_type, id } });
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });

@@ -167,6 +167,14 @@ class _POSStockScreenState extends State<POSStockScreen>
   final _stockReasonController = TextEditingController();
   String _stockType = 'purchase';
 
+  // ── Day-End Leftover Food state ────────────────────
+  List<LeftoverFoodModel> _leftoverFoods = [];
+  bool _leftoversLoading = false;
+  ProductModel? _selectedLeftoverProduct;
+  final _leftoverQtyController = TextEditingController(text: '');
+  final _leftoverNotesController = TextEditingController(text: '');
+  bool _isSavingLeftover = false;
+
   // ─────────────────────────────────────────────────────
   // LIFECYCLE
   // ─────────────────────────────────────────────────────
@@ -175,6 +183,7 @@ class _POSStockScreenState extends State<POSStockScreen>
     super.initState();
     _tabController = TabController(length: _tabCount, vsync: this);
     _initSession();
+    _loadLeftovers();
     if (_canViewAllSessions) {
       _loadAllSessions();
     }
@@ -190,6 +199,9 @@ class _POSStockScreenState extends State<POSStockScreen>
       if (type == 'stock_updated' || type == 'product_updated') {
         if (_canAdjustStock) _loadLogs(silent: true);
       }
+      if (type == 'leftover_stock_updated' || type == 'database_synchronized') {
+        _loadLeftovers(silent: true);
+      }
     });
   }
 
@@ -199,6 +211,8 @@ class _POSStockScreenState extends State<POSStockScreen>
     _tabController.dispose();
     _stockChangeController.dispose();
     _stockReasonController.dispose();
+    _leftoverQtyController.dispose();
+    _leftoverNotesController.dispose();
     for (final c in _rowQtyControllers.values) c.dispose();
     for (final c in _snapshotCtrls.values) c.dispose();
     for (final fn in _snapshotFocusNodes.values) fn.dispose();
@@ -334,6 +348,82 @@ class _POSStockScreenState extends State<POSStockScreen>
     }
   }
 
+  Future<void> _loadLeftovers({bool silent = false}) async {
+    if (!silent && mounted) setState(() => _leftoversLoading = true);
+    try {
+      final items = await APIService.instance.getLeftoverFoods();
+      if (mounted) {
+        setState(() {
+          _leftoverFoods = items;
+          _leftoversLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _leftoversLoading = false);
+    }
+  }
+
+  Future<void> _handleAddLeftover() async {
+    if (_selectedLeftoverProduct == null) {
+      _showSnack('Please select a product for leftover food.', isError: true);
+      return;
+    }
+    final qty = int.tryParse(_leftoverQtyController.text.trim()) ?? 0;
+    if (qty <= 0) {
+      _showSnack('Enter a valid leftover quantity (>0).', isError: true);
+      return;
+    }
+
+    setState(() => _isSavingLeftover = true);
+    try {
+      await APIService.instance.addLeftoverFood(
+        _selectedLeftoverProduct!.id,
+        qty,
+        _leftoverNotesController.text.trim(),
+      );
+      _leftoverQtyController.clear();
+      _leftoverNotesController.clear();
+      setState(() => _selectedLeftoverProduct = null);
+      await _loadLeftovers();
+      _showSnack('Leftover food entry saved successfully for carry-over!');
+    } catch (e) {
+      _showSnack(e.toString(), isError: true);
+    } finally {
+      if (mounted) setState(() => _isSavingLeftover = false);
+    }
+  }
+
+  Future<void> _handleDecreaseLeftover(LeftoverFoodModel item, int decQty) async {
+    try {
+      await APIService.instance.decreaseLeftoverFood(item.id, decQty);
+      await _loadLeftovers(silent: true);
+      _showSnack('Leftover ${item.productName} decreased by -$decQty');
+    } catch (e) {
+      _showSnack(e.toString(), isError: true);
+    }
+  }
+
+  Future<void> _handleUpdateLeftoverStatus(LeftoverFoodModel item, String newStatus) async {
+    try {
+      await APIService.instance.updateLeftoverFoodStatus(item.id, newStatus);
+      await _loadLeftovers(silent: true);
+      final label = newStatus == 'admin_approved' ? 'Approved by Admin' : 'Discarded';
+      _showSnack('Leftover item ${item.productName} marked as $label');
+    } catch (e) {
+      _showSnack(e.toString(), isError: true);
+    }
+  }
+
+  Future<void> _handleClearLeftovers({String clearType = 'expired', int? id}) async {
+    try {
+      await APIService.instance.clearLeftoverFoods(clearType: clearType, id: id);
+      await _loadLeftovers(silent: true);
+      _showSnack(clearType == 'all' ? 'All leftover food items cleared.' : 'Expired leftover food items cleared.');
+    } catch (e) {
+      _showSnack(e.toString(), isError: true);
+    }
+  }
+
   // ─────────────────────────────────────────────────────
   // ACTIONS
   // ─────────────────────────────────────────────────────
@@ -351,6 +441,10 @@ class _POSStockScreenState extends State<POSStockScreen>
       await APIService.instance.addToStockSession(productId, qty);
       ctrl.text = '1';
       await _refreshSession();
+      if (mounted) {
+        final controller = Provider.of<POSController>(context, listen: false);
+        await controller.reloadEnvironment(silent: true);
+      }
       _showSnack('+$qty "$productName" added to your session!');
     } catch (e) {
       _showSnack(e.toString(), isError: true);
@@ -680,6 +774,536 @@ class _POSStockScreenState extends State<POSStockScreen>
             logoutAt: _currentSession?.logoutAt,
             sessionSnapshot: _currentSession?.snapshot ?? {},
             title: 'My Stock Register — ${DateFormat('dd MMM yyyy').format(DateTime.now())}',
+          ),
+          const SizedBox(height: 24),
+
+          // ── Day-End Leftover Food Management Card Section ──
+          _buildLeftoverFoodSection(controller),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLeftoverFoodSection(POSController controller) {
+    final size = MediaQuery.of(context).size;
+    final isDesktop = size.width > 900;
+    final todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final yestStr = DateFormat('yyyy-MM-dd').format(DateTime.now().subtract(const Duration(days: 1)));
+
+    final yesterdayLeftovers = _leftoverFoods.where((l) => l.isYesterday || l.dateAdded == yestStr).toList();
+    final todayLeftovers = _leftoverFoods.where((l) => l.isToday || l.dateAdded == todayStr).toList();
+    final expiredLeftovers = _leftoverFoods.where((l) => l.isExpired || (l.dateAdded != todayStr && l.dateAdded != yestStr)).toList();
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppTheme.cardLight,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppTheme.borderLight),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 12, offset: const Offset(0, 4))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Header Title Bar ──────────────────────────
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFF8B5CF6), Color(0xFF6D28D9)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.only(topLeft: Radius.circular(13), topRight: Radius.circular(13)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.takeout_dining_rounded, color: Colors.white, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Day-End Leftover Food Management (Carry-Over Stock)',
+                        style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
+                      ),
+                      Text(
+                        'Record day-end prepared food leftovers to use tomorrow. Decrement stock when sold, check quality & clear expired items.',
+                        style: GoogleFonts.inter(fontSize: 11, color: Colors.white.withOpacity(0.85)),
+                      ),
+                    ],
+                  ),
+                ),
+                if (expiredLeftovers.isNotEmpty)
+                  OutlinedButton.icon(
+                    onPressed: () => _handleClearLeftovers(clearType: 'expired'),
+                    icon: const Icon(Icons.cleaning_services_outlined, size: 14, color: Colors.amberAccent),
+                    label: Text('Clear Expired (${expiredLeftovers.length})', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.amberAccent)),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Colors.amberAccent),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
+                  ),
+                if (_isAdmin && _leftoverFoods.isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    onPressed: () => _handleClearLeftovers(clearType: 'all'),
+                    icon: const Icon(Icons.delete_sweep_outlined, size: 14, color: Colors.white),
+                    label: Text('Clear All Leftovers', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Colors.white70),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ── KPI / Summary Chips Row ────────────────
+                Row(
+                  children: [
+                    _leftoverSummaryBadge(
+                      label: "Yesterday's Carry-Over",
+                      value: '${yesterdayLeftovers.fold<int>(0, (s, i) => s + i.quantity)} items',
+                      color: const Color(0xFF10B981),
+                      icon: Icons.history_rounded,
+                    ),
+                    const SizedBox(width: 12),
+                    _leftoverSummaryBadge(
+                      label: "Today's Leftovers",
+                      value: '${todayLeftovers.fold<int>(0, (s, i) => s + i.quantity)} items',
+                      color: const Color(0xFF8B5CF6),
+                      icon: Icons.today_rounded,
+                    ),
+                    const SizedBox(width: 12),
+                    _leftoverSummaryBadge(
+                      label: "Total Leftover Batches",
+                      value: '${_leftoverFoods.length} batches',
+                      color: const Color(0xFF3B82F6),
+                      icon: Icons.inventory_2_outlined,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+
+                // ── Split Layout: Left Form + Right Grid ──
+                if (isDesktop)
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Left Column: Add Leftover Form
+                      SizedBox(
+                        width: 320,
+                        child: _buildAddLeftoverForm(controller),
+                      ),
+                      const SizedBox(width: 20),
+                      // Right Column: Leftover Food Cards Box Grid
+                      Expanded(
+                        child: _buildLeftoverCardsGrid(controller),
+                      ),
+                    ],
+                  )
+                else ...[
+                  _buildAddLeftoverForm(controller),
+                  const SizedBox(height: 20),
+                  _buildLeftoverCardsGrid(controller),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _leftoverSummaryBadge({required String label, required String value, required Color color, required IconData icon}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 18),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: GoogleFonts.inter(fontSize: 10, color: AppTheme.textLightSecondary, fontWeight: FontWeight.w500)),
+              Text(value, style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: color)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAddLeftoverForm(POSController controller) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.bgLight,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.borderLight),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.add_circle_outline, color: Color(0xFF8B5CF6), size: 18),
+              const SizedBox(width: 8),
+              Text(
+                'Record Day-End Leftover',
+                style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Save remaining prepared items at the end of the day to carry over to tomorrow.',
+            style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary),
+          ),
+          const SizedBox(height: 14),
+
+          // Select product
+          _label('SELECT PREPARED ITEM *'),
+          const SizedBox(height: 6),
+          DropdownButtonFormField<ProductModel>(
+            value: _selectedLeftoverProduct != null && controller.products.contains(_selectedLeftoverProduct) ? _selectedLeftoverProduct : null,
+            dropdownColor: AppTheme.cardLight,
+            style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary),
+            hint: Text('Choose product...', style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightSecondary)),
+            items: controller.products.where((p) => p.status == 'active').map((p) => DropdownMenuItem(
+              value: p,
+              child: Text(
+                '${p.name}${p.sinhalaName != null && p.sinhalaName!.isNotEmpty ? " (${p.sinhalaName})" : ""}',
+                style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightPrimary),
+                overflow: TextOverflow.ellipsis,
+              ),
+            )).toList(),
+            onChanged: (p) => setState(() => _selectedLeftoverProduct = p),
+          ),
+          const SizedBox(height: 12),
+
+          // Leftover Qty
+          _label('LEFTOVER QUANTITY *'),
+          const SizedBox(height: 6),
+          TextField(
+            controller: _leftoverQtyController,
+            keyboardType: TextInputType.number,
+            inputFormatters: [
+              FilteringTextInputFormatter.digitsOnly,
+              _StripLeadingZeroFormatter(),
+            ],
+            style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold),
+            decoration: InputDecoration(
+              hintText: 'e.g. 15 portions',
+              hintStyle: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightSecondary.withOpacity(0.5)),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // Notes
+          _label('REMARKS / CONDITION (OPTIONAL)'),
+          const SizedBox(height: 6),
+          TextField(
+            controller: _leftoverNotesController,
+            style: GoogleFonts.inter(fontSize: 12),
+            decoration: InputDecoration(
+              hintText: 'e.g. refrigerated, prepared evening batch',
+              hintStyle: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary.withOpacity(0.5)),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Save button
+          ElevatedButton.icon(
+            onPressed: _isSavingLeftover ? null : _handleAddLeftover,
+            icon: _isSavingLeftover
+                ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : const Icon(Icons.save_rounded, size: 16),
+            label: Text(_isSavingLeftover ? 'Saving...' : '+ Add Day-End Leftover', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF8B5CF6),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              elevation: 0,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLeftoverCardsGrid(POSController controller) {
+    if (_leftoversLoading) {
+      return const Center(child: Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator()));
+    }
+
+    if (_leftoverFoods.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(36),
+        decoration: BoxDecoration(
+          color: AppTheme.bgLight,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppTheme.borderLight),
+        ),
+        child: Center(
+          child: Column(
+            children: [
+              Icon(Icons.takeout_dining_outlined, size: 40, color: AppTheme.textLightSecondary.withOpacity(0.4)),
+              const SizedBox(height: 12),
+              Text(
+                'No Day-End Leftover Food Entries',
+                style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Record prepared food remaining at day end using the form on the left.\nItems will be stored as carry-over stock for tomorrow.',
+                style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Wrap(
+      spacing: 14,
+      runSpacing: 14,
+      children: _leftoverFoods.map((item) => _buildLeftoverCardBox(item)).toList(),
+    );
+  }
+
+  Widget _buildLeftoverCardBox(LeftoverFoodModel item) {
+    Color cardBorderColor;
+    Color dateBadgeBg;
+    Color dateBadgeText;
+    String dateBadgeLabel;
+
+    if (item.isYesterday) {
+      cardBorderColor = const Color(0xFF10B981);
+      dateBadgeBg = const Color(0xFF10B981).withOpacity(0.12);
+      dateBadgeText = const Color(0xFF10B981);
+      dateBadgeLabel = "Yesterday's Carry-Over";
+    } else if (item.isToday) {
+      cardBorderColor = const Color(0xFF8B5CF6);
+      dateBadgeBg = const Color(0xFF8B5CF6).withOpacity(0.12);
+      dateBadgeText = const Color(0xFF8B5CF6);
+      dateBadgeLabel = "Today's Entry";
+    } else {
+      cardBorderColor = const Color(0xFFEF4444);
+      dateBadgeBg = const Color(0xFFEF4444).withOpacity(0.12);
+      dateBadgeText = const Color(0xFFEF4444);
+      dateBadgeLabel = "EXPIRED (${item.dateAdded})";
+    }
+
+    final isApproved = item.status == 'admin_approved';
+
+    return Container(
+      width: 290,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppTheme.cardLight,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: cardBorderColor.withOpacity(0.6), width: 1.5),
+        boxShadow: [
+          BoxShadow(color: cardBorderColor.withOpacity(0.06), blurRadius: 8, offset: const Offset(0, 2))
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header: Item name + Date badge
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.productName,
+                      style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (item.sinhalaName != null && item.sinhalaName!.isNotEmpty)
+                      Text(
+                        item.sinhalaName!,
+                        style: GoogleFonts.inter(fontSize: 10, color: AppTheme.textLightSecondary),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(color: dateBadgeBg, borderRadius: BorderRadius.circular(6)),
+                child: Text(
+                  dateBadgeLabel,
+                  style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold, color: dateBadgeText),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          // Quantity box + Admin Status Badge
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: cardBorderColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Text(
+                      '${item.quantity}',
+                      style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.bold, color: cardBorderColor),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'portions',
+                      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: cardBorderColor),
+                    ),
+                  ],
+                ),
+              ),
+              // Status Badge
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: isApproved ? const Color(0xFF10B981).withOpacity(0.12) : const Color(0xFFF59E0B).withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: isApproved ? const Color(0xFF10B981) : const Color(0xFFF59E0B)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      isApproved ? Icons.verified_user_rounded : Icons.pending_actions_rounded,
+                      size: 12,
+                      color: isApproved ? const Color(0xFF10B981) : const Color(0xFFF59E0B),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      isApproved ? 'Admin Checked' : 'Pending Check',
+                      style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold, color: isApproved ? const Color(0xFF10B981) : const Color(0xFFF59E0B)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+
+          // Added by info + notes
+          Row(
+            children: [
+              Icon(Icons.person_outline, size: 12, color: AppTheme.textLightSecondary),
+              const SizedBox(width: 4),
+              Text(
+                'By ${item.addedByUserName} · ${item.dateAdded}',
+                style: GoogleFonts.inter(fontSize: 10, color: AppTheme.textLightSecondary),
+              ),
+            ],
+          ),
+          if (item.notes != null && item.notes!.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Remarks: "${item.notes}"',
+              style: GoogleFonts.inter(fontSize: 10, fontStyle: FontStyle.italic, color: AppTheme.textLightSecondary),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+          const SizedBox(height: 12),
+          Divider(height: 1, color: AppTheme.borderLight),
+          const SizedBox(height: 8),
+
+          // Action Buttons: Decrease (-1), (-5), Admin Check, Discard
+          Row(
+            children: [
+              // Decrease -1
+              Expanded(
+                child: SizedBox(
+                  height: 30,
+                  child: ElevatedButton(
+                    onPressed: item.quantity <= 0 ? null : () => _handleDecreaseLeftover(item, 1),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF10B981),
+                      foregroundColor: Colors.white,
+                      padding: EdgeInsets.zero,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                      elevation: 0,
+                    ),
+                    child: Text('-1 Use', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              // Decrease -5
+              Expanded(
+                child: SizedBox(
+                  height: 30,
+                  child: ElevatedButton(
+                    onPressed: item.quantity < 5 ? null : () => _handleDecreaseLeftover(item, 5),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF059669),
+                      foregroundColor: Colors.white,
+                      padding: EdgeInsets.zero,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                      elevation: 0,
+                    ),
+                    child: Text('-5 Use', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ),
+              // Admin Check button (if admin & pending)
+              if (_isAdmin && !isApproved) ...[
+                const SizedBox(width: 6),
+                SizedBox(
+                  height: 30,
+                  child: IconButton(
+                    onPressed: () => _handleUpdateLeftoverStatus(item, 'admin_approved'),
+                    icon: const Icon(Icons.check_circle, color: Color(0xFF10B981), size: 20),
+                    tooltip: 'Admin Check & Approve',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                ),
+              ],
+              const SizedBox(width: 6),
+              // Discard button
+              SizedBox(
+                height: 30,
+                child: IconButton(
+                  onPressed: () => _handleClearLeftovers(id: item.id),
+                  icon: const Icon(Icons.delete_outline, color: Color(0xFFEF4444), size: 18),
+                  tooltip: 'Discard / Delete Leftover',
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+              ),
+            ],
           ),
         ],
       ),

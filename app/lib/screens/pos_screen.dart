@@ -1651,7 +1651,7 @@ class _POSScreenState extends State<POSScreen> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: const Color(0xFFF3E8FF), // Light purple bg
+              color: AppTheme.isDarkMode ? const Color(0xFF2C1C5F) : const Color(0xFFF3E8FF),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: const Color(0xFFA855F7), width: 1.5),
             ),
@@ -1660,11 +1660,15 @@ class _POSScreenState extends State<POSScreen> {
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.badge_outlined, color: Color(0xFF9333EA), size: 18),
+                    Icon(Icons.badge_outlined, color: AppTheme.isDarkMode ? const Color(0xFFC084FC) : const Color(0xFF9333EA), size: 18),
                     const SizedBox(width: 8),
                     Text(
                       'Staff Member (Recipient) *',
-                      style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF7E22CE)),
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.isDarkMode ? const Color(0xFFE9D5FF) : const Color(0xFF7E22CE),
+                      ),
                     ),
                     const Spacer(),
                     Container(
@@ -1684,18 +1688,31 @@ class _POSScreenState extends State<POSScreen> {
                 DropdownButtonFormField<UserModel>(
                   value: controller.selectedStaffUser,
                   isExpanded: true,
+                  dropdownColor: AppTheme.isDarkMode ? const Color(0xFF1E293B) : Colors.white,
                   decoration: InputDecoration(
                     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    fillColor: Colors.white,
+                    fillColor: AppTheme.isDarkMode ? const Color(0xFF1E293B) : Colors.white,
                     filled: true,
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFD8B4FE))),
                     enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFD8B4FE))),
+                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFF9333EA), width: 1.5)),
                   ),
-                  style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary, fontWeight: FontWeight.w600),
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    color: AppTheme.isDarkMode ? const Color(0xFFF8FAFC) : const Color(0xFF1E293B),
+                    fontWeight: FontWeight.w600,
+                  ),
                   items: controller.allUsers.map((u) {
                     return DropdownMenuItem<UserModel>(
                       value: u,
-                      child: Text('${u.name} (${u.role.toUpperCase()})'),
+                      child: Text(
+                        '${u.name} (${u.role.toUpperCase()})',
+                        style: GoogleFonts.inter(
+                          fontSize: 13,
+                          color: AppTheme.isDarkMode ? const Color(0xFFF8FAFC) : const Color(0xFF1E293B),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     );
                   }).toList(),
                   onChanged: (user) => controller.setSelectedStaffUser(user),

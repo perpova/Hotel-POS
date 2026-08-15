@@ -734,6 +734,8 @@ class POSController extends ChangeNotifier {
         case 'database_synchronized':
         case 'shift_updated':
         case 'ingredient_stock_updated':
+        case 'pos_stock_session_updated':
+        case 'leftover_stock_updated':
           reloadEnvironment(silent: true);
           break;
         case 'stock_updated':

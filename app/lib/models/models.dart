@@ -1015,3 +1015,72 @@ class SupplierLedgerEntryModel {
         type: json['type'] ?? 'delivery',
       );
 }
+
+class LeftoverFoodModel {
+  final int id;
+  final int productId;
+  final String productName;
+  final String? sinhalaName;
+  final int quantity;
+  final String dateAdded;
+  final int addedByUserId;
+  final String addedByUserName;
+  final String status; // 'pending_admin', 'admin_approved', 'discarded'
+  final String? notes;
+  final String createdAt;
+  final bool isToday;
+  final bool isYesterday;
+  final bool isExpired;
+
+  LeftoverFoodModel({
+    required this.id,
+    required this.productId,
+    required this.productName,
+    this.sinhalaName,
+    required this.quantity,
+    required this.dateAdded,
+    required this.addedByUserId,
+    required this.addedByUserName,
+    required this.status,
+    this.notes,
+    required this.createdAt,
+    this.isToday = false,
+    this.isYesterday = false,
+    this.isExpired = false,
+  });
+
+  factory LeftoverFoodModel.fromJson(Map<String, dynamic> json) => LeftoverFoodModel(
+        id: json['id'] ?? 0,
+        productId: json['product_id'] ?? 0,
+        productName: json['product_name'] ?? '',
+        sinhalaName: json['sinhala_name'],
+        quantity: int.tryParse(json['quantity'].toString()) ?? 0,
+        dateAdded: json['date_added'] ?? '',
+        addedByUserId: json['added_by_user_id'] ?? 0,
+        addedByUserName: json['added_by_user_name'] ?? 'Staff',
+        status: json['status'] ?? 'pending_admin',
+        notes: json['notes'],
+        createdAt: json['created_at'] ?? '',
+        isToday: json['is_today'] ?? false,
+        isYesterday: json['is_yesterday'] ?? false,
+        isExpired: json['is_expired'] ?? false,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'product_id': productId,
+        'product_name': productName,
+        'sinhala_name': sinhalaName,
+        'quantity': quantity,
+        'date_added': dateAdded,
+        'added_by_user_id': addedByUserId,
+        'added_by_user_name': addedByUserName,
+        'status': status,
+        'notes': notes,
+        'created_at': createdAt,
+        'is_today': isToday,
+        'is_yesterday': isYesterday,
+        'is_expired': isExpired,
+      };
+}
+
