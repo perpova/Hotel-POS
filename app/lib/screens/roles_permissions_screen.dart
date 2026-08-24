@@ -15,14 +15,14 @@ const List<String> kAppPages = [
   'Administrators', 'Delivery Boys', 'Customers', 'Employees', 'Waiters', 'Chefs', 'Short Eats Cabin',
   'Staff Attendance & Salary',
   'Sales Report', 'Items Report', 'Credit Balance Report',
-  'Raw Materials', 'POS Stock', 'POS Stock: All Sessions Tab', 'POS Stock: Stock Adjustment Tab', 'POS Stock: Show Remaining & Sold', 'Roles & Permissions', 'Settings',
+  'Raw Materials', 'Raw Materials: Prepped Items Table', 'Raw Materials: Manage Prepped Measurement Units', 'POS Stock', 'POS Stock: Day-End Leftover Food', 'POS Stock: All Sessions Tab', 'POS Stock: Stock Adjustment Tab', 'POS Stock: Show Remaining & Sold', 'Roles & Permissions', 'Settings',
 ];
 
 const Set<String> kPagesWithActions = {
   'Items', 'Offers', 'Administrators', 'Delivery Boys',
   'Customers', 'Employees', 'Waiters', 'Chefs', 'Short Eats Cabin',
   'Staff Attendance & Salary',
-  'Raw Materials', 'POS Stock', 'Roles & Permissions',
+  'Raw Materials', 'Raw Materials: Prepped Items Table', 'Raw Materials: Manage Prepped Measurement Units', 'POS Stock', 'POS Stock: Day-End Leftover Food', 'Roles & Permissions',
   'Pre Orders',
 };
 

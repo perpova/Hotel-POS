@@ -160,6 +160,8 @@ class _POSStockScreenState extends State<POSStockScreen>
 
   // ── Admin all-sessions filter ──────────────────────
   String _sessionsFilterDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
+  int? _sessionsFilterUserId;
+  bool _showOnlySessionItems = true;
 
   // ── Stock adjustment form (admin) ──────────────────
   ProductModel? _selectedStockProduct;
@@ -229,6 +231,7 @@ class _POSStockScreenState extends State<POSStockScreen>
   bool get _canViewCalculatedDetails => APIService.instance.isPosStockCalculatedDetailsAllowed();
   bool get _canAdjustStock => APIService.instance.isPosStockAdjustmentAllowed();
   bool get _canAddStock => APIService.instance.canCreateInPage('POS Stock');
+  bool get _canViewLeftovers => APIService.instance.isPosStockLeftoversAllowed();
 
 
   int get _tabCount {
@@ -272,6 +275,19 @@ class _POSStockScreenState extends State<POSStockScreen>
     }
   }
 
+  Future<void> _handleOpenSession() async {
+    setState(() => _sessionLoading = true);
+    try {
+      await APIService.instance.openStockSession();
+      await _refreshSession();
+      _showSnack('Stock session opened successfully!');
+    } catch (e) {
+      _showSnack(e.toString(), isError: true);
+    } finally {
+      if (mounted) setState(() => _sessionLoading = false);
+    }
+  }
+
   Future<void> _refreshSession({bool silent = false}) async {
     if (!silent && mounted) setState(() => _sessionLoading = true);
     try {
@@ -309,7 +325,10 @@ class _POSStockScreenState extends State<POSStockScreen>
   Future<void> _loadAllSessions({bool silent = false}) async {
     if (!silent) setState(() => _allSessionsLoading = true);
     try {
-      final raw = await APIService.instance.getAllStockSessions(date: _sessionsFilterDate);
+      final raw = await APIService.instance.getAllStockSessions(
+        date: _sessionsFilterDate,
+        userId: _sessionsFilterUserId,
+      );
       final sessions = raw.map((s) {
         final itemsRaw = (s['items'] as List?) ?? [];
         final items = itemsRaw.map((i) => _SessionItem.fromJson(Map<String, dynamic>.from(i))).toList();
@@ -739,7 +758,7 @@ class _POSStockScreenState extends State<POSStockScreen>
                     style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600, color: const Color(0xFF10B981))),
               ),
               const SizedBox(width: 14),
-              // Close session button
+              // Close session button or Open session button
               if (isActive)
                 ElevatedButton.icon(
                   onPressed: _isClosingSession ? null : () => _showCloseSessionDialog(displayItems),
@@ -755,12 +774,22 @@ class _POSStockScreenState extends State<POSStockScreen>
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
                     elevation: 0,
                   ),
-                ),
-              if (!isActive && sessionId != null)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(color: AppTheme.bgLight, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppTheme.borderLight)),
-                  child: Text('Session closed. Physical counts recorded.', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
+                )
+              else
+                ElevatedButton.icon(
+                  onPressed: _sessionLoading ? null : _handleOpenSession,
+                  icon: _sessionLoading
+                      ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.play_arrow_rounded, size: 18),
+                  label: Text(_sessionLoading ? 'Opening...' : 'Open Stock Session',
+                      style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 12)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF10B981),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+                    elevation: 0,
+                  ),
                 ),
             ]),
           ),
@@ -775,10 +804,11 @@ class _POSStockScreenState extends State<POSStockScreen>
             sessionSnapshot: _currentSession?.snapshot ?? {},
             title: 'My Stock Register — ${DateFormat('dd MMM yyyy').format(DateTime.now())}',
           ),
-          const SizedBox(height: 24),
-
           // ── Day-End Leftover Food Management Card Section ──
-          _buildLeftoverFoodSection(controller),
+          if (_canViewLeftovers) ...[
+            const SizedBox(height: 24),
+            _buildLeftoverFoodSection(controller),
+          ],
         ],
       ),
     );
@@ -1354,6 +1384,24 @@ class _POSStockScreenState extends State<POSStockScreen>
                 Icon(Icons.logout, size: 12, color: Colors.white70), const SizedBox(width: 4),
                 Text(DateFormat('hh:mm a').format(logoutAt.toLocal()), style: GoogleFonts.inter(fontSize: 10, color: Colors.white70)),
               ],
+              if (isActive && _canAddStock) ...[
+                const SizedBox(width: 8),
+                InkWell(
+                  onTap: () => _showFryAndTransferDialog(),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF59E0B),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      const Icon(Icons.local_fire_department, size: 12, color: Colors.white),
+                      const SizedBox(width: 4),
+                      Text('Fry & Add Prepped Items', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white)),
+                    ]),
+                  ),
+                ),
+              ],
               const SizedBox(width: 10),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -1400,7 +1448,7 @@ class _POSStockScreenState extends State<POSStockScreen>
 
           // ── Totals row ──
           if (displayItems.isNotEmpty)
-            _buildTotalsRow(displayItems, hasSnapshot: hasSnapshot, snapshot: sessionSnapshot),
+            _buildTotalsRow(displayItems, isActive: isActive, hasSnapshot: hasSnapshot, snapshot: sessionSnapshot),
         ],
       ),
     );
@@ -1618,7 +1666,7 @@ class _POSStockScreenState extends State<POSStockScreen>
   }
 
   // ── Totals row ───────────────────────────────────────
-  Widget _buildTotalsRow(List<_DisplayItem> items, {bool hasSnapshot = false, Map<int, int> snapshot = const {}}) {
+  Widget _buildTotalsRow(List<_DisplayItem> items, {bool isActive = false, bool hasSnapshot = false, Map<int, int> snapshot = const {}}) {
     final totalAdded    = items.fold<int>(0, (s, i) => s + i.totalAdded);
     final totalSold     = items.fold<int>(0, (s, i) => s + i.soldQty);
     final totalSysRem   = items.fold<int>(0, (s, i) => s + i.sysRemaining);
@@ -1645,6 +1693,8 @@ class _POSStockScreenState extends State<POSStockScreen>
           Expanded(flex: 2, child: Text('$totalActual', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary), textAlign: TextAlign.center)),
           Expanded(flex: 2, child: Text(totalShort > 0 ? '-$totalShort' : '$totalShort', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: totalShort > 0 ? const Color(0xFFEF4444) : const Color(0xFF10B981)), textAlign: TextAlign.center)),
         ],
+        if (isActive && _canAddStock)
+          Expanded(flex: 4, child: const SizedBox()),
       ]),
     );
   }
@@ -1850,58 +1900,143 @@ class _POSStockScreenState extends State<POSStockScreen>
   }
 
   // ─────────────────────────────────────────────────────
-  // TAB 2 — ALL SESSIONS (Admin)
+  // TAB 2 — ALL SESSIONS (Admin user-by-user view & shortage tracking)
   // ─────────────────────────────────────────────────────
   Widget _buildAllSessionsTab(POSController controller) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        _buildSessionsFilterBar(),
-        const SizedBox(height: 20),
+        _buildSessionsFilterBar(controller),
+        const SizedBox(height: 16),
+        if (_allSessions.isNotEmpty) _buildSessionsKpiHeader(controller),
         if (_allSessionsLoading)
           const Center(child: Padding(padding: EdgeInsets.all(60), child: CircularProgressIndicator()))
         else if (_allSessions.isEmpty)
-          _emptyState('No sessions found for $_sessionsFilterDate', Icons.event_busy_outlined)
+          _emptyState('No stock sessions found for $_sessionsFilterDate', Icons.event_busy_outlined)
         else
           ..._allSessions.map((session) {
-            final name = session.userDisplayName ?? 'Unknown';
+            final name = session.userDisplayName ?? session.userName ?? 'Unknown User';
             final role = session.userRole ?? '';
             final loginStr = session.loginAt != null ? DateFormat('hh:mm a').format(session.loginAt!.toLocal()) : '—';
             final logoutStr = session.logoutAt != null ? DateFormat('hh:mm a').format(session.logoutAt!.toLocal()) : '—';
 
-            // Build display items for this session (items only — no inline add for past sessions)
+            // Build display items for this user's session
             final sessionItemMap = {for (var i in session.items) i.productId: i};
-            final displayItems = controller.products
-                .where((p) => p.trackStock && p.status == 'active')
-                .map((p) => _DisplayItem(product: p, sessionItem: sessionItemMap[p.id]))
-                .toList();
+            
+            List<_DisplayItem> displayItems;
+            if (_showOnlySessionItems) {
+              // Show only items that were added, sold, or recorded in snapshot in this session
+              final activeProductIds = <int>{
+                ...sessionItemMap.keys,
+                ...session.snapshot.keys,
+              };
+              displayItems = controller.products
+                  .where((p) => activeProductIds.contains(p.id))
+                  .map((p) => _DisplayItem(product: p, sessionItem: sessionItemMap[p.id]))
+                  .toList();
+
+              // Fallback: If session had items not in active catalog list, map them
+              if (displayItems.isEmpty && session.items.isNotEmpty) {
+                displayItems = session.items.map((si) => _DisplayItem(
+                  product: ProductModel(
+                    id: si.productId,
+                    name: si.productName,
+                    sinhalaName: si.sinhalaName,
+                    categoryId: 0, price: 0, cost: 0, activePrice: 0, isHappyHour: false,
+                    stockQty: 0, minStockLevel: 0, isShortEat: false, trackStock: true,
+                  ),
+                  sessionItem: si,
+                )).toList();
+              }
+            } else {
+              displayItems = controller.products
+                  .where((p) => p.trackStock && p.status == 'active')
+                  .map((p) => _DisplayItem(product: p, sessionItem: sessionItemMap[p.id]))
+                  .toList();
+            }
+
+            // Calculate session shortage metrics for header badge
+            int shortItemsCount = 0;
+            int shortPortionsSum = 0;
+            if (session.snapshot.isNotEmpty) {
+              for (final item in displayItems) {
+                final actual = session.snapshot[item.productId];
+                if (actual != null) {
+                  final short = item.sysRemaining - actual;
+                  if (short > 0) {
+                    shortItemsCount++;
+                    shortPortionsSum += short;
+                  }
+                }
+              }
+            }
 
             return Padding(
               padding: const EdgeInsets.only(bottom: 24),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                // Session user header
+                // Session User Header Card
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
                   decoration: BoxDecoration(
-                    color: session.isActive ? const Color(0xFF10B981).withOpacity(0.08) : AppTheme.bgLight,
-                    border: Border.all(color: session.isActive ? const Color(0xFF10B981).withOpacity(0.3) : AppTheme.borderLight),
-                    borderRadius: const BorderRadius.only(topLeft: Radius.circular(10), topRight: Radius.circular(10)),
+                    color: session.isActive ? const Color(0xFF10B981).withOpacity(0.08) : AppTheme.cardLight,
+                    border: Border.all(color: session.isActive ? const Color(0xFF10B981).withOpacity(0.4) : AppTheme.borderLight),
+                    borderRadius: const BorderRadius.only(topLeft: Radius.circular(12), topRight: Radius.circular(12)),
                   ),
                   child: Row(children: [
                     CircleAvatar(
-                      radius: 17, backgroundColor: AppTheme.primary.withOpacity(0.15),
+                      radius: 18,
+                      backgroundColor: AppTheme.primary.withOpacity(0.15),
                       child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?',
                           style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 14, color: AppTheme.primary)),
                     ),
                     const SizedBox(width: 12),
                     Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(name, style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.textLightPrimary)),
-                      Text('${role.toUpperCase()} · Login: $loginStr → ${session.isActive ? "Still Active" : "Logout: $logoutStr"}',
-                          style: GoogleFonts.inter(fontSize: 10, color: AppTheme.textLightSecondary)),
+                      Row(children: [
+                        Text(name, style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14, color: AppTheme.textLightPrimary)),
+                        if (role.isNotEmpty) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(color: AppTheme.primary.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
+                            child: Text(role.toUpperCase(), style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold, color: AppTheme.primary)),
+                          ),
+                        ],
+                      ]),
+                      Text('Started: $loginStr ${session.isActive ? "· (Session Still Active)" : "· Ended: $logoutStr"}',
+                          style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary)),
                     ]),
                     const Spacer(),
+
+                    // Shortage Badge per User Session
+                    if (session.snapshot.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: shortPortionsSum > 0 ? const Color(0xFFFEE2E2) : const Color(0xFFDCFCE7),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: shortPortionsSum > 0 ? const Color(0xFFEF4444) : const Color(0xFF10B981)),
+                        ),
+                        child: Row(children: [
+                          Icon(shortPortionsSum > 0 ? Icons.warning_amber_rounded : Icons.check_circle_outline,
+                              size: 13, color: shortPortionsSum > 0 ? const Color(0xFFEF4444) : const Color(0xFF10B981)),
+                          const SizedBox(width: 4),
+                          Text(
+                            shortPortionsSum > 0 ? '$shortItemsCount Items Short (-$shortPortionsSum)' : '✓ Balanced (No Shortage)',
+                            style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: shortPortionsSum > 0 ? const Color(0xFFEF4444) : const Color(0xFF10B981)),
+                          ),
+                        ]),
+                      )
+                    else if (!session.isActive)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(color: const Color(0xFFFFF3CD), borderRadius: BorderRadius.circular(20)),
+                        child: Text('Pending Physical Count', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600, color: const Color(0xFF856404))),
+                      ),
+
+                    const SizedBox(width: 12),
+                    // Active / Closed Status Pill
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
                       decoration: BoxDecoration(
                         color: session.isActive ? const Color(0xFF10B981).withOpacity(0.12) : AppTheme.bgLight,
                         borderRadius: BorderRadius.circular(20),
@@ -1910,18 +2045,17 @@ class _POSStockScreenState extends State<POSStockScreen>
                       child: Text(session.isActive ? '● ACTIVE' : '✓ CLOSED',
                           style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold, color: session.isActive ? const Color(0xFF10B981) : AppTheme.textLightSecondary)),
                     ),
-                    const SizedBox(width: 10),
-                    Text('${session.items.length} entries', style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary)),
                   ]),
                 ),
-                // Register table for this session
+
+                // User's POS Stock Register Table
                 _buildRegisterTable(
                   displayItems: displayItems,
                   isActive: false,
                   loginAt: session.loginAt,
                   logoutAt: session.logoutAt,
                   sessionSnapshot: session.snapshot,
-                  title: '$name\'s Register',
+                  title: '$name\'s Stock Session Register (${displayItems.length} items)',
                 ),
               ]),
             );
@@ -1930,43 +2064,166 @@ class _POSStockScreenState extends State<POSStockScreen>
     );
   }
 
-  Widget _buildSessionsFilterBar() {
+  Widget _buildSessionsKpiHeader(POSController controller) {
+    int activeCount = _allSessions.where((s) => s.isActive).length;
+    int closedCount = _allSessions.where((s) => !s.isActive).length;
+    int totalShortageCount = 0;
+    int totalShortagePortions = 0;
+
+    for (final session in _allSessions) {
+      if (session.snapshot.isNotEmpty) {
+        final sessionItemMap = {for (var i in session.items) i.productId: i};
+        for (final p in controller.products) {
+          final sessionItem = sessionItemMap[p.id];
+          final sysRem = sessionItem?.remaining ?? 0;
+          final actual = session.snapshot[p.id];
+          if (actual != null) {
+            final short = sysRem - actual;
+            if (short > 0) {
+              totalShortageCount++;
+              totalShortagePortions += short;
+            }
+          }
+        }
+      }
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      decoration: BoxDecoration(
+        color: AppTheme.cardLight,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.borderLight),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 8, offset: const Offset(0, 2))],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _kpiItem('Total User Sessions', '${_allSessions.length}', Icons.people_outline, const Color(0xFF3B82F6)),
+          _kpiDivider(),
+          _kpiItem('Active Sessions', '$activeCount', Icons.play_circle_outline, const Color(0xFF10B981)),
+          _kpiDivider(),
+          _kpiItem('Closed Sessions', '$closedCount', Icons.check_circle_outline, const Color(0xFF8B5CF6)),
+          _kpiDivider(),
+          _kpiItem(
+            'Short Discrepancies',
+            totalShortageCount > 0 ? '$totalShortageCount items (-$totalShortagePortions)' : '0 Short (Balanced)',
+            Icons.warning_amber_rounded,
+            totalShortageCount > 0 ? const Color(0xFFEF4444) : const Color(0xFF10B981),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _kpiDivider() => Container(width: 1, height: 32, color: AppTheme.borderLight);
+
+  Widget _kpiItem(String label, String value, IconData icon, Color color) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(color: color.withOpacity(0.12), borderRadius: BorderRadius.circular(8)),
+          child: Icon(icon, color: color, size: 18),
+        ),
+        const SizedBox(width: 10),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label, style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary)),
+            Text(value, style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: color)),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSessionsFilterBar(POSController controller) {
+    final users = controller.allUsers;
+
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(color: AppTheme.cardLight, borderRadius: BorderRadius.circular(10), border: Border.all(color: AppTheme.borderLight)),
-      child: Row(children: [
-        Icon(Icons.calendar_today_outlined, size: 16, color: AppTheme.primary),
-        const SizedBox(width: 8),
-        Text('Date:', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold)),
-        const SizedBox(width: 10),
-        InkWell(
-          onTap: () async {
-            final picked = await showDatePicker(context: context,
-                initialDate: DateTime.tryParse(_sessionsFilterDate) ?? DateTime.now(),
-                firstDate: DateTime(2024), lastDate: DateTime.now());
-            if (picked != null) { setState(() => _sessionsFilterDate = DateFormat('yyyy-MM-dd').format(picked)); _loadAllSessions(); }
-          },
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-            decoration: BoxDecoration(color: AppTheme.bgLight, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppTheme.borderLight)),
-            child: Row(children: [
-              Text(_sessionsFilterDate, style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600)),
-              const SizedBox(width: 6), Icon(Icons.edit_calendar_outlined, size: 14, color: AppTheme.primary),
-            ]),
-          ),
-        ),
-        const SizedBox(width: 10),
-        OutlinedButton.icon(
-          onPressed: () { setState(() => _sessionsFilterDate = DateFormat('yyyy-MM-dd').format(DateTime.now())); _loadAllSessions(); },
-          icon: const Icon(Icons.today, size: 14), label: const Text('Today'),
-          style: OutlinedButton.styleFrom(side: BorderSide(color: AppTheme.primary), foregroundColor: AppTheme.primary, textStyle: GoogleFonts.inter(fontSize: 12), padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
-        ),
-        const Spacer(),
-        if (_allSessionsLoading) const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-        else Text('${_allSessions.length} session(s)', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
-        const SizedBox(width: 10),
-        IconButton(onPressed: () => _loadAllSessions(), icon: Icon(Icons.refresh, size: 18, color: AppTheme.primary), tooltip: 'Refresh', padding: EdgeInsets.zero, constraints: const BoxConstraints(minWidth: 30, minHeight: 30)),
-      ]),
+      child: Wrap(
+        spacing: 12, runSpacing: 10, crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          // Date filter
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(Icons.calendar_today_outlined, size: 16, color: AppTheme.primary),
+            const SizedBox(width: 6),
+            Text('Date:', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold)),
+            const SizedBox(width: 8),
+            InkWell(
+              onTap: () async {
+                final picked = await showDatePicker(context: context,
+                    initialDate: DateTime.tryParse(_sessionsFilterDate) ?? DateTime.now(),
+                    firstDate: DateTime(2024), lastDate: DateTime.now());
+                if (picked != null) { setState(() => _sessionsFilterDate = DateFormat('yyyy-MM-dd').format(picked)); _loadAllSessions(); }
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                decoration: BoxDecoration(color: AppTheme.bgLight, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppTheme.borderLight)),
+                child: Row(children: [
+                  Text(_sessionsFilterDate, style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600)),
+                  const SizedBox(width: 6), Icon(Icons.edit_calendar_outlined, size: 14, color: AppTheme.primary),
+                ]),
+              ),
+            ),
+            const SizedBox(width: 6),
+            OutlinedButton(
+              onPressed: () { setState(() => _sessionsFilterDate = DateFormat('yyyy-MM-dd').format(DateTime.now())); _loadAllSessions(); },
+              style: OutlinedButton.styleFrom(side: BorderSide(color: AppTheme.primary), foregroundColor: AppTheme.primary, padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8)),
+              child: Text('Today', style: GoogleFonts.inter(fontSize: 12)),
+            ),
+          ]),
+
+          // User filter dropdown
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(Icons.person_search_outlined, size: 16, color: AppTheme.primary),
+            const SizedBox(width: 6),
+            Text('User:', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold)),
+            const SizedBox(width: 8),
+            SizedBox(
+              width: 170,
+              child: DropdownButtonFormField<int?>(
+                value: _sessionsFilterUserId,
+                dropdownColor: AppTheme.cardLight,
+                style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightPrimary),
+                isDense: true,
+                decoration: InputDecoration(
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: AppTheme.borderLight)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                ),
+                items: [
+                  const DropdownMenuItem<int?>(value: null, child: Text('All Users')),
+                  ...users.map((u) => DropdownMenuItem<int?>(
+                    value: u.id,
+                    child: Text('${u.name} (${u.role.toUpperCase()})', overflow: TextOverflow.ellipsis),
+                  )),
+                ],
+                onChanged: (val) {
+                  setState(() => _sessionsFilterUserId = val);
+                  _loadAllSessions();
+                },
+              ),
+            ),
+          ]),
+
+          // Filter view mode chip
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            ChoiceChip(
+              selected: _showOnlySessionItems,
+              label: Text(_showOnlySessionItems ? 'User Session Items Only' : 'Full Product Catalog', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600)),
+              onSelected: (val) => setState(() => _showOnlySessionItems = val),
+              selectedColor: AppTheme.primary.withOpacity(0.15),
+              backgroundColor: AppTheme.bgLight,
+            ),
+          ]),
+
+          IconButton(onPressed: () => _loadAllSessions(), icon: Icon(Icons.refresh, size: 18, color: AppTheme.primary), tooltip: 'Refresh Sessions'),
+        ],
+      ),
     );
   }
 
@@ -2232,5 +2489,171 @@ class _POSStockScreenState extends State<POSStockScreen>
       final path = await FilePicker.platform.saveFile(dialogTitle: 'Export PDF', fileName: 'POS_Stock_$_sessionsFilterDate.pdf', type: FileType.custom, allowedExtensions: ['pdf']);
       if (path != null) { await File(path).writeAsBytes(await doc.save()); _showSnack('PDF saved to $path'); }
     } catch (e) { _showSnack('Export failed: $e', isError: true); }
+  }
+
+  Future<void> _showFryAndTransferDialog() async {
+    final controller = Provider.of<POSController>(context, listen: false);
+    List<IngredientModel> ingredients = [];
+    try {
+      ingredients = await APIService.instance.getIngredients();
+    } catch (_) {}
+
+    IngredientModel? selectedIng;
+    ProductModel? selectedProd;
+    final qtyCtrl = TextEditingController();
+    final notesCtrl = TextEditingController();
+    bool isSaving = false;
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDlgState) {
+          return Dialog(
+            backgroundColor: AppTheme.cardLight,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: Container(
+              width: 480,
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(color: const Color(0xFFF59E0B).withOpacity(0.15), borderRadius: BorderRadius.circular(8)),
+                          child: const Icon(Icons.soup_kitchen_outlined, color: Color(0xFFF59E0B), size: 20),
+                        ),
+                        const SizedBox(width: 10),
+                        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text('Fry & Add Prepped Stock', style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
+                          Text('Deducts unfried stock from Raw Materials & adds to your register', style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary)),
+                        ]),
+                      ]),
+                      IconButton(icon: const Icon(Icons.close, size: 18), onPressed: () => Navigator.pop(ctx)),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+
+                  Text('1. SELECT PREPARED RAW ITEM (FROM RAW MATERIALS) *', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary)),
+                  const SizedBox(height: 6),
+                  DropdownButtonFormField<IngredientModel>(
+                    value: selectedIng,
+                    dropdownColor: AppTheme.cardLight,
+                    style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightPrimary),
+                    hint: Text('Select unfried raw prepped item...', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
+                    items: ingredients.map((i) => DropdownMenuItem(
+                      value: i,
+                      child: Text('${i.name} | Raw Stock: ${i.stockQty.toStringAsFixed(0)} ${i.unit}', style: const TextStyle(fontSize: 12)),
+                    )).toList(),
+                    onChanged: (val) => setDlgState(() => selectedIng = val),
+                  ),
+                  const SizedBox(height: 16),
+
+                  Text('2. SELECT TARGET POS PRODUCT ITEM *', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary)),
+                  const SizedBox(height: 6),
+                  DropdownButtonFormField<ProductModel>(
+                    value: selectedProd,
+                    dropdownColor: AppTheme.cardLight,
+                    style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightPrimary),
+                    hint: Text('Select POS product item (e.g. Fish Roll)...', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
+                    items: controller.products.where((p) => p.trackStock).map((p) => DropdownMenuItem(
+                      value: p,
+                      child: Text('${p.name} | Current Stock: ${p.stockQty}', style: const TextStyle(fontSize: 12)),
+                    )).toList(),
+                    onChanged: (val) => setDlgState(() => selectedProd = val),
+                  ),
+                  const SizedBox(height: 16),
+
+                  Row(children: [
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text('FRIED QTY ADDED TO SHIFT *', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary)),
+                        const SizedBox(height: 6),
+                        TextField(
+                          controller: qtyCtrl,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(hintText: 'e.g. 20'),
+                          style: GoogleFonts.inter(fontSize: 13),
+                        ),
+                      ]),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text('BATCH NOTES (OPTIONAL)', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textLightSecondary)),
+                        const SizedBox(height: 6),
+                        TextField(
+                          controller: notesCtrl,
+                          decoration: const InputDecoration(hintText: 'e.g. Morning frying'),
+                          style: GoogleFonts.inter(fontSize: 13),
+                        ),
+                      ]),
+                    ),
+                  ]),
+                  const SizedBox(height: 24),
+
+                  Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+                    OutlinedButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      style: OutlinedButton.styleFrom(side: BorderSide(color: AppTheme.borderLight), foregroundColor: AppTheme.textLightSecondary),
+                      child: const Text('Cancel'),
+                    ),
+                    const SizedBox(width: 12),
+                    ElevatedButton.icon(
+                      onPressed: isSaving ? null : () async {
+                        if (selectedIng == null) {
+                          _showSnack('Select a raw material prepared item.', isError: true);
+                          return;
+                        }
+                        if (selectedProd == null) {
+                          _showSnack('Select a target POS product.', isError: true);
+                          return;
+                        }
+                        final qty = int.tryParse(qtyCtrl.text.trim()) ?? 0;
+                        if (qty <= 0) {
+                          _showSnack('Enter a valid fried quantity (> 0).', isError: true);
+                          return;
+                        }
+                        if (selectedIng!.stockQty < qty) {
+                          _showSnack('Insufficient raw stock! Only ${selectedIng!.stockQty.toStringAsFixed(0)} ${selectedIng!.unit} available in Raw Materials.', isError: true);
+                          return;
+                        }
+
+                        setDlgState(() => isSaving = true);
+                        try {
+                          final res = await APIService.instance.fryAndTransferToPosStock(
+                            ingredientId: selectedIng!.id,
+                            productId: selectedProd!.id,
+                            qty: qty,
+                            notes: notesCtrl.text.trim(),
+                          );
+                          if (ctx.mounted) Navigator.pop(ctx);
+                          await _refreshSession();
+                          await controller.reloadEnvironment(silent: true);
+                          _showSnack(res['message'] ?? 'Successfully fried & added to your active shift register!');
+                        } catch (e) {
+                          _showSnack(e.toString(), isError: true);
+                        } finally {
+                          setDlgState(() => isSaving = false);
+                        }
+                      },
+                      icon: isSaving
+                          ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          : const Icon(Icons.local_fire_department, size: 16),
+                      label: Text(isSaving ? 'Processing...' : 'Fry & Add to My Shift Register'),
+                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFF59E0B), foregroundColor: Colors.white),
+                    ),
+                  ]),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
   }
 }

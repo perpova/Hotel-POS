@@ -134,6 +134,7 @@ class APIService {
         await prefs.setString('auth_user', jsonEncode(data['user']));
         
         connectWebSocket();
+        try { await openStockSession(); } catch (_) {}
         return true;
       }
       return false;
@@ -390,6 +391,24 @@ class APIService {
     for (final p in currentUserPermissions) {
       if (p['page']?.toString().toLowerCase() == 'pos stock') {
         return p['can_update'] == 1 || p['can_update'] == true;
+      }
+    }
+    final role = currentUser!.role.toLowerCase();
+    if (role == 'admin' || role == 'owner') return true;
+    return false;
+  }
+
+  bool isPosStockLeftoversAllowed() {
+    if (currentUser == null) return false;
+    for (final p in currentUserPermissions) {
+      if (p['page']?.toString().toLowerCase() == 'pos stock: day-end leftover food' ||
+          p['page']?.toString().toLowerCase() == 'pos stock: leftover food') {
+        return p['can_view'] == 1 || p['can_view'] == true;
+      }
+    }
+    for (final p in currentUserPermissions) {
+      if (p['page']?.toString().toLowerCase() == 'pos stock') {
+        return p['can_view'] == 1 || p['can_view'] == true;
       }
     }
     final role = currentUser!.role.toLowerCase();
@@ -947,6 +966,143 @@ class APIService {
       return List<Map<String, dynamic>>.from(data);
     }
     throw Exception('Failed to load ingredient stock logs');
+  }
+
+  // Prepped & Cooked Items APIs
+  Future<List<PreppedItemModel>> getPreppedItems() async {
+    final response = await http.get(
+      Uri.parse('$_baseUrl/api/prepped-items'),
+      headers: _getHeaders(),
+    );
+    if (response.statusCode == 200) {
+      final List data = jsonDecode(response.body);
+      return data.map((i) => PreppedItemModel.fromJson(i)).toList();
+    }
+    throw Exception('Failed to load prepped items');
+  }
+
+  Future<void> createPreppedItem(String name, String unit, {String? sinhalaName, double minStockLevel = 5.0}) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/api/prepped-items'),
+      headers: _getHeaders(),
+      body: jsonEncode({
+        'name': name,
+        'sinhala_name': sinhalaName,
+        'unit': unit,
+        'min_stock_level': minStockLevel,
+      }),
+    );
+    if (response.statusCode != 200) {
+      final errData = jsonDecode(response.body);
+      throw Exception(errData['error'] ?? 'Failed to create prepped item');
+    }
+  }
+
+  Future<void> updatePreppedItem(int id, String name, String unit, double minStockLevel, {String? sinhalaName}) async {
+    final response = await http.put(
+      Uri.parse('$_baseUrl/api/prepped-items/$id'),
+      headers: _getHeaders(),
+      body: jsonEncode({
+        'name': name,
+        'sinhala_name': sinhalaName,
+        'unit': unit,
+        'min_stock_level': minStockLevel,
+      }),
+    );
+    if (response.statusCode != 200) {
+      final errData = jsonDecode(response.body);
+      throw Exception(errData['error'] ?? 'Failed to update prepped item');
+    }
+  }
+
+  Future<void> deletePreppedItem(int id) async {
+    final response = await http.delete(
+      Uri.parse('$_baseUrl/api/prepped-items/$id'),
+      headers: _getHeaders(),
+    );
+    if (response.statusCode != 200) {
+      final errData = jsonDecode(response.body);
+      throw Exception(errData['error'] ?? 'Failed to delete prepped item');
+    }
+  }
+
+  Future<void> adjustPreppedItemStock(int itemId, double changeQty, String type, String reason, {bool deductRawEgg = false}) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/api/prepped-items/$itemId/adjust'),
+      headers: _getHeaders(),
+      body: jsonEncode({
+        'change_qty': changeQty,
+        'type': type,
+        'reason': reason,
+        'deduct_raw_egg': deductRawEgg,
+      }),
+    );
+    if (response.statusCode != 200) {
+      final errData = jsonDecode(response.body);
+      throw Exception(errData['error'] ?? 'Failed to adjust prepped item stock');
+    }
+  }
+
+  Future<List<PreppedItemLogModel>> getPreppedItemLogs() async {
+    final response = await http.get(
+      Uri.parse('$_baseUrl/api/prepped-items/logs'),
+      headers: _getHeaders(),
+    );
+    if (response.statusCode == 200) {
+      final List data = jsonDecode(response.body);
+      return data.map((l) => PreppedItemLogModel.fromJson(l)).toList();
+    }
+    throw Exception('Failed to load prepped item logs');
+  }
+
+  bool isPreppedItemsTableAllowed() {
+    if (currentUser == null) return true;
+    final roleName = currentUser!.role.trim().toLowerCase();
+    if (roleName == 'admin' || roleName == 'owner') return true;
+
+    for (final p in currentUserPermissions) {
+      if (p['page']?.toString().toLowerCase() == 'raw materials: prepped items table') {
+        return p['can_view'] == 1 || p['can_view'] == true;
+      }
+    }
+    return true;
+  }
+
+  bool canManagePreppedItemUnits() {
+    if (currentUser == null) return false;
+    final roleName = currentUser!.role.trim().toLowerCase();
+    if (roleName == 'admin' || roleName == 'owner') return true;
+
+    for (final p in currentUserPermissions) {
+      if (p['page']?.toString().toLowerCase() == 'raw materials: manage prepped measurement units') {
+        return p['can_create'] == 1 || p['can_create'] == true || p['can_update'] == 1 || p['can_update'] == true;
+      }
+    }
+    return false;
+  }
+
+  /// Fry / Cook overnight prepared raw ingredient and transfer into POS Stock
+  Future<Map<String, dynamic>> fryAndTransferToPosStock({
+    required int ingredientId,
+    required int productId,
+    required int qty,
+    String? notes,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/api/pos-stock/fry-and-transfer'),
+      headers: _getHeaders(),
+      body: jsonEncode({
+        'ingredient_id': ingredientId,
+        'product_id': productId,
+        'qty': qty,
+        'notes': notes,
+      }),
+    );
+    if (response.statusCode == 200) {
+      return Map<String, dynamic>.from(jsonDecode(response.body));
+    }
+    final errData = jsonDecode(response.body);
+    throw Exception(errData['error'] ?? 'Failed to fry and transfer stock');
   }
 
   Future<void> configureHappyHour(int? productId, double promoPrice, String startTime, String endTime, String days, String? name, int? categoryId, String? imageBase64) async {

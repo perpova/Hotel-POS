@@ -41,6 +41,19 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
   
   bool _loading = false;
 
+  // Overnight Prepped Stock state
+  ProductModel? _selectedPreppedProduct;
+  final _prepQtyController = TextEditingController();
+  final _prepNotesController = TextEditingController();
+  bool _isSavingPrep = false;
+
+  // Prepped & Cooked Items Table State
+  List<PreppedItemModel> _preppedItems = [];
+  List<PreppedItemLogModel> _preppedLogs = [];
+  final Map<int, TextEditingController> _preppedQtyControllers = {};
+  final Map<int, FocusNode> _preppedFocusNodes = {};
+  bool _savingPreppedCount = false;
+
   // Log Filtering & Pagination
   int _entriesLimit = 10;
   bool _isFilterExpanded = false;
@@ -68,7 +81,8 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
           type == 'ws_reconnected' ||
           type == 'ingredient_stock_updated' ||
           type == 'ingredient_created' ||
-          type == 'ingredient_updated') {
+          type == 'ingredient_updated' ||
+          type == 'prepped_stock_updated') {
         _loadData(silent: true);
       }
     });
@@ -83,6 +97,10 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
     _newIngMinStockController.dispose();
     _filterIngredientController.dispose();
     _filterDateController.dispose();
+    _prepQtyController.dispose();
+    _prepNotesController.dispose();
+    for (var ctrl in _preppedQtyControllers.values) ctrl.dispose();
+    for (var fn in _preppedFocusNodes.values) fn.dispose();
     super.dispose();
   }
 
@@ -94,10 +112,21 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
     try {
       final ings = await APIService.instance.getIngredients();
       final logsData = await APIService.instance.getIngredientStockLogs();
+      List<PreppedItemModel> prepped = [];
+      List<PreppedItemLogModel> preppedLogs = [];
+      try {
+        prepped = await APIService.instance.getPreppedItems();
+        preppedLogs = await APIService.instance.getPreppedItemLogs();
+      } catch (pe) {
+        print('Error loading prepped items: $pe');
+      }
+
       if (mounted) {
         setState(() {
           _ingredients = ings;
           _logs = logsData;
+          _preppedItems = prepped;
+          _preppedLogs = preppedLogs;
           _loading = false;
         });
       }
@@ -425,8 +454,84 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
     );
   }
 
+  void _showSnack(String msg, {bool isError = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg),
+      backgroundColor: isError ? AppTheme.danger : AppTheme.accent,
+    ));
+  }
+
+  Future<void> _handleRecordPreppedStock() async {
+    if (_selectedPreppedProduct == null) {
+      _showSnack('Please select a POS product item (e.g. Fish Roll).', isError: true);
+      return;
+    }
+    final qty = double.tryParse(_prepQtyController.text.trim()) ?? 0.0;
+    if (qty <= 0) {
+      _showSnack('Please enter a valid quantity (> 0).', isError: true);
+      return;
+    }
+
+    setState(() => _isSavingPrep = true);
+    try {
+      final productName = _selectedPreppedProduct!.name;
+      final rawName = '$productName (Prepped Raw)';
+
+      // 1. Check if ingredient already exists for this prepped product
+      IngredientModel? targetIng;
+      for (var ing in _ingredients) {
+        if (ing.name.toLowerCase() == rawName.toLowerCase() || ing.name.toLowerCase() == productName.toLowerCase()) {
+          targetIng = ing;
+          break;
+        }
+      }
+
+      // 2. Create raw ingredient if not present
+      if (targetIng == null) {
+        await APIService.instance.createIngredient(
+          rawName,
+          'units',
+          minStockLevel: 5,
+        );
+        // Reload ingredients list
+        await _loadData();
+        for (var ing in _ingredients) {
+          if (ing.name.toLowerCase() == rawName.toLowerCase()) {
+            targetIng = ing;
+            break;
+          }
+        }
+      }
+
+      if (targetIng != null) {
+        final notes = _prepNotesController.text.trim();
+        final reasonStr = 'Overnight / Pre-fried batch entry for $productName${notes.isNotEmpty ? ' ($notes)' : ''}';
+
+        await APIService.instance.adjustIngredientStock(
+          targetIng.id,
+          qty,
+          'purchase',
+          reasonStr,
+        );
+      }
+
+      _prepQtyController.clear();
+      _prepNotesController.clear();
+      setState(() => _selectedPreppedProduct = null);
+
+      await _loadData();
+      _showSnack('Recorded $qty units of prepped stock for "$productName" into Raw Materials Inventory!');
+    } catch (e) {
+      _showSnack(e.toString(), isError: true);
+    } finally {
+      if (mounted) setState(() => _isSavingPrep = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final controller = Provider.of<POSController>(context);
     final size = MediaQuery.of(context).size;
     final isDesktop = size.width > 950;
     
@@ -597,10 +702,14 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Expanded(
-                              flex: 2,
+                              flex: 3,
                               child: SingleChildScrollView(
                                 child: Column(
                                   children: [
+                                    _buildPreppedItemsCard(hasSeniorAccess),
+                                    const SizedBox(height: 24),
+                                    _buildPreppedStockFormCard(controller, hasSeniorAccess),
+                                    const SizedBox(height: 24),
                                     _buildAdjustmentFormCard(hasSeniorAccess),
                                     const SizedBox(height: 24),
                                     _buildCreateIngredientCard(hasSeniorAccess),
@@ -611,16 +720,30 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
                             const SizedBox(width: 24),
                             Expanded(
                               flex: 3,
-                              child: _buildLogsCard(displayLogs),
+                              child: SingleChildScrollView(
+                                child: Column(
+                                  children: [
+                                    _buildPreppedItemLogsCard(_preppedLogs.take(_entriesLimit).toList()),
+                                    const SizedBox(height: 24),
+                                    _buildLogsCard(displayLogs),
+                                  ],
+                                ),
+                              ),
                             ),
                           ],
                         )
                       : SingleChildScrollView(
                           child: Column(
                             children: [
+                              _buildPreppedItemsCard(hasSeniorAccess),
+                              const SizedBox(height: 24),
+                              _buildPreppedStockFormCard(controller, hasSeniorAccess),
+                              const SizedBox(height: 24),
                               _buildAdjustmentFormCard(hasSeniorAccess),
                               const SizedBox(height: 24),
                               _buildCreateIngredientCard(hasSeniorAccess),
+                              const SizedBox(height: 24),
+                              _buildPreppedItemLogsCard(_preppedLogs.take(_entriesLimit).toList()),
                               const SizedBox(height: 24),
                               _buildLogsCard(displayLogs),
                             ],
@@ -831,12 +954,6 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
                   },
                   icon: const Icon(Icons.clear, size: 14),
                   label: const Text('Clear'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.textLightSecondary,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  ),
                 ),
               ],
             ),
@@ -847,8 +964,862 @@ class _RawMaterialsScreenState extends State<RawMaterialsScreen> {
   }
 
   // ----------------------------------------------------
-  // ADJUSTMENT INPUT FORM
+  // PREPPED & COOKED ITEMS STOCK TABLE CARD
   // ----------------------------------------------------
+  Widget _buildPreppedItemsCard(bool hasSeniorAccess) {
+    final canAccessPrepped = APIService.instance.isPreppedItemsTableAllowed();
+    final canManageUnits = APIService.instance.canManagePreppedItemUnits();
+
+    if (!canAccessPrepped) {
+      return const SizedBox.shrink();
+    }
+
+    return Card(
+      elevation: 0,
+      color: AppTheme.cardLight,
+      shape: RoundedRectangleBorder(
+        side: BorderSide(color: AppTheme.primary.withOpacity(0.4), width: 1.5),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primary.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(Icons.soup_kitchen_outlined, color: AppTheme.primary, size: 22),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Newly Purchased Items Stock'.tr(context),
+                              style: GoogleFonts.outfit(fontSize: 17, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+                            ),
+                            Text(
+                              'Record & monitor daily purchased items, stock entries, and inventory levels'.tr(context),
+                              style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (canManageUnits)
+                  ElevatedButton.icon(
+                    onPressed: _showAddPreppedItemDialog,
+                    icon: const Icon(Icons.add_circle_outline, size: 16),
+                    label: Text('Add New Item & Unit'.tr(context), style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // Prepped items table
+            Container(
+              decoration: BoxDecoration(
+                border: Border.all(color: AppTheme.borderLight),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                children: [
+                  // Table header
+                  Container(
+                    color: AppTheme.bgLight,
+                    padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                    child: Row(
+                      children: [
+                        Expanded(flex: 3, child: _buildTableHeaderText('PREPPED ITEM')),
+                        Expanded(flex: 1, child: _buildTableHeaderText('UNIT')),
+                        Expanded(flex: 2, child: _buildTableHeaderText('CURRENT STOCK')),
+                        Expanded(flex: 5, child: _buildTableHeaderText('COUNT ENTRY (+ / -)')),
+                        if (canManageUnits)
+                          Expanded(flex: 1, child: _buildTableHeaderText('ACTIONS')),
+                      ],
+                    ),
+                  ),
+                  _preppedItems.isEmpty
+                      ? Padding(
+                          padding: const EdgeInsets.all(24.0),
+                          child: Center(
+                            child: Text('No prepped items registered.', style: GoogleFonts.inter(color: AppTheme.textLightSecondary)),
+                          ),
+                        )
+                      : ListView.separated(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: _preppedItems.length,
+                          separatorBuilder: (context, index) => Divider(height: 1, color: AppTheme.dividerColor),
+                          itemBuilder: (context, index) {
+                            final item = _preppedItems[index];
+                            final rowCtrl = _preppedQtyControllers.putIfAbsent(item.id, () => TextEditingController(text: '1'));
+                            final rowNode = _preppedFocusNodes.putIfAbsent(item.id, () => FocusNode());
+                            final isBoiledEgg = item.name.toLowerCase().contains('egg') || item.name.toLowerCase().contains('බිත්තර');
+
+                            void submitAndFocusNext(double changeQty, String type, {bool deductRawEgg = false}) {
+                              _handleAdjustPreppedStock(item, changeQty, type, deductRawEgg: deductRawEgg);
+                              if (index + 1 < _preppedItems.length) {
+                                final nextItem = _preppedItems[index + 1];
+                                final nextNode = _preppedFocusNodes[nextItem.id];
+                                final nextCtrl = _preppedQtyControllers[nextItem.id];
+                                if (nextNode != null) {
+                                  nextNode.requestFocus();
+                                  if (nextCtrl != null) {
+                                    nextCtrl.selection = TextSelection(baseOffset: 0, extentOffset: nextCtrl.text.length);
+                                  }
+                                }
+                              }
+                            }
+
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    flex: 3,
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          item.name.tr(context),
+                                          style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+                                        ),
+                                        if (item.sinhalaName != null && item.sinhalaName!.isNotEmpty)
+                                          Text(
+                                            item.sinhalaName!,
+                                            style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                  Expanded(
+                                    flex: 1,
+                                    child: Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: AppTheme.bgLight,
+                                          borderRadius: BorderRadius.circular(6),
+                                          border: Border.all(color: AppTheme.borderLight),
+                                        ),
+                                        child: Text(
+                                          item.unit,
+                                          style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textLightPrimary),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    flex: 2,
+                                    child: Text(
+                                      '${item.currentStock.toStringAsFixed(0)} ${item.unit}',
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                        color: item.currentStock <= item.minStockLevel ? const Color(0xFFDC2626) : AppTheme.textLightPrimary,
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    flex: 5,
+                                    child: Row(
+                                      children: [
+                                        SizedBox(
+                                          width: 58,
+                                          height: 36,
+                                          child: TextField(
+                                            controller: rowCtrl,
+                                            focusNode: rowNode,
+                                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                            textInputAction: TextInputAction.next,
+                                            onTap: () {
+                                              rowCtrl.selection = TextSelection(baseOffset: 0, extentOffset: rowCtrl.text.length);
+                                            },
+                                            onSubmitted: (val) {
+                                              final qty = double.tryParse(val) ?? 1.0;
+                                              submitAndFocusNext(qty, 'addition');
+                                            },
+                                            decoration: InputDecoration(
+                                              contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                              border: const OutlineInputBorder(),
+                                              focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: AppTheme.primary, width: 2)),
+                                            ),
+                                            style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        ElevatedButton(
+                                          onPressed: () {
+                                            final qty = double.tryParse(rowCtrl.text) ?? 1.0;
+                                            submitAndFocusNext(qty, 'addition');
+                                          },
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: const Color(0xFF10B981),
+                                            foregroundColor: Colors.white,
+                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                            minimumSize: Size.zero,
+                                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                          ),
+                                          child: const Text('+ Add', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        OutlinedButton(
+                                          onPressed: () {
+                                            final qty = double.tryParse(rowCtrl.text) ?? 1.0;
+                                            submitAndFocusNext(-qty, 'deduction');
+                                          },
+                                          style: OutlinedButton.styleFrom(
+                                            foregroundColor: AppTheme.danger,
+                                            side: const BorderSide(color: AppTheme.danger),
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                                            minimumSize: Size.zero,
+                                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                          ),
+                                          child: const Text('- Less', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                        ),
+                                        if (isBoiledEgg) ...[
+                                          const SizedBox(width: 6),
+                                          ElevatedButton(
+                                            onPressed: () => submitAndFocusNext(60.0, 'addition', deductRawEgg: true),
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: Colors.orange,
+                                              foregroundColor: Colors.white,
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                                              minimumSize: Size.zero,
+                                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                            ),
+                                            child: const Text('+60 Boiled', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
+                                  if (canManageUnits)
+                                    Expanded(
+                                      flex: 1,
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.end,
+                                        children: [
+                                          IconButton(
+                                            icon: Icon(Icons.edit_outlined, size: 16, color: AppTheme.primary),
+                                            onPressed: () => _showEditPreppedItemDialog(item),
+                                            tooltip: 'Edit Unit / Item',
+                                          ),
+                                          IconButton(
+                                            icon: Icon(Icons.delete_outline, size: 16, color: AppTheme.danger),
+                                            onPressed: () => _confirmDeletePreppedItem(item),
+                                            tooltip: 'Delete Item',
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handleAdjustPreppedStock(PreppedItemModel item, double changeQty, String type, {bool deductRawEgg = false}) async {
+    try {
+      final isBoiledEgg = item.name.toLowerCase().contains('egg') || item.name.toLowerCase().contains('බිත්තර');
+      final reasonStr = type == 'addition'
+          ? 'Prepped stock addition (+${changeQty.toStringAsFixed(0)} ${item.unit})${deductRawEgg || isBoiledEgg ? ' [Raw Egg Deducted]' : ''}'
+          : 'Prepped stock usage/deduction (${changeQty.toStringAsFixed(0)} ${item.unit})';
+
+      await APIService.instance.adjustPreppedItemStock(item.id, changeQty, type, reasonStr, deductRawEgg: deductRawEgg || isBoiledEgg);
+      await _loadData();
+      _showSnack('${type == "addition" ? "+" : ""}${changeQty.toStringAsFixed(0)} ${item.name} stock updated successfully!');
+    } catch (e) {
+      _showSnack(e.toString(), isError: true);
+    }
+  }
+
+  void _showAddPreppedItemDialog() {
+    final nameCtrl = TextEditingController();
+    final sinhalaCtrl = TextEditingController();
+    final minStockCtrl = TextEditingController(text: '5.0');
+    String selectedUnit = 'units';
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return AlertDialog(
+              backgroundColor: AppTheme.cardLight,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Row(
+                children: [
+                  Icon(Icons.add_circle_outline, color: AppTheme.primary),
+                  const SizedBox(width: 8),
+                  Text('Add Prepped Item & Unit'.tr(context), style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildFieldLabel('PREPPED ITEM NAME *'),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: nameCtrl,
+                      decoration: const InputDecoration(hintText: 'e.g. Cutlets, Pastry'),
+                      style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary),
+                    ),
+                    const SizedBox(height: 16),
+                    _buildFieldLabel('SINHALA NAME (OPTIONAL)'),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: sinhalaCtrl,
+                      decoration: const InputDecoration(hintText: 'e.g. කට්ලට්ස්'),
+                      style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary),
+                    ),
+                    const SizedBox(height: 16),
+                    _buildFieldLabel('MEASUREMENT UNIT *'),
+                    const SizedBox(height: 6),
+                    DropdownButtonFormField<String>(
+                      value: selectedUnit,
+                      dropdownColor: AppTheme.cardLight,
+                      style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary),
+                      items: const [
+                        DropdownMenuItem(value: 'units', child: Text('Units / Pieces')),
+                        DropdownMenuItem(value: 'kg', child: Text('Kilograms (kg)')),
+                        DropdownMenuItem(value: 'grams', child: Text('Grams (g)')),
+                        DropdownMenuItem(value: 'liters', child: Text('Liters (L)')),
+                        DropdownMenuItem(value: 'packs', child: Text('Packs / Batches')),
+                      ],
+                      onChanged: (val) => setDialogState(() => selectedUnit = val!),
+                    ),
+                    const SizedBox(height: 16),
+                    _buildFieldLabel('MIN STOCK ALERT LEVEL'),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: minStockCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(hintText: 'e.g. 5.0'),
+                      style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: Text('Cancel', style: TextStyle(color: AppTheme.textLightSecondary)),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    final name = nameCtrl.text.trim();
+                    if (name.isEmpty) return;
+                    final minStock = double.tryParse(minStockCtrl.text.trim()) ?? 5.0;
+
+                    Navigator.pop(ctx);
+                    setState(() => _loading = true);
+                    try {
+                      await APIService.instance.createPreppedItem(name, selectedUnit, sinhalaName: sinhalaCtrl.text.trim(), minStockLevel: minStock);
+                      await _loadData();
+                      _showSnack('New prepped item "$name" created successfully!');
+                    } catch (e) {
+                      setState(() => _loading = false);
+                      _showSnack(e.toString(), isError: true);
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primary, foregroundColor: Colors.white),
+                  child: const Text('Create Item'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showEditPreppedItemDialog(PreppedItemModel item) {
+    final nameCtrl = TextEditingController(text: item.name);
+    final sinhalaCtrl = TextEditingController(text: item.sinhalaName ?? '');
+    final minStockCtrl = TextEditingController(text: item.minStockLevel.toStringAsFixed(0));
+    String selectedUnit = item.unit;
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return AlertDialog(
+              backgroundColor: AppTheme.cardLight,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Row(
+                children: [
+                  Icon(Icons.edit_outlined, color: AppTheme.primary),
+                  const SizedBox(width: 8),
+                  Text('Edit Prepped Item & Unit'.tr(context), style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildFieldLabel('PREPPED ITEM NAME *'),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: nameCtrl,
+                      style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary),
+                    ),
+                    const SizedBox(height: 16),
+                    _buildFieldLabel('SINHALA NAME'),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: sinhalaCtrl,
+                      style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary),
+                    ),
+                    const SizedBox(height: 16),
+                    _buildFieldLabel('MEASUREMENT UNIT *'),
+                    const SizedBox(height: 6),
+                    DropdownButtonFormField<String>(
+                      value: selectedUnit,
+                      dropdownColor: AppTheme.cardLight,
+                      style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary),
+                      items: const [
+                        DropdownMenuItem(value: 'units', child: Text('Units / Pieces')),
+                        DropdownMenuItem(value: 'kg', child: Text('Kilograms (kg)')),
+                        DropdownMenuItem(value: 'grams', child: Text('Grams (g)')),
+                        DropdownMenuItem(value: 'liters', child: Text('Liters (L)')),
+                        DropdownMenuItem(value: 'packs', child: Text('Packs / Batches')),
+                      ],
+                      onChanged: (val) => setDialogState(() => selectedUnit = val!),
+                    ),
+                    const SizedBox(height: 16),
+                    _buildFieldLabel('MIN STOCK ALERT LEVEL'),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: minStockCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: Text('Cancel', style: TextStyle(color: AppTheme.textLightSecondary)),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    final name = nameCtrl.text.trim();
+                    if (name.isEmpty) return;
+                    final minStock = double.tryParse(minStockCtrl.text.trim()) ?? 5.0;
+
+                    Navigator.pop(ctx);
+                    setState(() => _loading = true);
+                    try {
+                      await APIService.instance.updatePreppedItem(item.id, name, selectedUnit, minStock, sinhalaName: sinhalaCtrl.text.trim());
+                      await _loadData();
+                      _showSnack('Prepped item "$name" updated successfully!');
+                    } catch (e) {
+                      setState(() => _loading = false);
+                      _showSnack(e.toString(), isError: true);
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primary, foregroundColor: Colors.white),
+                  child: const Text('Save Changes'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _confirmDeletePreppedItem(PreppedItemModel item) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.cardLight,
+        title: Text('Delete Prepped Item', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
+        content: Text('Are you sure you want to delete ${item.name}? This cannot be undone.', style: GoogleFonts.inter(color: AppTheme.textLightSecondary)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Cancel', style: TextStyle(color: AppTheme.textLightSecondary))),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              setState(() => _loading = true);
+              try {
+                await APIService.instance.deletePreppedItem(item.id);
+                await _loadData();
+                _showSnack('${item.name} deleted successfully.');
+              } catch (e) {
+                setState(() => _loading = false);
+                _showSnack(e.toString(), isError: true);
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.danger, foregroundColor: Colors.white),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPreppedItemLogsCard(List<PreppedItemLogModel> logsList) {
+    return Card(
+      elevation: 0,
+      color: AppTheme.cardLight,
+      shape: RoundedRectangleBorder(
+        side: BorderSide(color: AppTheme.borderLight),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Newly Purchased Item Logs'.tr(context),
+                  style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+                ),
+                OutlinedButton.icon(
+                  onPressed: _exportPreppedPDF,
+                  icon: const Icon(Icons.picture_as_pdf_outlined, size: 14),
+                  label: const Text('PDF Log'),
+                  style: OutlinedButton.styleFrom(foregroundColor: AppTheme.primary, side: BorderSide(color: AppTheme.primary)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            logsList.isEmpty
+                ? Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 40.0),
+                    child: Center(
+                      child: Text('No prepped item adjustment logs found.', style: GoogleFonts.inter(color: AppTheme.textLightSecondary)),
+                    ),
+                  )
+                : Column(
+                    children: [
+                      Container(
+                        color: AppTheme.bgLight,
+                        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                        child: Row(
+                          children: [
+                            Expanded(flex: 3, child: _buildTableHeaderText('PREPPED ITEM')),
+                            Expanded(flex: 2, child: _buildTableHeaderText('CHANGE')),
+                            Expanded(flex: 3, child: _buildTableHeaderText('LOG TYPE')),
+                            Expanded(flex: 3, child: _buildTableHeaderText('REASON')),
+                            Expanded(flex: 3, child: _buildTableHeaderText('RECORDER')),
+                            Expanded(flex: 4, child: _buildTableHeaderText('DATE & TIME')),
+                          ],
+                        ),
+                      ),
+                      ListView.separated(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: logsList.length,
+                        separatorBuilder: (context, index) => Divider(height: 1, color: AppTheme.dividerColor),
+                        itemBuilder: (context, index) {
+                          final l = logsList[index];
+                          final isPositive = l.changeQty > 0;
+                          final timeFormatted = DateFormat('hh:mm a, dd-MM-yyyy').format((DateTime.tryParse(l.timestamp) ?? DateTime.now()).toLocal());
+
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  flex: 3,
+                                  child: Text(
+                                    l.preppedItemName,
+                                    style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 2,
+                                  child: Text(
+                                    '${isPositive ? "+" : ""}${l.changeQty.toStringAsFixed(0)}',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
+                                      color: isPositive ? const Color(0xFF137333) : const Color(0xFFC5221F),
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 3,
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: isPositive ? const Color(0xFFE6F4EA) : const Color(0xFFFCE8E6),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        l.type.toUpperCase(),
+                                        style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold, color: isPositive ? const Color(0xFF137333) : const Color(0xFFC5221F)),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 3,
+                                  child: Text(
+                                    l.reason ?? '',
+                                    style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 3,
+                                  child: Text(
+                                    l.recorderName,
+                                    style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary),
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 4,
+                                  child: Text(
+                                    timeFormatted,
+                                    style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _exportPreppedPDF() async {
+    try {
+      final doc = pw.Document();
+      final headers = ['Prepped Item', 'Change Qty', 'Log Type', 'Reason', 'Recorder', 'Date & Time'];
+      final data = _preppedLogs.take(50).map((l) {
+        final isPositive = l.changeQty > 0;
+        final timeFormatted = DateFormat('yyyy-MM-dd HH:mm').format((DateTime.tryParse(l.timestamp) ?? DateTime.now()).toLocal());
+        return [
+          l.preppedItemName,
+          '${isPositive ? "+" : ""}${l.changeQty.toStringAsFixed(0)}',
+          l.type.toUpperCase(),
+          l.reason ?? '',
+          l.recorderName,
+          timeFormatted,
+        ];
+      }).toList();
+
+      doc.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat.a4,
+          build: (pw.Context context) {
+            return pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text(
+                  'Prepped & Cooked Items Stock Report',
+                  style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold),
+                ),
+                pw.SizedBox(height: 6),
+                pw.Text('Generated on: ${DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now())}'),
+                pw.SizedBox(height: 16),
+                pw.Table.fromTextArray(
+                  headers: headers,
+                  data: data,
+                  border: pw.TableBorder.all(color: PdfColors.grey300),
+                  headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                  cellHeight: 25,
+                ),
+              ],
+            );
+          },
+        ),
+      );
+
+      final resultPath = await FilePicker.platform.saveFile(
+        dialogTitle: 'Export Prepped Stock PDF Report',
+        fileName: 'Prepped_Stock_Logs_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+      );
+
+      if (resultPath != null) {
+        final file = File(resultPath);
+        await file.writeAsBytes(await doc.save());
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Prepped Stock PDF saved to: $resultPath'), backgroundColor: AppTheme.accent),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Export PDF failed: $e'), backgroundColor: AppTheme.danger),
+        );
+      }
+    }
+  }
+
+  // ----------------------------------------------------
+  // OVERNIGHT PREPPED UNFRIED STOCK FORM CARD
+  // ----------------------------------------------------
+  Widget _buildPreppedStockFormCard(POSController controller, bool hasSeniorAccess) {
+    return Card(
+      elevation: 0,
+      color: AppTheme.cardLight,
+      shape: RoundedRectangleBorder(
+        side: BorderSide(color: AppTheme.primary.withOpacity(0.3), width: 1.5),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primary.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(Icons.soup_kitchen_outlined, color: AppTheme.primary, size: 20),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Record Overnight / Prepped Unfried Items',
+                          style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
+                      Text('Record raw prepared items (e.g. Unfried Rolls) into Raw Material Inventory before frying',
+                          style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+
+            _buildFieldLabel('SELECT POS PRODUCT (TRACK STOCK CHECKED) *'),
+            const SizedBox(height: 6),
+            DropdownButtonFormField<ProductModel>(
+              value: _selectedPreppedProduct != null && controller.products.contains(_selectedPreppedProduct) ? _selectedPreppedProduct : null,
+              dropdownColor: AppTheme.cardLight,
+              style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary),
+              hint: Text('Choose POS stock item (e.g. Fish Roll, Egg Roti)...', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
+              items: controller.products.where((p) => p.trackStock).map((p) {
+                final rawName = '${p.name} (Prepped Raw)'.toLowerCase();
+                final existingIng = _ingredients.firstWhere(
+                  (i) => i.name.toLowerCase() == rawName || i.name.toLowerCase() == p.name.toLowerCase(),
+                  orElse: () => IngredientModel(id: 0, name: '', unit: '', stockQty: 0, minStockLevel: 0),
+                );
+                final rawStockStr = existingIng.id != 0 ? '${existingIng.stockQty.toStringAsFixed(0)} units' : '0 units';
+                return DropdownMenuItem(
+                  value: p,
+                  child: Text('${p.name} | Raw Prepped Stock: $rawStockStr', style: const TextStyle(fontSize: 12)),
+                );
+              }).toList(),
+              onChanged: (prod) => setState(() => _selectedPreppedProduct = prod),
+            ),
+            const SizedBox(height: 16),
+
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildFieldLabel('PREPARED QTY *'),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: _prepQtyController,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: const InputDecoration(hintText: 'e.g. 50'),
+                        style: GoogleFonts.inter(fontSize: 13),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildFieldLabel('PREP REMARKS / NOTES'),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: _prepNotesController,
+                        decoration: const InputDecoration(hintText: 'e.g. Night shift batch'),
+                        style: GoogleFonts.inter(fontSize: 13),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+
+            ElevatedButton.icon(
+              onPressed: _isSavingPrep ? null : _handleRecordPreppedStock,
+              icon: _isSavingPrep
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Icon(Icons.save_outlined, size: 18),
+              label: Text(_isSavingPrep ? 'Saving Prepped Stock...' : 'Save Prepped Stock to Raw Materials',
+                  style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
   Widget _buildAdjustmentFormCard(bool hasSeniorAccess) {
     if (!hasSeniorAccess) {
       return Card(

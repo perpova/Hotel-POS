@@ -118,6 +118,28 @@ class TranslationService {
     'Ingredient Transaction Logs': 'අමුද්‍රව්‍ය ගනුදෙනු සටහන්',
     'No adjustment history logged.': 'කිසිදු සංශෝධන ඉතිහාසයක් සටහන් වී නොමැත.',
 
+    // Newly Purchased / Daily Stock Items Table Translations
+    'Newly Purchased Items Stock': 'අලුතෙන් ගන්නා ද්‍රව්‍ය තොග සටහන',
+    'Prepped & Cooked Items Stock': 'අලුතෙන් ගන්නා ද්‍රව්‍ය තොග සටහන',
+    'Prepped & Cooked Items Table': 'අලුතෙන් ගන්නා ද්‍රව්‍ය තොග සටහන',
+    'Record & monitor prepped kitchen food items, batch production, and stock levels': 'එදිනෙදා අලුතෙන් ලබාගන්නා ද්‍රව්‍ය, තොග ඇතුළත් කිරීම් සහ මට්ටම් පාලනය කරන්න',
+    'Record & monitor daily purchased items, stock entries, and inventory levels': 'එදිනෙදා අලුතෙන් ලබාගන්නා ද්‍රව්‍ය, තොග ඇතුළත් කිරීම් සහ මට්ටම් පාලනය කරන්න',
+    'Add Prepped Item & Unit': 'නව ද්‍රව්‍යයක් එකතු කරන්න',
+    'Add New Item & Unit': 'නව ද්‍රව්‍යයක් එකතු කරන්න',
+    'Quick Boiled Egg Batch (+60)': 'තැම්බූ බිත්තර 60 කාණ්ඩය (+60)',
+    'Boiled Egg Batch Prep (+60)': 'තැම්බූ බිත්තර 60 කාණ්ඩය සූදානම් කිරීම (+60)',
+    'Kirimalu': 'කිරිමාළු',
+    'Miris Malu': 'මිරිස් මාළු',
+    'Drumstick': 'කුකුළු කකුල්',
+    'Breast': 'කුකුළු පපුව',
+    'Rolls': 'රෝල්ස්',
+    'Egg (Boiled)': 'තැම්බූ බිත්තර',
+    'Boiled Egg': 'තැම්බූ බිත්තර',
+    'Raw Materials: Prepped Items Table': 'ද්‍රව්‍ය තොග: අලුතෙන් ගන්නා ද්‍රව්‍ය වගුව',
+    'Raw Materials: Manage Prepped Measurement Units': 'ද්‍රව්‍ය තොග: මිනුම් ඒකක පාලනය',
+    'Prepped Item Transaction Logs': 'අලුතෙන් ගත් ද්‍රව්‍ය ගනුදෙනු සටහන්',
+    'Newly Purchased Item Logs': 'අලුතෙන් ගත් ද්‍රව්‍ය ගනුදෙනු සටහන්',
+
     // Reports & Logs Screen
     'End-of-Day Summary': 'දින අවසාන සාරාංශය',
     'Expenses': 'වියදම්',

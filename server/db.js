@@ -582,6 +582,52 @@ async function initializeDatabase() {
                 `);
             } catch (_) {}
 
+            // 19. PREPPED_ITEMS & PREPPED_ITEM_LOGS table migrations
+            try {
+                await dbPool.query(`
+                    CREATE TABLE IF NOT EXISTS prepped_items (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        name VARCHAR(255) NOT NULL UNIQUE,
+                        sinhala_name VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+                        unit VARCHAR(50) NOT NULL DEFAULT 'units',
+                        current_stock DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+                        min_stock_level DECIMAL(10,2) NOT NULL DEFAULT 5.00,
+                        is_default BOOLEAN DEFAULT FALSE,
+                        raw_ingredient_id INT NULL,
+                        conversion_ratio DECIMAL(10,2) DEFAULT 1.00,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (raw_ingredient_id) REFERENCES ingredients(id) ON DELETE SET NULL
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+                `);
+                await dbPool.query(`
+                    CREATE TABLE IF NOT EXISTS prepped_item_logs (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        prepped_item_id INT NOT NULL,
+                        prepped_item_name VARCHAR(255) NOT NULL,
+                        change_qty DECIMAL(10,2) NOT NULL,
+                        type VARCHAR(50) NOT NULL,
+                        reason TEXT NULL,
+                        user_id INT NULL,
+                        recorder_name VARCHAR(255) DEFAULT 'Admin',
+                        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (prepped_item_id) REFERENCES prepped_items(id) ON DELETE CASCADE,
+                        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+                `);
+
+                const defaultPreppedItems = [
+                    ['Kirimalu', 'කිරිමාළු', 'units', 0.00, 5.00, true],
+                    ['Miris Malu', 'මිරිස් මාළු', 'units', 0.00, 5.00, true],
+                    ['Drumstick', 'කුකුළු කකුල්', 'units', 0.00, 5.00, true],
+                    ['Breast', 'කුකුළු පපුව', 'units', 0.00, 5.00, true],
+                    ['Rolls', 'රෝල්ස්', 'units', 0.00, 10.00, true],
+                    ['Egg (Boiled)', 'තැම්බූ බිත්තර', 'units', 0.00, 10.00, true]
+                ];
+                for (const pi of defaultPreppedItems) {
+                    await dbPool.query('INSERT IGNORE INTO prepped_items (name, sinhala_name, unit, current_stock, min_stock_level, is_default) VALUES (?, ?, ?, ?, ?, ?)', pi);
+                }
+            } catch (_) {}
+
             console.log("Self-healing schema synchronization completed successfully ✓");
         }
     } catch (error) {

@@ -493,6 +493,35 @@ CREATE TABLE IF NOT EXISTS customer_reviews (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- 27. Prepped & Cooked Items Table
+CREATE TABLE IF NOT EXISTS prepped_items (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL UNIQUE,
+    sinhala_name VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+    unit VARCHAR(50) NOT NULL DEFAULT 'units',
+    current_stock DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    min_stock_level DECIMAL(10,2) NOT NULL DEFAULT 5.00,
+    is_default BOOLEAN DEFAULT FALSE,
+    raw_ingredient_id INT NULL,
+    conversion_ratio DECIMAL(10,2) DEFAULT 1.00,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (raw_ingredient_id) REFERENCES ingredients(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS prepped_item_logs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    prepped_item_id INT NOT NULL,
+    prepped_item_name VARCHAR(255) NOT NULL,
+    change_qty DECIMAL(10,2) NOT NULL,
+    type VARCHAR(50) NOT NULL,
+    reason TEXT NULL,
+    user_id INT NULL,
+    recorder_name VARCHAR(255) DEFAULT 'Admin',
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (prepped_item_id) REFERENCES prepped_items(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 
 
 -- Seed Data
@@ -523,6 +552,15 @@ INSERT INTO products (name, sinhala_name, description, category_id, price, cost,
 ('Egg Roti', 'බිත්තර රොටි', 'Flatbread cooked with a whole egg inside.', 3, 150.00, 80.00, '9780000000065', 40, 15, TRUE),
 ('Coca-Cola 500ml', 'කොකා කෝලා', 'Refreshing soft drink.', 4, 250.00, 200.00, '9780000000072', 200, 30, FALSE),
 ('Fresh Ginger Tea', 'ඉඟුරු තේ', 'A warm cup of traditional ginger black tea.', 4, 100.00, 30.00, '9780000000089', 500, 50, FALSE);
+
+-- Prepped Items Seed Data
+INSERT IGNORE INTO prepped_items (name, sinhala_name, unit, current_stock, min_stock_level, is_default) VALUES
+('Kirimalu', 'කිරිමාළු', 'units', 0.00, 5.00, TRUE),
+('Miris Malu', 'මිරිස් මාළු', 'units', 0.00, 5.00, TRUE),
+('Drumstick', 'කුකුළු කකුල්', 'units', 0.00, 5.00, TRUE),
+('Breast', 'කුකුළු පපුව', 'units', 0.00, 5.00, TRUE),
+('Rolls', 'රෝල්ස්', 'units', 0.00, 10.00, TRUE),
+('Egg (Boiled)', 'තැම්බූ බිත්තර', 'units', 0.00, 10.00, TRUE);
 
 -- Dining Tables
 INSERT INTO dining_tables (table_number, capacity) VALUES

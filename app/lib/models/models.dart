@@ -1084,3 +1084,92 @@ class LeftoverFoodModel {
       };
 }
 
+class PreppedItemModel {
+  final int id;
+  final String name;
+  final String? sinhalaName;
+  final String unit;
+  final double currentStock;
+  final double minStockLevel;
+  final bool isDefault;
+
+  PreppedItemModel({
+    required this.id,
+    required this.name,
+    this.sinhalaName,
+    required this.unit,
+    required this.currentStock,
+    required this.minStockLevel,
+    this.isDefault = false,
+  });
+
+  factory PreppedItemModel.fromJson(Map<String, dynamic> json) => PreppedItemModel(
+        id: json['id'] ?? 0,
+        name: json['name'] ?? '',
+        sinhalaName: json['sinhala_name'],
+        unit: json['unit'] ?? 'units',
+        currentStock: double.tryParse(json['current_stock']?.toString() ?? '0') ?? 0.0,
+        minStockLevel: double.tryParse(json['min_stock_level']?.toString() ?? '0') ?? 0.0,
+        isDefault: json['is_default'] == true || json['is_default'] == 1,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'sinhala_name': sinhalaName,
+        'unit': unit,
+        'current_stock': currentStock,
+        'min_stock_level': minStockLevel,
+        'is_default': isDefault,
+      };
+}
+
+class PreppedItemLogModel {
+  final int id;
+  final int preppedItemId;
+  final String preppedItemName;
+  final double changeQty;
+  final String type;
+  final String? reason;
+  final int? userId;
+  final String recorderName;
+  final String timestamp;
+
+  PreppedItemLogModel({
+    required this.id,
+    required this.preppedItemId,
+    required this.preppedItemName,
+    required this.changeQty,
+    required this.type,
+    this.reason,
+    this.userId,
+    required this.recorderName,
+    required this.timestamp,
+  });
+
+  factory PreppedItemLogModel.fromJson(Map<String, dynamic> json) => PreppedItemLogModel(
+        id: json['id'] ?? 0,
+        preppedItemId: json['prepped_item_id'] ?? 0,
+        preppedItemName: json['prepped_item_name'] ?? '',
+        changeQty: double.tryParse(json['change_qty']?.toString() ?? '0') ?? 0.0,
+        type: json['type'] ?? 'addition',
+        reason: json['reason'],
+        userId: json['user_id'],
+        recorderName: json['recorder_name'] ?? json['user_name'] ?? json['username'] ?? 'Staff',
+        timestamp: json['timestamp'] ?? '',
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'prepped_item_id': preppedItemId,
+        'prepped_item_name': preppedItemName,
+        'change_qty': changeQty,
+        'type': type,
+        'reason': reason,
+        'user_id': userId,
+        'recorder_name': recorderName,
+        'timestamp': timestamp,
+      };
+}
+
+

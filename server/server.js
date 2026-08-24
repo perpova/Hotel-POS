@@ -386,6 +386,33 @@ app.post('/api/pos-stock/session/add', authenticateToken, async (req, res) => {
             [product_id, qty, userId]
         );
 
+        // Deduct matching prepped raw material stock if present (e.g. Egg Roti (Prepped Raw) or Egg Roti)
+        try {
+            const [prod] = await db.query('SELECT name FROM products WHERE id = ?', [product_id]);
+            if (prod) {
+                const rawName = `${prod.name} (Prepped Raw)`;
+                const matchingIngs = await db.query(
+                    `SELECT * FROM ingredients WHERE LOWER(name) = LOWER(?) OR LOWER(name) = LOWER(?)`,
+                    [rawName, prod.name]
+                );
+                if (matchingIngs.length > 0) {
+                    const ing = matchingIngs[0];
+                    const decQty = Math.min(Number(ing.stock_qty || 0), Number(qty));
+                    if (decQty > 0) {
+                        await db.query(`UPDATE ingredients SET stock_qty = GREATEST(0, stock_qty - ?) WHERE id = ?`, [decQty, ing.id]);
+                        const reasonStr = `POS Shift Stock Entry deduction (${qty} added to shift session)`;
+                        await db.query(
+                            `INSERT INTO ingredient_stock_logs (ingredient_id, change_qty, type, reason, user_id) VALUES (?, ?, 'used_for_pos_prep', ?, ?)`,
+                            [ing.id, -decQty, reasonStr, userId]
+                        );
+                        broadcast({ type: 'ingredient_stock_updated', data: { ingredientId: ing.id } });
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('Error auto-deducting raw prepped ingredient stock:', e);
+        }
+
         broadcast({ type: 'stock_updated', data: { productId: product_id, stock_qty: newStockQty } });
         broadcast({ type: 'pos_stock_session_updated', data: { sessionId, userId, productId: product_id } });
         broadcast({ type: 'database_synchronized' });
@@ -401,13 +428,21 @@ app.get('/api/pos-stock/session/current', authenticateToken, async (req, res) =>
         const userId = req.user.id;
         const sessionDate = new Date().toISOString().slice(0, 10);
 
-        const sessions = await db.query(
+        let sessions = await db.query(
             `SELECT * FROM pos_stock_sessions WHERE user_id = ? AND session_date = ? AND status = 'active' ORDER BY login_at DESC LIMIT 1`,
             [userId, sessionDate]
         );
 
         if (sessions.length === 0) {
-            return res.json({ session: null, items: [] });
+            const recentSessions = await db.query(
+                `SELECT * FROM pos_stock_sessions WHERE user_id = ? AND session_date = ? ORDER BY login_at DESC LIMIT 1`,
+                [userId, sessionDate]
+            );
+            if (recentSessions.length > 0) {
+                sessions = recentSessions;
+            } else {
+                return res.json({ session: null, items: [] });
+            }
         }
 
         const session = sessions[0];
@@ -644,6 +679,70 @@ app.post('/api/pos-stock/session/:id/snapshot', authenticateToken, async (req, r
     }
 });
 
+// Helper to automatically deduct from active leftover stock entries when sold/ordered
+async function deductLeftoverStock(connOrDb, productId, quantityNeeded) {
+    if (!productId || quantityNeeded <= 0) return 0;
+    try {
+        let leftovers;
+        if (connOrDb && typeof connOrDb.query === 'function') {
+            const res = await connOrDb.query(
+                `SELECT id, quantity FROM leftover_stock 
+                 WHERE product_id = ? AND status != 'discarded' AND quantity > 0 
+                 ORDER BY date_added ASC, id ASC`,
+                [productId]
+            );
+            leftovers = Array.isArray(res[0]) ? res[0] : res;
+        } else {
+            leftovers = await db.query(
+                `SELECT id, quantity FROM leftover_stock 
+                 WHERE product_id = ? AND status != 'discarded' AND quantity > 0 
+                 ORDER BY date_added ASC, id ASC`,
+                [productId]
+            );
+        }
+
+        if (!leftovers || leftovers.length === 0) return 0;
+
+        let remainingToDeduct = quantityNeeded;
+        let totalDeducted = 0;
+
+        for (const item of leftovers) {
+            if (remainingToDeduct <= 0) break;
+            const currentQty = Number(item.quantity || 0);
+            if (currentQty <= 0) continue;
+
+            const deductFromThis = Math.min(currentQty, remainingToDeduct);
+            const newQty = currentQty - deductFromThis;
+
+            if (newQty <= 0) {
+                if (connOrDb && typeof connOrDb.execute === 'function') {
+                    await connOrDb.query("UPDATE leftover_stock SET quantity = 0, status = 'discarded' WHERE id = ?", [item.id]);
+                } else {
+                    await db.query("UPDATE leftover_stock SET quantity = 0, status = 'discarded' WHERE id = ?", [item.id]);
+                }
+            } else {
+                if (connOrDb && typeof connOrDb.execute === 'function') {
+                    await connOrDb.query("UPDATE leftover_stock SET quantity = ? WHERE id = ?", [newQty, item.id]);
+                } else {
+                    await db.query("UPDATE leftover_stock SET quantity = ? WHERE id = ?", [newQty, item.id]);
+                }
+            }
+
+            remainingToDeduct -= deductFromThis;
+            totalDeducted += deductFromThis;
+        }
+
+        if (totalDeducted > 0) {
+            broadcast({ type: 'leftover_stock_updated', data: { action: 'auto_decreased', product_id: productId, totalDeducted } });
+        }
+
+        return totalDeducted;
+    } catch (err) {
+        console.error('Error auto-deducting leftover stock:', err);
+        return 0;
+    }
+}
+
 // ----------------------------------------------------
 // LEFTOVER STOCK ENDPOINTS (Day-End Carry-Over Food)
 // ----------------------------------------------------
@@ -702,9 +801,9 @@ app.post('/api/pos-stock/leftovers', authenticateToken, async (req, res) => {
             return res.status(400).json({ error: 'product_id and valid quantity (>0) are required.' });
         }
 
-        const products = await db.query('SELECT name FROM products WHERE id = ?', [product_id]);
+        const products = await db.query('SELECT name, track_stock, stock_qty FROM products WHERE id = ?', [product_id]);
         if (products.length === 0) return res.status(404).json({ error: 'Product not found.' });
-        const productName = products[0].name;
+        const product = products[0];
 
         const userId = req.user.id;
         const users = await db.query('SELECT name FROM users WHERE id = ?', [userId]);
@@ -715,10 +814,22 @@ app.post('/api/pos-stock/leftovers', authenticateToken, async (req, res) => {
         const result = await db.query(
             `INSERT INTO leftover_stock (product_id, product_name, quantity, date_added, added_by_user_id, added_by_user_name, status, notes)
              VALUES (?, ?, ?, ?, ?, ?, 'pending_admin', ?)`,
-            [product_id, productName, qty, dateAdded, userId, userName, notes || null]
+            [product_id, product.name, qty, dateAdded, userId, userName, notes || null]
         );
 
+        // Also update product stock quantity so customers & POS can use it
+        if (product.track_stock) {
+            const newStock = (product.stock_qty || 0) + qty;
+            await db.query('UPDATE products SET stock_qty = ? WHERE id = ?', [newStock, product_id]);
+            await db.query(
+                `INSERT INTO stock_logs (product_id, change_qty, type, reason, user_id) VALUES (?, ?, 'purchase', 'Day-End Leftover carry-over stock', ?)`,
+                [product_id, qty, userId]
+            );
+            broadcast({ type: 'stock_updated', data: { productId: product_id, stock_qty: newStock } });
+        }
+
         broadcast({ type: 'leftover_stock_updated', data: { action: 'created', id: result.insertId } });
+        broadcast({ type: 'database_synchronized' });
         res.json({ success: true, id: result.insertId });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -736,14 +847,26 @@ app.put('/api/pos-stock/leftovers/:id/decrease', authenticateToken, async (req, 
         if (leftovers.length === 0) return res.status(404).json({ error: 'Leftover item not found.' });
         const item = leftovers[0];
 
-        const newQty = Math.max(0, item.quantity - decQty);
+        const actualDec = Math.min(item.quantity, decQty);
+        const newQty = item.quantity - actualDec;
         if (newQty === 0) {
             await db.query("UPDATE leftover_stock SET quantity = 0, status = 'discarded' WHERE id = ?", [id]);
         } else {
             await db.query("UPDATE leftover_stock SET quantity = ? WHERE id = ?", [newQty, id]);
         }
 
+        // Adjust product stock if tracked
+        if (item.product_id && actualDec > 0) {
+            await db.query('UPDATE products SET stock_qty = GREATEST(0, stock_qty - ?) WHERE id = ? AND track_stock = 1', [actualDec, item.product_id]);
+            await db.query(
+                `INSERT INTO stock_logs (product_id, change_qty, type, reason, user_id) VALUES (?, ?, 'adjustment', 'Manual leftover stock deduction', ?)`,
+                [item.product_id, -actualDec, req.user.id]
+            );
+            broadcast({ type: 'stock_updated', data: { productId: item.product_id } });
+        }
+
         broadcast({ type: 'leftover_stock_updated', data: { action: 'decreased', id, newQty } });
+        broadcast({ type: 'database_synchronized' });
         res.json({ success: true, new_quantity: newQty });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -771,18 +894,36 @@ app.put('/api/pos-stock/leftovers/:id/status', authenticateToken, async (req, re
 app.delete('/api/pos-stock/leftovers', authenticateToken, async (req, res) => {
     try {
         const { clear_type, id } = req.query; // 'expired', 'all', or specific item id
+        let itemsToDiscard = [];
+
         if (id) {
+            itemsToDiscard = await db.query("SELECT * FROM leftover_stock WHERE id = ? AND status != 'discarded' AND quantity > 0", [id]);
             await db.query("UPDATE leftover_stock SET status = 'discarded' WHERE id = ?", [id]);
         } else if (clear_type === 'all') {
+            itemsToDiscard = await db.query("SELECT * FROM leftover_stock WHERE status != 'discarded' AND quantity > 0");
             await db.query("UPDATE leftover_stock SET status = 'discarded'");
         } else {
             const yestObj = new Date();
             yestObj.setDate(yestObj.getDate() - 1);
             const yesterdayStr = yestObj.toISOString().slice(0, 10);
+            itemsToDiscard = await db.query("SELECT * FROM leftover_stock WHERE date_added < ? AND status != 'discarded' AND quantity > 0", [yesterdayStr]);
             await db.query("UPDATE leftover_stock SET status = 'discarded' WHERE date_added < ?", [yesterdayStr]);
         }
 
+        // Adjust product stock for discarded leftover items
+        for (const item of itemsToDiscard) {
+            if (item.product_id && item.quantity > 0) {
+                await db.query('UPDATE products SET stock_qty = GREATEST(0, stock_qty - ?) WHERE id = ? AND track_stock = 1', [item.quantity, item.product_id]);
+                await db.query(
+                    `INSERT INTO stock_logs (product_id, change_qty, type, reason, user_id) VALUES (?, ?, 'wastage', 'Discarded expired leftover food', ?)`,
+                    [item.product_id, -item.quantity, req.user.id]
+                );
+            }
+        }
+
         broadcast({ type: 'leftover_stock_updated', data: { action: 'cleared', clear_type, id } });
+        broadcast({ type: 'stock_updated' });
+        broadcast({ type: 'database_synchronized' });
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -884,6 +1025,23 @@ app.post('/api/auth/login', async (req, res) => {
         const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '24h' });
         
         await logAudit('login', 'users', user.id, `User ${username} logged in.`, user.id);
+        
+        // Automatically ensure active POS stock session for logged-in user for today
+        try {
+            const sessionDate = new Date().toISOString().slice(0, 10);
+            const activeSessions = await db.query(
+                `SELECT id FROM pos_stock_sessions WHERE user_id = ? AND session_date = ? AND status = 'active' LIMIT 1`,
+                [user.id, sessionDate]
+            );
+            if (activeSessions.length === 0) {
+                await db.query(
+                    `INSERT INTO pos_stock_sessions (user_id, session_date, login_at, status) VALUES (?, ?, NOW(), 'active')`,
+                    [user.id, sessionDate]
+                );
+            }
+        } catch (sessErr) {
+            console.error('Auto session creation error on login:', sessErr);
+        }
         
         loginAttemptsTotal.inc({ result: 'success' });
         res.json({
@@ -1263,6 +1421,91 @@ app.post('/api/ingredients/:id/stock', authenticateToken, async (req, res) => {
         // Fetch updated ingredient
         const [updated] = await db.query('SELECT * FROM ingredients WHERE id = ?', [id]);
         res.json(updated);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ----------------------------------------------------
+// Overnight Prepared Food: Fry / Cook & Transfer Raw Prep to POS Stock
+// ----------------------------------------------------
+app.post('/api/pos-stock/fry-and-transfer', authenticateToken, async (req, res) => {
+    const { ingredient_id, product_id, qty, notes } = req.body;
+    const transferQty = Number(qty);
+
+    if (!ingredient_id || !product_id || isNaN(transferQty) || transferQty <= 0) {
+        return res.status(400).json({ error: 'Valid ingredient_id, product_id, and quantity (> 0) are required.' });
+    }
+
+    try {
+        // 1. Fetch raw ingredient
+        const [ingredient] = await db.query('SELECT * FROM ingredients WHERE id = ?', [ingredient_id]);
+        if (!ingredient) {
+            return res.status(404).json({ error: 'Raw material ingredient not found.' });
+        }
+
+        // 2. Validate raw material stock level
+        const currentIngStock = Number(ingredient.stock_qty || 0);
+        if (currentIngStock < transferQty) {
+            return res.status(400).json({
+                error: `Insufficient raw material stock! ${ingredient.name} current stock is ${currentIngStock} ${ingredient.unit}, but tried to fry/transfer ${transferQty} units.`
+            });
+        }
+
+        // 3. Fetch POS product
+        const [product] = await db.query('SELECT * FROM products WHERE id = ?', [product_id]);
+        if (!product) {
+            return res.status(404).json({ error: 'Target POS product not found.' });
+        }
+
+        // 4. Deduct raw ingredient stock & log
+        await db.query('UPDATE ingredients SET stock_qty = stock_qty - ? WHERE id = ?', [transferQty, ingredient_id]);
+        const reasonStr = `Fried/Prepared ${transferQty} units into POS item "${product.name}"${notes ? ' (' + notes + ')' : ''}`;
+        await db.query(
+            'INSERT INTO ingredient_stock_logs (ingredient_id, change_qty, type, reason, user_id) VALUES (?, ?, ?, ?, ?)',
+            [ingredient_id, -transferQty, 'used_for_pos_prep', reasonStr, req.user.id]
+        );
+
+        // 5. Update POS product stock
+        await db.query('UPDATE products SET stock_qty = stock_qty + ? WHERE id = ?', [transferQty, product_id]);
+
+        // 6. Ensure active stock session for current user
+        const todayStr = new Date().toISOString().slice(0, 10);
+        let [session] = await db.query(
+            'SELECT * FROM pos_stock_sessions WHERE user_id = ? AND session_date = ? AND status = "active" LIMIT 1',
+            [req.user.id, todayStr]
+        );
+
+        if (!session) {
+            // Open session automatically
+            const result = await db.query(
+                'INSERT INTO pos_stock_sessions (user_id, session_date, login_at, status) VALUES (?, ?, NOW(), "active")',
+                [req.user.id, todayStr]
+            );
+            session = { id: result.insertId };
+        }
+
+        // Insert entry into active session
+        await db.query(
+            'INSERT INTO pos_stock_session_entries (session_id, product_id, added_qty, added_at) VALUES (?, ?, ?, NOW())',
+            [session.id, product_id, transferQty]
+        );
+
+        // 7. Audit trail
+        await logAudit('edit_stock', 'products', product_id, `Fried ${transferQty} units from raw ingredient ${ingredient.name} into POS product ${product.name}`, req.user.id);
+
+        // 8. Real-time WebSocket notifications
+        broadcast({ type: 'ingredient_stock_updated', data: { ingredientId: ingredient_id } });
+        broadcast({ type: 'pos_stock_session_updated', data: { productId: product_id } });
+        broadcast({ type: 'stock_updated', data: { productId: product_id } });
+        broadcast({ type: 'database_synchronized' });
+
+        res.json({
+            success: true,
+            message: `Successfully fried & transferred ${transferQty} units of ${ingredient.name} into POS stock for ${product.name}!`,
+            ingredient_remaining: currentIngStock - transferQty,
+            new_pos_product_stock: Number(product.stock_qty || 0) + transferQty,
+        });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -3023,6 +3266,11 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
                 );
             }
 
+            // Auto-deduct from Leftover Stock if active carry-over entries exist for this product
+            if (item.product_id) {
+                await deductLeftoverStock(conn, item.product_id, item.quantity);
+            }
+
             // Deduct recipe/raw ingredients if product has any
             if (prodRows[0] && prodRows[0].ingredients) {
                 try {
@@ -4047,6 +4295,177 @@ app.delete('/api/users/:id', authenticateToken, async (req, res) => {
         broadcast({ type: 'database_synchronized' });
 
         res.json({ success: true, message: 'User deactivated successfully' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ----------------------------------------------------
+// PREPPED & COOKED ITEMS ENDPOINTS
+// ----------------------------------------------------
+
+// GET /api/prepped-items — List all prepped items
+app.get('/api/prepped-items', authenticateToken, async (req, res) => {
+    try {
+        const items = await db.query('SELECT * FROM prepped_items ORDER BY is_default DESC, id ASC');
+        res.json(items);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/prepped-items — Create new prepped item (Admin only)
+app.post('/api/prepped-items', authenticateToken, async (req, res) => {
+    try {
+        const userRole = (req.user && req.user.role ? req.user.role : '').toLowerCase();
+        const isAdmin = userRole === 'admin' || userRole === 'owner';
+        if (!isAdmin) {
+            return res.status(403).json({ error: 'Only admins can create prepped items and measurement units.' });
+        }
+
+        const { name, sinhala_name, unit, min_stock_level } = req.body;
+        if (!name || name.trim().length === 0) {
+            return res.status(400).json({ error: 'Item name is required.' });
+        }
+
+        const result = await db.query(
+            `INSERT INTO prepped_items (name, sinhala_name, unit, min_stock_level, current_stock) VALUES (?, ?, ?, ?, 0.00)`,
+            [name.trim(), sinhala_name ? sinhala_name.trim() : null, unit || 'units', min_stock_level || 5.00]
+        );
+
+        broadcast({ type: 'prepped_stock_updated' });
+        broadcast({ type: 'database_synchronized' });
+        res.json({ id: result.insertId, name: name.trim(), unit: unit || 'units' });
+    } catch (err) {
+        if (err.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'Item with this name already exists.' });
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// PUT /api/prepped-items/:id — Update prepped item metadata/unit (Admin only)
+app.put('/api/prepped-items/:id', authenticateToken, async (req, res) => {
+    try {
+        const userRole = (req.user && req.user.role ? req.user.role : '').toLowerCase();
+        const isAdmin = userRole === 'admin' || userRole === 'owner';
+        if (!isAdmin) {
+            return res.status(403).json({ error: 'Only admins can update prepped items.' });
+        }
+
+        const { id } = req.params;
+        const { name, sinhala_name, unit, min_stock_level, current_stock } = req.body;
+
+        await db.query(`
+            UPDATE prepped_items SET
+                name = COALESCE(?, name),
+                sinhala_name = COALESCE(?, sinhala_name),
+                unit = COALESCE(?, unit),
+                min_stock_level = COALESCE(?, min_stock_level),
+                current_stock = COALESCE(?, current_stock)
+            WHERE id = ?
+        `, [name || null, sinhala_name || null, unit || null, min_stock_level || null, current_stock || null, id]);
+
+        broadcast({ type: 'prepped_stock_updated' });
+        broadcast({ type: 'database_synchronized' });
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// DELETE /api/prepped-items/:id — Delete prepped item (Admin only)
+app.delete('/api/prepped-items/:id', authenticateToken, async (req, res) => {
+    try {
+        const userRole = (req.user && req.user.role ? req.user.role : '').toLowerCase();
+        const isAdmin = userRole === 'admin' || userRole === 'owner';
+        if (!isAdmin) {
+            return res.status(403).json({ error: 'Only admins can delete prepped items.' });
+        }
+
+        await db.query('DELETE FROM prepped_items WHERE id = ?', [req.params.id]);
+        broadcast({ type: 'prepped_stock_updated' });
+        broadcast({ type: 'database_synchronized' });
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/prepped-items/:id/adjust — Record stock count entry/adjustment with automatic raw egg deduction
+app.post('/api/prepped-items/:id/adjust', authenticateToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { change_qty, type, reason, deduct_raw_egg } = req.body;
+        const qty = parseFloat(change_qty);
+        if (isNaN(qty) || qty === 0) {
+            return res.status(400).json({ error: 'Valid change_qty is required.' });
+        }
+
+        const items = await db.query('SELECT * FROM prepped_items WHERE id = ?', [id]);
+        if (items.length === 0) {
+            return res.status(404).json({ error: 'Prepped item not found.' });
+        }
+        const item = items[0];
+
+        // Update stock
+        let newStock = item.current_stock + qty;
+        if (type === 'adjustment') {
+            newStock = Math.max(0, qty);
+        } else {
+            newStock = Math.max(0, newStock);
+        }
+
+        await db.query('UPDATE prepped_items SET current_stock = ? WHERE id = ?', [newStock, id]);
+
+        const recorderName = req.user.name || req.user.username || 'Staff';
+        const userId = req.user.id;
+        const logType = type || (qty > 0 ? 'addition' : 'deduction');
+
+        await db.query(`
+            INSERT INTO prepped_item_logs (prepped_item_id, prepped_item_name, change_qty, type, reason, user_id, recorder_name)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        `, [id, item.name, qty, logType, reason || 'Stock count update', userId, recorderName]);
+
+        // Automatic raw egg deduction logic if Boiled Eggs added
+        const isBoiledEgg = item.name.toLowerCase().includes('egg') || item.name.toLowerCase().includes('බිත්තර');
+        const shouldDeductRawEgg = (deduct_raw_egg === true || deduct_raw_egg === 'true' || isBoiledEgg) && qty > 0;
+
+        if (shouldDeductRawEgg) {
+            try {
+                // Find Raw Egg ingredient in ingredients table
+                const rawEggIngs = await db.query(`SELECT * FROM ingredients WHERE LOWER(name) = 'egg' OR LOWER(name) LIKE '%egg%' LIMIT 1`);
+                if (rawEggIngs.length > 0) {
+                    const rawEgg = rawEggIngs[0];
+                    const eggDeductQty = qty; // 1 Boiled Egg uses 1 Raw Egg
+                    await db.query(`UPDATE ingredients SET stock_qty = GREATEST(0, stock_qty - ?) WHERE id = ?`, [eggDeductQty, rawEgg.id]);
+                    await db.query(`
+                        INSERT INTO ingredient_stock_logs (ingredient_id, change_qty, type, reason, user_id)
+                        VALUES (?, ?, 'boiled_egg_prep', ?, ?)
+                    `, [rawEgg.id, -eggDeductQty, `Boiled Egg batch prep (${qty} eggs boiled by ${recorderName})`, userId]);
+                    broadcast({ type: 'ingredient_stock_updated', data: { ingredientId: rawEgg.id } });
+                }
+            } catch (eggErr) {
+                console.error('Error auto deducting raw eggs:', eggErr.message);
+            }
+        }
+
+        broadcast({ type: 'prepped_stock_updated', data: { itemId: id, newStock } });
+        broadcast({ type: 'database_synchronized' });
+        res.json({ success: true, new_stock: newStock });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/prepped-items/logs — Retrieve prepped stock logs for reports & admin audit
+app.get('/api/prepped-items/logs', authenticateToken, async (req, res) => {
+    try {
+        const logs = await db.query(`
+            SELECT pil.*, u.username, u.name as user_name
+            FROM prepped_item_logs pil
+            LEFT JOIN users u ON pil.user_id = u.id
+            ORDER BY pil.timestamp DESC
+        `);
+        res.json(logs);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -6844,7 +7263,7 @@ app.post('/api/customer-orders', async (req, res) => {
 
         const orderId = orderResult.insertId;
 
-        // 7. Insert Order Items
+        // 7. Insert Order Items & deduct stock/leftovers
         for (const item of processedItems) {
             await db.query(`
                 INSERT INTO order_items (
@@ -6855,7 +7274,18 @@ app.post('/api/customer-orders', async (req, res) => {
                 orderId, orderNumber, item.product_id, item.product_name, item.product_sinhala_name,
                 item.quantity, item.price, item.notes, item.status, item.is_short_eat ? 1 : 0
             ]);
+
+            // Reduce product stock & leftover stock for online/QR customer orders
+            if (item.product_id) {
+                await db.query('UPDATE products SET stock_qty = GREATEST(0, stock_qty - ?) WHERE id = ? AND track_stock = 1', [item.quantity, item.product_id]);
+                await db.query(
+                    'INSERT INTO stock_logs (product_id, change_qty, type, reason) VALUES (?, ?, "sale", ?)',
+                    [item.product_id, -item.quantity, `Customer QR Order: ${orderNumber}`]
+                );
+                await deductLeftoverStock(db, item.product_id, item.quantity);
+            }
         }
+        broadcast({ type: 'stock_updated' });
 
         // 8. Update Table status to 'seated'
         await db.query('UPDATE dining_tables SET status = "seated", current_order_id = ? WHERE id = ?', [orderId, table.id]);
