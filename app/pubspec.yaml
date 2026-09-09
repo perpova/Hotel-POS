@@ -57,6 +57,7 @@ flutter:
   assets:
     - assets/images/mhb_logo.png
     - assets/images/perpova logo.png
+    - assets/images/perpova pos.png
     - assets/fonts/NotoSansSinhala-Regular.ttf
     - assets/fonts/Isiagni.ttf
 
@@ -69,9 +70,9 @@ flutter:
 flutter_launcher_icons:
   android: true
   ios: false
-  image_path: "assets/images/mhb_logo.png"
+  image_path: "assets/images/perpova pos.png"
   min_sdk_android: 21
   windows:
     generate: true
-    image_path: "assets/images/mhb_logo.png"
+    image_path: "assets/images/perpova pos.png"
     icon_size: 48  # min 48, max 256

@@ -26,26 +26,17 @@ class DashboardController extends ChangeNotifier {
     }
   }
 
+  static DateTimeRange _defaultTodayRange() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return DateTimeRange(start: today, end: today);
+  }
+
   // Date ranges for individual panels
-  DateTimeRange _salesDateRange = DateTimeRange(
-    start: DateTime(2026, 7, 1),
-    end: DateTime(2026, 7, 31),
-  );
-
-  DateTimeRange _ordersDateRange = DateTimeRange(
-    start: DateTime(2026, 7, 1),
-    end: DateTime(2026, 7, 31),
-  );
-
-  DateTimeRange _customerDateRange = DateTimeRange(
-    start: DateTime(2026, 7, 1),
-    end: DateTime(2026, 7, 31),
-  );
-
-  DateTimeRange _statsDateRange = DateTimeRange(
-    start: DateTime(2026, 7, 11),
-    end: DateTime(2026, 7, 11),
-  );
+  DateTimeRange _salesDateRange = _defaultTodayRange();
+  DateTimeRange _ordersDateRange = _defaultTodayRange();
+  DateTimeRange _customerDateRange = _defaultTodayRange();
+  DateTimeRange _statsDateRange = _defaultTodayRange();
 
   // Getters
   Map<String, dynamic>? get reportData => _reportData;
@@ -78,29 +69,19 @@ class DashboardController extends ChangeNotifier {
     }
   }
 
-  void setSalesDateRange(DateTimeRange range) {
+  void setDateRange(DateTimeRange range) {
     _salesDateRange = range;
-    notifyListeners();
-    loadDashboardData(range: range);
-  }
-
-  void setOrdersDateRange(DateTimeRange range) {
     _ordersDateRange = range;
-    notifyListeners();
-    loadDashboardData(range: range);
-  }
-
-  void setCustomerDateRange(DateTimeRange range) {
     _customerDateRange = range;
-    notifyListeners();
-    loadDashboardData(range: range);
-  }
-
-  void setStatsDateRange(DateTimeRange range) {
     _statsDateRange = range;
     notifyListeners();
     loadDashboardData(range: range);
   }
+
+  void setSalesDateRange(DateTimeRange range) => setDateRange(range);
+  void setOrdersDateRange(DateTimeRange range) => setDateRange(range);
+  void setCustomerDateRange(DateTimeRange range) => setDateRange(range);
+  void setStatsDateRange(DateTimeRange range) => setDateRange(range);
 
   Future<void> loadDashboardData({DateTimeRange? range}) async {
     _isLoading = true;

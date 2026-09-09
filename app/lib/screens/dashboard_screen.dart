@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../controllers/dashboard_controller.dart';
+import '../services/api_service.dart';
 import '../widgets/dashboard/reminder_banner.dart';
 import '../widgets/dashboard/greeting_header.dart';
 import '../widgets/dashboard/overview_cards.dart';
@@ -21,12 +23,34 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
+  StreamSubscription? _wsSub;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Provider.of<DashboardController>(context, listen: false).loadDashboardData();
     });
+
+    _wsSub = APIService.instance.eventStream.listen((event) {
+      final type = event['type'];
+      if (type == 'order_created' ||
+          type == 'order_updated' ||
+          type == 'order_status_updated' ||
+          type == 'order_deleted' ||
+          type == 'database_synchronized' ||
+          type == 'shift_updated') {
+        if (mounted) {
+          Provider.of<DashboardController>(context, listen: false).loadDashboardData();
+        }
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _wsSub?.cancel();
+    super.dispose();
   }
 
   @override

@@ -294,13 +294,19 @@ class _MainLayoutState extends State<MainLayout> {
           )
         else
           Container(
-            padding: const EdgeInsets.all(6),
+            width: 34,
+            height: 34,
             margin: const EdgeInsets.only(right: 8),
             decoration: BoxDecoration(
-              color: AppTheme.primary.withOpacity(0.1),
-              shape: BoxShape.circle,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
             ),
-            child: Icon(Icons.restaurant_menu, color: AppTheme.primary, size: 22),
+            clipBehavior: Clip.antiAlias,
+            child: Image.asset(
+              'assets/images/perpova pos.png',
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Icon(Icons.restaurant_menu, color: AppTheme.primary, size: 22),
+            ),
           ),
         // Two-tone name text
         Flexible(
@@ -954,13 +960,26 @@ class _MainLayoutState extends State<MainLayout> {
                     )
                   else
                     Container(
-                      padding: const EdgeInsets.all(8),
+                      width: 42,
+                      height: 42,
                       margin: const EdgeInsets.only(right: 12),
                       decoration: BoxDecoration(
-                        color: AppTheme.primary.withOpacity(0.1),
-                        shape: BoxShape.circle,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.04),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
                       ),
-                      child: Icon(Icons.restaurant_menu, color: AppTheme.primary, size: 20),
+                      clipBehavior: Clip.antiAlias,
+                      child: Image.asset(
+                        'assets/images/perpova pos.png',
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Icon(Icons.restaurant_menu, color: AppTheme.primary, size: 24),
+                      ),
                     ),
                   // Company Name Text
                   Expanded(
