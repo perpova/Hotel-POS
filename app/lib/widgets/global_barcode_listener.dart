@@ -127,9 +127,16 @@ class _GlobalBarcodeListenerState extends State<GlobalBarcodeListener> {
     bool isKot = false;
     bool isInv = false;
     bool isPreOrder = false;
+    bool isDelivery = false;
 
     final upper = cleanBarcode.toUpperCase();
-    if (upper.startsWith('KOT-')) {
+    if (upper.startsWith('DEL-')) {
+      cleanBarcode = cleanBarcode.substring(4);
+      isDelivery = true;
+    } else if (upper.startsWith('D-')) {
+      cleanBarcode = cleanBarcode.substring(2);
+      isDelivery = true;
+    } else if (upper.startsWith('KOT-')) {
       cleanBarcode = cleanBarcode.substring(4);
       isKot = true;
     } else if (upper.startsWith('K-')) {
@@ -218,6 +225,15 @@ class _GlobalBarcodeListenerState extends State<GlobalBarcodeListener> {
 
       if (order == null) {
         _showToast('No order found with barcode: $barcode', isError: true);
+        return;
+      }
+
+      // ── Delivery Bill Barcode Scan -> Open Payment Processing Screen ────────
+      if (isDelivery || order.orderType == 'delivery' || order.barcode.toUpperCase().startsWith('DEL-')) {
+        if (posController != null) {
+          posController.triggerOrderPayment(order);
+          _showToast('Delivery order #${order.orderNumber} barcode scanned! Payment processing opened.');
+        }
         return;
       }
 

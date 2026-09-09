@@ -80,6 +80,7 @@ class POSController extends ChangeNotifier {
   
   // KDS & Orders status lists
   List<OrderModel> activeOrders = [];
+  List<OrderModel> recentDeliveryOrders = [];
   String voiceLanguage = 'English';
 
   // Table persistent orders state
@@ -105,6 +106,18 @@ class POSController extends ChangeNotifier {
   int unreadNotificationCount = 0;
   int? activePreOrderId;
   int? requestedScreenIndex;
+  OrderModel? pendingPaymentOrder;
+
+  void triggerOrderPayment(OrderModel order) {
+    pendingPaymentOrder = order;
+    requestedScreenIndex = 1; // Ensure POS screen is active
+    notifyListeners();
+  }
+
+  void clearPendingPaymentOrder() {
+    pendingPaymentOrder = null;
+    notifyListeners();
+  }
 
   void navigateToScreen(int index) {
     requestedScreenIndex = index;
@@ -119,7 +132,10 @@ class POSController extends ChangeNotifier {
   }
 
   String getTableStatus(DiningTableModel table) {
-    if (tableCarts.containsKey(table.id) && tableCarts[table.id]!.isNotEmpty) {
+    if (tableStatuses.containsKey(table.id) && tableStatuses[table.id] != 'empty') {
+      return tableStatuses[table.id]!;
+    }
+    if ((selectedTable?.id == table.id && cart.isNotEmpty) || (tableCarts.containsKey(table.id) && tableCarts[table.id]!.isNotEmpty)) {
       return tableStatuses[table.id] ?? 'seated';
     }
     return table.status;
@@ -127,6 +143,30 @@ class POSController extends ChangeNotifier {
 
   void setTableStatus(int tableId, String status) async {
     tableStatuses[tableId] = status;
+    if (selectedTable != null && selectedTable!.id == tableId) {
+      selectedTable = DiningTableModel(
+        id: selectedTable!.id,
+        tableNumber: selectedTable!.tableNumber,
+        capacity: selectedTable!.capacity,
+        status: status,
+        stewardName: selectedTable!.stewardName,
+        currentOrderId: selectedTable!.currentOrderId,
+        activeStatus: selectedTable!.activeStatus,
+      );
+    }
+    final tIdx = diningTables.indexWhere((t) => t.id == tableId);
+    if (tIdx != -1) {
+      final old = diningTables[tIdx];
+      diningTables[tIdx] = DiningTableModel(
+        id: old.id,
+        tableNumber: old.tableNumber,
+        capacity: old.capacity,
+        status: status,
+        stewardName: old.stewardName,
+        currentOrderId: old.currentOrderId,
+        activeStatus: old.activeStatus,
+      );
+    }
     if (isOnline) {
       try {
         await _api.updateTableStatus(tableId, status, stewardName: stewardName);
@@ -911,6 +951,41 @@ class POSController extends ChangeNotifier {
           );
         }));
         
+        // Fetch and populate recent delivery orders (both unpaid and delivered)
+        final deliveryOrds = ords.where((o) => o.orderType == 'delivery').toList();
+        recentDeliveryOrders = await Future.wait(deliveryOrds.map((o) async {
+          List<OrderItemModel> items = [];
+          try {
+            items = await _api.getOrderItems(o.id!);
+          } catch (_) {}
+          return OrderModel(
+            id: o.id,
+            orderNumber: o.orderNumber,
+            tableId: o.tableId,
+            orderType: o.orderType,
+            deliveryPlatform: o.deliveryPlatform,
+            customerId: o.customerId,
+            stewardName: o.stewardName,
+            status: o.status,
+            paymentStatus: o.paymentStatus,
+            paymentMethod: o.paymentMethod,
+            subtotal: o.subtotal,
+            discount: o.discount,
+            total: o.total,
+            cashierId: o.cashierId,
+            shiftId: o.shiftId,
+            kotPrinted: o.kotPrinted,
+            ackPrinted: o.ackPrinted,
+            cardTxReference: o.cardTxReference,
+            barcode: o.barcode,
+            createdAt: o.createdAt,
+            updatedAt: o.updatedAt,
+            receivedAmount: o.receivedAmount,
+            changeAmount: o.changeAmount,
+            items: items,
+          );
+        }));
+        
         // Restore Dine-In tables state from active unpaid orders (e.g. after a power cut or restart)
         final activeDineInOrders = activeOrders.where((o) => o.orderType == 'dine_in' && o.tableId != null).toList();
         
@@ -1250,7 +1325,19 @@ class POSController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void addToCart(ProductModel product, {int quantity = 1, String? notes, List<ProductExtra> extras = const [], double? customPrice}) {
+  bool get isSelectedTableBilling {
+    if (orderType == 'dine_in' && selectedTable != null) {
+      final tid = selectedTable!.id;
+      final currentStatus = tableStatuses[tid] ?? selectedTable!.status;
+      return currentStatus == 'billing';
+    }
+    return false;
+  }
+
+  bool addToCart(ProductModel product, {int quantity = 1, String? notes, List<ProductExtra> extras = const [], double? customPrice}) {
+    if (isSelectedTableBilling) {
+      return false;
+    }
     final currentPrice = customPrice ?? getProductActivePrice(product);
     final wasEmpty = cart.isEmpty;
     
@@ -1293,6 +1380,7 @@ class POSController extends ChangeNotifier {
     notifyListeners();
     _broadcastLiveState();
     _triggerTableAutoSync();
+    return true;
   }
 
   Timer? _tableAutoSyncTimer;
@@ -1368,7 +1456,10 @@ class POSController extends ChangeNotifier {
     });
   }
 
-  void updateCartQuantity(int index, int quantity) {
+  bool updateCartQuantity(int index, int quantity) {
+    if (index >= 0 && index < cart.length && quantity > cart[index].quantity && isSelectedTableBilling) {
+      return false;
+    }
     if (quantity <= 0) {
       cart.removeAt(index);
       if (cart.isEmpty) {
@@ -1394,6 +1485,7 @@ class POSController extends ChangeNotifier {
     notifyListeners();
     _broadcastLiveState();
     _triggerTableAutoSync();
+    return true;
   }
 
   void updateCartNotes(int index, String? notes) {
@@ -1469,6 +1561,7 @@ class POSController extends ChangeNotifier {
       orderType = 'dine_in';
       selectTable(t);
     } else {
+      orderType = 'takeaway';
       notifyListeners();
     }
   }
@@ -1781,6 +1874,57 @@ class POSController extends ChangeNotifier {
       'orderId': orderId,
       'orderNumber': orderNum,
     };
+  }
+
+  Future<void> collectDeliveryPayment({
+    required OrderModel order,
+    required String paymentMethod,
+    required double receivedAmount,
+    required double changeAmount,
+  }) async {
+    final now = DateTime.now().toIso8601String();
+    if (isOnline) {
+      await _api.updateOrderOnline(order.id!, {
+        'status': 'delivered',
+        'payment_status': 'paid',
+        'payment_method': paymentMethod,
+        'received_amount': receivedAmount,
+        'change_amount': changeAmount,
+        'updated_at': now,
+      });
+    } else {
+      final updated = OrderModel(
+        id: order.id,
+        orderNumber: order.orderNumber,
+        tableId: order.tableId,
+        orderType: order.orderType,
+        deliveryPlatform: order.deliveryPlatform,
+        customerId: order.customerId,
+        stewardName: order.stewardName,
+        status: 'delivered',
+        paymentStatus: 'paid',
+        paymentMethod: paymentMethod,
+        subtotal: order.subtotal,
+        discount: order.discount,
+        total: order.total,
+        cashierId: order.cashierId,
+        shiftId: order.shiftId,
+        kotPrinted: order.kotPrinted,
+        ackPrinted: order.ackPrinted,
+        cardTxReference: order.cardTxReference,
+        barcode: order.barcode,
+        createdAt: order.createdAt,
+        updatedAt: now,
+        receivedAmount: receivedAmount,
+        changeAmount: changeAmount,
+        advancePayment: order.advancePayment,
+        balanceAmount: 0.00,
+        preOrderId: order.preOrderId,
+        items: order.items,
+      );
+      await LocalDB.instance.saveOrderOffline(updated);
+    }
+    await reloadEnvironment();
   }
 
   // 3. Process Card machine charge

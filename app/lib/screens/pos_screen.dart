@@ -151,6 +151,14 @@ class _POSScreenState extends State<POSScreen> {
       }
     }
 
+    if (controller.pendingPaymentOrder != null) {
+      final pendingOrder = controller.pendingPaymentOrder!;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        controller.clearPendingPaymentOrder();
+        _showOrderPaymentDialog(controller, pendingOrder);
+      });
+    }
+
     return Scaffold(
       backgroundColor: AppTheme.bgLight,
       body: isDesktop
@@ -593,12 +601,18 @@ class _POSScreenState extends State<POSScreen> {
         onTap: (!product.trackStock || product.stockQty > 0)
             ? () {
                 appSettings.playTouchSound();
+                if (controller.isSelectedTableBilling) {
+                  context.showWarningToast('Acknowledgement bill printed. Settle bill for Table ${controller.selectedTable?.tableNumber} before adding further products.');
+                  return;
+                }
                 if (product.hasSizes || product.hasExtras || product.hasAddons) {
                   _showProductOptionsModal(product, controller);
                 } else {
-                  controller.addToCart(product, quantity: 1);
-                  _focusCartItemForProduct(controller, product.id);
-                  context.showSuccessToast('${product.name} successfully added to cart');
+                  final added = controller.addToCart(product, quantity: 1);
+                  if (added) {
+                    _focusCartItemForProduct(controller, product.id);
+                    context.showSuccessToast('${product.name} successfully added to cart');
+                  }
                 }
               }
             : null,
@@ -725,13 +739,19 @@ class _POSScreenState extends State<POSScreen> {
                    InkWell(
                     onTap: product.stockQty > 0
                         ? () {
+                            if (controller.isSelectedTableBilling) {
+                              context.showWarningToast('Acknowledgement bill printed. Settle bill for Table ${controller.selectedTable?.tableNumber} before adding further products.');
+                              return;
+                            }
                             if (product.hasSizes || product.hasExtras || product.hasAddons) {
                               _showProductOptionsModal(product, controller);
                             } else {
                               final activePrice = controller.getProductActivePrice(product);
-                              controller.addToCart(product, quantity: 1, customPrice: activePrice);
-                              _focusCartItemForProduct(controller, product.id);
-                              context.showSuccessToast('${product.name} successfully added to cart');
+                              final added = controller.addToCart(product, quantity: 1, customPrice: activePrice);
+                              if (added) {
+                                _focusCartItemForProduct(controller, product.id);
+                                context.showSuccessToast('${product.name} successfully added to cart');
+                              }
                             }
                           }
                         : null,
@@ -981,42 +1001,35 @@ class _POSScreenState extends State<POSScreen> {
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Container(
-                    height: 44,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    decoration: BoxDecoration(
-                      color: AppTheme.cardLight,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: AppTheme.borderLight),
-                    ),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButtonFormField<String>(
-                        value: controller.waiters.any((w) => w.name == controller.stewardName) ? controller.stewardName : null,
-                        dropdownColor: AppTheme.cardLight,
-                        hint: Align(
-                          alignment: Alignment.center,
-                          child: Text('Select Waiter', style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightSecondary)),
-                        ),
-                        alignment: Alignment.center,
-                        decoration: const InputDecoration(
-                          border: InputBorder.none,
-                          enabledBorder: InputBorder.none,
-                          focusedBorder: InputBorder.none,
-                          filled: false,
-                          contentPadding: EdgeInsets.symmetric(vertical: 4),
-                        ),
-                        iconSize: 18,
-                        style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
-                        items: [
-                          ...controller.waiters.map((w) => DropdownMenuItem(
-                                value: w.name,
-                                child: Align(
-                                  alignment: Alignment.center,
-                                  child: Text(w.name, style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightPrimary)),
-                                ),
-                              )),
+                  child: InkWell(
+                    onTap: () => _showWaiterSelectionDialog(context, controller, controller.selectedTable),
+                    borderRadius: BorderRadius.circular(10),
+                    child: Container(
+                      height: 44,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: AppTheme.cardLight,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppTheme.borderLight),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              controller.stewardName == null || controller.stewardName!.isEmpty
+                                  ? 'Select Waiter'
+                                  : 'Waiter: ${controller.stewardName}',
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                fontWeight: controller.stewardName == null ? FontWeight.normal : FontWeight.bold,
+                                color: controller.stewardName == null ? AppTheme.textLightSecondary : AppTheme.textLightPrimary,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Icon(Icons.badge_outlined, size: 16, color: AppTheme.textLightSecondary),
                         ],
-                        onChanged: (val) => controller.setStewardName(val),
                       ),
                     ),
                   ),
@@ -1024,41 +1037,85 @@ class _POSScreenState extends State<POSScreen> {
               ],
             ),
           ] else if (controller.orderType == 'delivery') ...[
-            Container(
-              height: 44,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(
-                color: AppTheme.cardLight,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppTheme.borderLight),
-              ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButtonFormField<String>(
-                  value: controller.deliveryPlatform,
-                  dropdownColor: AppTheme.cardLight,
-                  hint: Align(
-                    alignment: Alignment.center,
-                    child: Text('Delivery Platform', style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightSecondary)),
+            Row(
+              children: [
+                // 1. Delivery Method Selection Card
+                Expanded(
+                  child: InkWell(
+                    onTap: () => _showDeliveryPlatformDialog(context, controller),
+                    borderRadius: BorderRadius.circular(10),
+                    child: Container(
+                      height: 44,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: AppTheme.cardLight,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppTheme.borderLight),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              controller.deliveryPlatform == null || controller.deliveryPlatform!.isEmpty
+                                  ? 'Select Delivery Method'
+                                  : 'Method: ${_getDeliveryPlatformLabel(controller.deliveryPlatform)}',
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                fontWeight: controller.deliveryPlatform == null ? FontWeight.normal : FontWeight.bold,
+                                color: controller.deliveryPlatform == null ? AppTheme.textLightSecondary : AppTheme.textLightPrimary,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Icon(Icons.two_wheeler_rounded, size: 16, color: AppTheme.textLightSecondary),
+                        ],
+                      ),
+                    ),
                   ),
-                  alignment: Alignment.center,
-                  decoration: const InputDecoration(
-                    border: InputBorder.none,
-                    enabledBorder: InputBorder.none,
-                    focusedBorder: InputBorder.none,
-                    filled: false,
-                    contentPadding: EdgeInsets.symmetric(vertical: 4),
-                  ),
-                  iconSize: 18,
-                  style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary),
-                  items: const [
-                    DropdownMenuItem(value: 'uber_eats', child: Align(alignment: Alignment.center, child: Text('Uber Eats', style: TextStyle(fontSize: 13)))),
-                    DropdownMenuItem(value: 'pickme', child: Align(alignment: Alignment.center, child: Text('PickMe Food', style: TextStyle(fontSize: 13)))),
-                    DropdownMenuItem(value: 'phone', child: Align(alignment: Alignment.center, child: Text('Phone Order', style: TextStyle(fontSize: 13)))),
-                    DropdownMenuItem(value: 'direct', child: Align(alignment: Alignment.center, child: Text('Direct Delivery', style: TextStyle(fontSize: 13)))),
-                  ],
-                  onChanged: (platform) => controller.setDeliveryPlatform(platform),
                 ),
-              ),
+                const SizedBox(width: 8),
+                // 2. Delivery Orders List / Rider Selection Card
+                Expanded(
+                  child: InkWell(
+                    onTap: () => _showDeliveryOrdersListDialog(context, controller),
+                    borderRadius: BorderRadius.circular(10),
+                    child: Container(
+                      height: 44,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: AppTheme.cardLight,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppTheme.borderLight),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Delivery List (${controller.activeOrders.where((o) => o.orderType == 'delivery').length})',
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: AppTheme.textLightPrimary,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF97316).withOpacity(0.15),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.list_alt_rounded, size: 14, color: Color(0xFFF97316)),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
           const SizedBox(height: 8),
@@ -1328,6 +1385,8 @@ class _POSScreenState extends State<POSScreen> {
                               : () {
                                   if (controller.orderType == 'staff_meal') {
                                     _handleStaffMealOrder(controller);
+                                  } else if (controller.orderType == 'delivery') {
+                                    _handleDeliveryOrderPlacement(controller);
                                   } else {
                                     _showOrderPaymentDialog(controller);
                                   }
@@ -1379,9 +1438,9 @@ class _POSScreenState extends State<POSScreen> {
     }
 
     final tableStatus = controller.tableStatuses[table.id] ?? table.status;
-    Color statusColor = Colors.green;
-    if (tableStatus == 'seated') statusColor = Colors.orange;
-    if (tableStatus == 'billing') statusColor = Colors.red;
+    Color statusColor = const Color(0xFF10B981); // Green once bill is paid / empty
+    if (tableStatus == 'seated') statusColor = const Color(0xFFEF4444); // Red while order is being placed
+    if (tableStatus == 'billing') statusColor = const Color(0xFFF59E0B); // Yellow after Ack bill printed
 
     return Container(
       margin: const EdgeInsets.only(top: 8),
@@ -1559,7 +1618,15 @@ class _POSScreenState extends State<POSScreen> {
               Expanded(
                 flex: 3,
                 child: ElevatedButton(
-                  onPressed: () => _showOrderPaymentDialog(controller),
+                  onPressed: () {
+                    if (controller.orderType == 'staff_meal') {
+                      _handleStaffMealOrder(controller);
+                    } else if (controller.orderType == 'delivery') {
+                      _handleDeliveryOrderPlacement(controller);
+                    } else {
+                      _showOrderPaymentDialog(controller);
+                    }
+                  },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF10B981),
                     foregroundColor: Colors.white,
@@ -1725,9 +1792,26 @@ class _POSScreenState extends State<POSScreen> {
     );
   }
 
+  Color _getOrderTypeColor(String type) {
+    switch (type) {
+      case 'takeaway':
+        return const Color(0xFF0EA5E9); // Sky Blue / Cyan for Takeaway
+      case 'dine_in':
+        return const Color(0xFF10B981); // Emerald Green for Dine-In
+      case 'delivery':
+        return const Color(0xFFF97316); // Bright Orange for Delivery
+      case 'staff_meal':
+        return const Color(0xFF9333EA); // Vivid Purple for Staff Meal
+      default:
+        return AppTheme.primary;
+    }
+  }
+
   Widget _buildFoodKingTypeButton(String type, String label, POSController controller) {
     final appSettings = Provider.of<AppSettingsController>(context, listen: false);
     final isSel = controller.orderType == type;
+    final typeColor = _getOrderTypeColor(type);
+
     return GestureDetector(
       onTap: () {
         appSettings.playTouchSound();
@@ -1736,16 +1820,16 @@ class _POSScreenState extends State<POSScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
         decoration: BoxDecoration(
-          color: isSel ? AppTheme.primary.withOpacity(0.12) : AppTheme.cardLight,
+          color: isSel ? typeColor.withOpacity(0.14) : AppTheme.cardLight,
           border: Border.all(
-            color: isSel ? AppTheme.primary : AppTheme.borderLight,
+            color: isSel ? typeColor : AppTheme.borderLight,
             width: isSel ? 2.0 : 1.0,
           ),
           borderRadius: BorderRadius.circular(12),
           boxShadow: isSel
               ? [
                   BoxShadow(
-                    color: AppTheme.primary.withOpacity(0.08),
+                    color: typeColor.withOpacity(0.12),
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   )
@@ -1757,7 +1841,7 @@ class _POSScreenState extends State<POSScreen> {
           children: [
             Icon(
               isSel ? Icons.radio_button_checked : Icons.radio_button_off,
-              color: isSel ? AppTheme.primary : AppTheme.textLightSecondary,
+              color: isSel ? typeColor : AppTheme.textLightSecondary,
               size: 16,
             ),
             const SizedBox(width: 6),
@@ -1768,7 +1852,7 @@ class _POSScreenState extends State<POSScreen> {
                 style: GoogleFonts.inter(
                   fontSize: 13,
                   fontWeight: isSel ? FontWeight.bold : FontWeight.w600,
-                  color: isSel ? AppTheme.primary : AppTheme.textLightPrimary,
+                  color: isSel ? typeColor : AppTheme.textLightPrimary,
                 ),
               ),
             ),
@@ -1962,13 +2046,23 @@ class _POSScreenState extends State<POSScreen> {
                     },
                     onSubmitted: (val) {
                       final newQty = int.tryParse(val.trim()) ?? item.quantity;
+                      if (newQty > item.quantity && controller.isSelectedTableBilling) {
+                        context.showWarningToast('Acknowledgement bill printed. Settle bill for Table ${controller.selectedTable?.tableNumber} before adding further products.');
+                        return;
+                      }
                       controller.updateCartQuantity(index, newQty);
                     },
                   ),
                 ),
                 const SizedBox(width: 6),
                 InkWell(
-                  onTap: () => controller.updateCartQuantity(index, item.quantity + 1),
+                  onTap: () {
+                    if (controller.isSelectedTableBilling) {
+                      context.showWarningToast('Acknowledgement bill printed. Settle bill for Table ${controller.selectedTable?.tableNumber} before adding further products.');
+                      return;
+                    }
+                    controller.updateCartQuantity(index, item.quantity + 1);
+                  },
                   borderRadius: BorderRadius.circular(6),
                   child: Container(
                     width: 32,
@@ -2001,8 +2095,83 @@ class _POSScreenState extends State<POSScreen> {
   }
 
   // ----------------------------------------------------
-  // FLOW IMPLEMENTATIONS (KOT, ACK, STAFF MEAL, MOCK TICKET PRINT)
+  // FLOW IMPLEMENTATIONS (KOT, ACK, STAFF MEAL, DELIVERY, MOCK TICKET PRINT)
   // ----------------------------------------------------
+  void _handleDeliveryOrderPlacement(POSController controller) async {
+    if (controller.cart.isEmpty) {
+      _showErrorSnackBar('Cart is empty');
+      return;
+    }
+
+    final itemsCopy = List<OrderItemModel>.from(controller.cart);
+    final subtotalCopy = controller.cartSubtotal;
+    final discountCopy = controller.discount;
+    final totalCopy = controller.cartTotal;
+    final selectedCust = controller.selectedCustomer;
+
+    final hasKotItems = controller.cart.any((item) {
+      final p = controller.products.firstWhere(
+        (prod) => prod.id == item.productId,
+        orElse: () => ProductModel(
+          id: 0,
+          name: '',
+          categoryId: 0,
+          price: 0,
+          cost: 0,
+          activePrice: 0,
+          isHappyHour: false,
+          stockQty: 0,
+          minStockLevel: 0,
+          isShortEat: false,
+          isKotItem: false,
+        ),
+      );
+      return p.id != 0 && p.isKotItem;
+    });
+
+    try {
+      final orderResult = await controller.placeOrder(
+        printKOT: hasKotItems,
+        printAck: false,
+        status: 'pending',
+        paymentStatus: 'unpaid',
+        paymentMethod: 'cash',
+        receivedAmount: 0.00,
+        changeAmount: 0.00,
+      );
+
+      final int orderId = orderResult['orderId'] ?? 0;
+      final String orderNum = orderResult['orderNumber'] ?? '';
+
+      final deliveryOrder = OrderModel(
+        id: orderId,
+        orderNumber: orderNum,
+        orderType: 'delivery',
+        deliveryPlatform: controller.deliveryPlatform,
+        customerId: selectedCust?.id,
+        stewardName: controller.stewardName,
+        status: 'pending',
+        paymentStatus: 'unpaid',
+        paymentMethod: 'cash',
+        subtotal: subtotalCopy,
+        discount: discountCopy,
+        total: totalCopy,
+        cashierId: APIService.instance.currentUser?.id ?? 1,
+        shiftId: controller.activeShift?.id ?? 1,
+        barcode: 'DEL-$orderNum',
+        createdAt: DateTime.now().toIso8601String(),
+        items: itemsCopy,
+      );
+
+      if (mounted) {
+        context.showSuccessToast('Delivery order #$orderNum placed (Cash on Delivery). Printing 3 Bills...');
+        await _print3DeliveryBillsDirect(context, controller, deliveryOrder);
+      }
+    } catch (e) {
+      _showErrorSnackBar('Failed to place delivery order: $e');
+    }
+  }
+
   void _handleStaffMealOrder(POSController controller) async {
     if (controller.cart.isEmpty) {
       _showErrorSnackBar('Cart is empty');
@@ -2157,6 +2326,10 @@ class _POSScreenState extends State<POSScreen> {
   // DIALOG FLOWS
   // ----------------------------------------------------
   void _showProductOptionsModal(ProductModel product, POSController controller) {
+    if (controller.isSelectedTableBilling) {
+      context.showWarningToast('Acknowledgement bill printed. Settle bill for Table ${controller.selectedTable?.tableNumber} before adding further products.');
+      return;
+    }
     final List<Map<String, dynamic>> sizes = product.hasSizes && product.sizes.isNotEmpty
         ? product.sizes.map((s) => {'name': s.name, 'price': s.price}).toList()
         : [
@@ -2947,6 +3120,7 @@ class _POSScreenState extends State<POSScreen> {
                       onTap: () {
                         ctrl.selectTable(table);
                         Navigator.pop(context);
+                        _showWaiterSelectionDialog(context, ctrl, table);
                       },
                       borderRadius: BorderRadius.circular(12),
                       child: Container(
@@ -3014,6 +3188,1086 @@ class _POSScreenState extends State<POSScreen> {
         );
       },
     );
+  }
+
+  void _showWaiterSelectionDialog(BuildContext context, POSController controller, DiningTableModel? table) {
+    final waitersList = controller.waiters.isNotEmpty
+        ? controller.waiters
+        : controller.allUsers.where((u) => u.role.toLowerCase() != 'admin').toList();
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        String searchQuery = '';
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            final filteredWaiters = waitersList.where((w) {
+              return w.name.toLowerCase().contains(searchQuery.toLowerCase()) ||
+                     w.role.toLowerCase().contains(searchQuery.toLowerCase());
+            }).toList();
+
+            return AlertDialog(
+              backgroundColor: AppTheme.cardLight,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              contentPadding: const EdgeInsets.all(20),
+              title: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primary.withOpacity(0.12),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(Icons.badge_outlined, color: AppTheme.primary, size: 20),
+                      ),
+                      const SizedBox(width: 10),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Select Waiter / Steward',
+                            style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 17, color: AppTheme.textLightPrimary),
+                          ),
+                          if (table != null)
+                            Text(
+                              'Table: ${table.tableNumber} (${table.capacity} Seats)',
+                              style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.close, size: 20, color: AppTheme.textLightSecondary),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 480,
+                height: 400,
+                child: Column(
+                  children: [
+                    Container(
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: AppTheme.isDarkMode ? Colors.black26 : Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppTheme.borderLight),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: Row(
+                        children: [
+                          Icon(Icons.search, size: 16, color: AppTheme.textLightSecondary),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextField(
+                              style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightPrimary),
+                              decoration: InputDecoration(
+                                hintText: 'Search waiter by name...',
+                                hintStyle: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary),
+                                border: InputBorder.none,
+                                isDense: true,
+                              ),
+                              onChanged: (val) {
+                                setStateDialog(() {
+                                  searchQuery = val;
+                                });
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    Expanded(
+                      child: filteredWaiters.isEmpty
+                          ? Center(
+                              child: Text(
+                                'No waiters found.',
+                                style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightSecondary),
+                              ),
+                            )
+                          : GridView.builder(
+                              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 2,
+                                crossAxisSpacing: 10,
+                                mainAxisSpacing: 10,
+                                childAspectRatio: 2.2,
+                              ),
+                              itemCount: filteredWaiters.length,
+                              itemBuilder: (context, index) {
+                                final waiter = filteredWaiters[index];
+                                final isSelected = controller.stewardName == waiter.name;
+
+                                return InkWell(
+                                  onTap: () {
+                                    controller.setStewardName(waiter.name);
+                                    Navigator.pop(ctx);
+                                    if (table != null) {
+                                      context.showSuccessToast('Assigned Waiter ${waiter.name} to ${table.tableNumber}');
+                                    } else {
+                                      context.showSuccessToast('Selected Waiter ${waiter.name}');
+                                    }
+                                  },
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: isSelected
+                                          ? AppTheme.primary.withOpacity(0.15)
+                                          : (AppTheme.isDarkMode ? Colors.white.withOpacity(0.04) : Colors.white),
+                                      border: Border.all(
+                                        color: isSelected ? AppTheme.primary : AppTheme.borderLight,
+                                        width: isSelected ? 2.0 : 1.0,
+                                      ),
+                                      borderRadius: BorderRadius.circular(12),
+                                      boxShadow: [
+                                        if (isSelected)
+                                          BoxShadow(
+                                            color: AppTheme.primary.withOpacity(0.12),
+                                            blurRadius: 6,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                      ],
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        CircleAvatar(
+                                          radius: 18,
+                                          backgroundColor: isSelected ? AppTheme.primary : AppTheme.primary.withOpacity(0.12),
+                                          child: Text(
+                                            waiter.name.isNotEmpty ? waiter.name[0].toUpperCase() : 'W',
+                                            style: GoogleFonts.outfit(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.bold,
+                                              color: isSelected ? Colors.white : AppTheme.primary,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Column(
+                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                waiter.name,
+                                                style: GoogleFonts.outfit(
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: isSelected ? AppTheme.primary : AppTheme.textLightPrimary,
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                              const SizedBox(height: 2),
+                                              Text(
+                                                waiter.role.toUpperCase(),
+                                                style: GoogleFonts.inter(
+                                                  fontSize: 9,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: AppTheme.textLightSecondary,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        if (isSelected)
+                                          Icon(Icons.check_circle, color: AppTheme.primary, size: 18),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        TextButton.icon(
+                          onPressed: () {
+                            controller.setStewardName(null);
+                            Navigator.pop(ctx);
+                            context.showWarningToast('Waiter selection cleared.');
+                          },
+                          icon: const Icon(Icons.person_off_outlined, size: 16, color: Colors.orange),
+                          label: Text('Unassign Waiter', style: GoogleFonts.inter(fontSize: 12, color: Colors.orange, fontWeight: FontWeight.bold)),
+                        ),
+                        ElevatedButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.primary,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          ),
+                          child: Text('Done', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  String _getDeliveryPlatformLabel(String? platform) {
+    switch (platform) {
+      case 'uber_eats':
+        return 'Uber Eats';
+      case 'pickme':
+        return 'PickMe Food';
+      case 'phone':
+        return 'Phone Order';
+      case 'direct':
+        return 'Direct Delivery';
+      default:
+        return platform ?? 'Select Delivery Method';
+    }
+  }
+
+  Widget _buildFilterChip(String label, bool isSelected, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected ? AppTheme.primary : (AppTheme.isDarkMode ? Colors.white10 : Colors.grey.shade200),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          label,
+          style: GoogleFonts.inter(
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            color: isSelected ? Colors.white : AppTheme.textLightSecondary,
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showDeliveryPlatformDialog(BuildContext context, POSController controller) {
+    final platforms = [
+      {'id': 'uber_eats', 'name': 'Uber Eats', 'icon': Icons.delivery_dining_rounded, 'color': const Color(0xFF10B981)},
+      {'id': 'pickme', 'name': 'PickMe Food', 'icon': Icons.two_wheeler_rounded, 'color': const Color(0xFFEF4444)},
+      {'id': 'phone', 'name': 'Phone Order', 'icon': Icons.phone_callback_rounded, 'color': const Color(0xFF9333EA)},
+      {'id': 'direct', 'name': 'Direct Delivery', 'icon': Icons.local_shipping_rounded, 'color': const Color(0xFF3B82F6)},
+    ];
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.cardLight,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        contentPadding: const EdgeInsets.all(20),
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF97316).withOpacity(0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.two_wheeler_rounded, color: Color(0xFFF97316), size: 20),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  'Select Delivery Method',
+                  style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 17, color: AppTheme.textLightPrimary),
+                ),
+              ],
+            ),
+            IconButton(
+              icon: Icon(Icons.close, size: 20, color: AppTheme.textLightSecondary),
+              onPressed: () => Navigator.pop(ctx),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 440,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 10,
+                  mainAxisSpacing: 10,
+                  childAspectRatio: 2.2,
+                ),
+                itemCount: platforms.length,
+                itemBuilder: (context, idx) {
+                  final p = platforms[idx];
+                  final isSelected = controller.deliveryPlatform == p['id'];
+                  final Color pColor = p['color'] as Color;
+
+                  return InkWell(
+                    onTap: () {
+                      controller.setDeliveryPlatform(p['id'] as String);
+                      Navigator.pop(ctx);
+                      context.showSuccessToast('Selected Delivery Method: ${p['name']}');
+                    },
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: isSelected ? pColor.withOpacity(0.15) : (AppTheme.isDarkMode ? Colors.white.withOpacity(0.04) : Colors.white),
+                        border: Border.all(
+                          color: isSelected ? pColor : AppTheme.borderLight,
+                          width: isSelected ? 2.0 : 1.0,
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(p['icon'] as IconData, color: isSelected ? pColor : AppTheme.textLightSecondary, size: 24),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              p['name'] as String,
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                                color: AppTheme.textLightPrimary,
+                              ),
+                            ),
+                          ),
+                          if (isSelected) Icon(Icons.check_circle_rounded, color: pColor, size: 18),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showDeliveryOrdersListDialog(BuildContext context, POSController controller) {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        String searchQuery = '';
+        String filterStatus = 'all';
+
+        return StatefulBuilder(
+          builder: (dialogCtx, setDialogState) {
+            final deliveryOrders = controller.recentDeliveryOrders.isNotEmpty
+                ? controller.recentDeliveryOrders
+                : controller.activeOrders.where((o) => o.orderType == 'delivery').toList();
+
+            final filtered = deliveryOrders.where((o) {
+              final matchQuery = o.orderNumber.toLowerCase().contains(searchQuery.toLowerCase()) ||
+                  (o.deliveryPlatform ?? '').toLowerCase().contains(searchQuery.toLowerCase()) ||
+                  (o.stewardName ?? '').toLowerCase().contains(searchQuery.toLowerCase());
+
+              if (!matchQuery) return false;
+              if (filterStatus == 'unpaid') return o.paymentStatus != 'paid';
+              if (filterStatus == 'delivered') return o.status == 'delivered';
+              return true;
+            }).toList();
+
+            return AlertDialog(
+              backgroundColor: AppTheme.cardLight,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              contentPadding: const EdgeInsets.all(20),
+              title: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF97316).withOpacity(0.12),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.list_alt_rounded, color: Color(0xFFF97316), size: 22),
+                      ),
+                      const SizedBox(width: 10),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Delivery Orders List',
+                            style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 18, color: AppTheme.textLightPrimary),
+                          ),
+                          Text(
+                            '${deliveryOrders.length} active delivery orders',
+                            style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.close, size: 20, color: AppTheme.textLightSecondary),
+                    onPressed: () => Navigator.pop(dialogCtx),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 680,
+                height: 520,
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Container(
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: AppTheme.isDarkMode ? Colors.black26 : Colors.grey.shade100,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: AppTheme.borderLight),
+                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            child: Row(
+                              children: [
+                                Icon(Icons.search, size: 16, color: AppTheme.textLightSecondary),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: TextField(
+                                    style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightPrimary),
+                                    decoration: InputDecoration(
+                                      hintText: 'Search order # or delivery platform...',
+                                      hintStyle: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary),
+                                      border: InputBorder.none,
+                                      isDense: true,
+                                    ),
+                                    onChanged: (val) {
+                                      setDialogState(() {
+                                        searchQuery = val;
+                                      });
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        _buildFilterChip('All', filterStatus == 'all', () => setDialogState(() => filterStatus = 'all')),
+                        const SizedBox(width: 4),
+                        _buildFilterChip('Unpaid', filterStatus == 'unpaid', () => setDialogState(() => filterStatus = 'unpaid')),
+                        const SizedBox(width: 4),
+                        _buildFilterChip('Delivered', filterStatus == 'delivered', () => setDialogState(() => filterStatus = 'delivered')),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+
+                    Expanded(
+                      child: filtered.isEmpty
+                          ? Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.two_wheeler_rounded, size: 48, color: AppTheme.textLightSecondary.withOpacity(0.4)),
+                                  const SizedBox(height: 10),
+                                  Text(
+                                    'No delivery orders found.',
+                                    style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textLightSecondary),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : ListView.separated(
+                              itemCount: filtered.length,
+                              separatorBuilder: (_, __) => const SizedBox(height: 10),
+                              itemBuilder: (context, idx) {
+                                final order = filtered[idx];
+                                final isPaid = order.paymentStatus == 'paid';
+                                final platformLabel = _getDeliveryPlatformLabel(order.deliveryPlatform);
+
+                                return InkWell(
+                                  onTap: () {
+                                    Navigator.pop(dialogCtx);
+                                    _showDeliveryOrderDetailsDialog(context, controller, order);
+                                  },
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(14),
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.isDarkMode ? Colors.white.withOpacity(0.04) : Colors.white,
+                                      border: Border.all(color: AppTheme.borderLight),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.all(10),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFF97316).withOpacity(0.12),
+                                            borderRadius: BorderRadius.circular(10),
+                                          ),
+                                          child: const Icon(Icons.two_wheeler_rounded, color: Color(0xFFF97316), size: 22),
+                                        ),
+                                        const SizedBox(width: 14),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Row(
+                                                children: [
+                                                  Text(
+                                                    '#${order.orderNumber}',
+                                                    style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 15, color: AppTheme.textLightPrimary),
+                                                  ),
+                                                  const SizedBox(width: 8),
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                    decoration: BoxDecoration(
+                                                      color: AppTheme.primary.withOpacity(0.12),
+                                                      borderRadius: BorderRadius.circular(6),
+                                                    ),
+                                                    child: Text(
+                                                      platformLabel,
+                                                      style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.primary),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                'Items: ${order.items.length} items | Created: ${_formatTimeString(order.createdAt)}',
+                                                style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        Column(
+                                          crossAxisAlignment: CrossAxisAlignment.end,
+                                          children: [
+                                            Text(
+                                              'LKR ${order.total.toStringAsFixed(2)}',
+                                              style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.primary),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Row(
+                                              children: [
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                  decoration: BoxDecoration(
+                                                    color: isPaid ? const Color(0xFF10B981).withOpacity(0.15) : const Color(0xFFEF4444).withOpacity(0.15),
+                                                    borderRadius: BorderRadius.circular(6),
+                                                  ),
+                                                  child: Text(
+                                                    isPaid ? 'PAID' : 'UNPAID',
+                                                    style: GoogleFonts.inter(
+                                                      fontSize: 10,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: isPaid ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                                                    ),
+                                                  ),
+                                                ),
+                                                if (!isPaid) ...[
+                                                  const SizedBox(width: 8),
+                                                  ElevatedButton(
+                                                    onPressed: () {
+                                                      Navigator.pop(dialogCtx);
+                                                      _showOrderPaymentDialog(controller, order);
+                                                    },
+                                                    style: ElevatedButton.styleFrom(
+                                                      backgroundColor: const Color(0xFFF97316),
+                                                      foregroundColor: Colors.white,
+                                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                                      minimumSize: Size.zero,
+                                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                                    ),
+                                                    child: Text(
+                                                      'Pay',
+                                                      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold),
+                                                    ),
+                                                  ),
+                                                ],
+                                                const SizedBox(width: 6),
+                                                Icon(Icons.chevron_right_rounded, color: AppTheme.textLightSecondary, size: 18),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showDeliveryOrderDetailsDialog(BuildContext context, POSController controller, OrderModel order) {
+    final isPaid = order.paymentStatus == 'paid';
+    final platformLabel = _getDeliveryPlatformLabel(order.deliveryPlatform);
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        backgroundColor: AppTheme.cardLight,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        contentPadding: const EdgeInsets.all(20),
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF97316).withOpacity(0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.receipt_long_rounded, color: Color(0xFFF97316), size: 22),
+                ),
+                const SizedBox(width: 10),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Delivery Order Details',
+                      style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 18, color: AppTheme.textLightPrimary),
+                    ),
+                    Text(
+                      'Order #${order.orderNumber} ($platformLabel)',
+                      style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            IconButton(
+              icon: Icon(Icons.close, size: 20, color: AppTheme.textLightSecondary),
+              onPressed: () => Navigator.pop(dialogCtx),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 580,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.isDarkMode ? Colors.white.withOpacity(0.04) : Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppTheme.borderLight),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Method: $platformLabel', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
+                        const SizedBox(height: 2),
+                        Text('Status: ${order.status.toUpperCase()}', style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary)),
+                        Text('Created: ${_formatTimeString(order.createdAt)}', style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textLightSecondary)),
+                      ],
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text('LKR ${order.total.toStringAsFixed(2)}', style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.primary)),
+                        const SizedBox(height: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: isPaid ? const Color(0xFF10B981).withOpacity(0.15) : const Color(0xFFEF4444).withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            isPaid ? 'PAYMENT COLLECTED' : 'PAYMENT PENDING',
+                            style: GoogleFonts.inter(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: isPaid ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+
+              Text('Order Items', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
+              const SizedBox(height: 6),
+              Container(
+                constraints: const BoxConstraints(maxHeight: 220),
+                decoration: BoxDecoration(
+                  border: Border.all(color: AppTheme.borderLight),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: order.items.length,
+                  separatorBuilder: (_, __) => Divider(height: 1, color: AppTheme.borderLight),
+                  itemBuilder: (context, idx) {
+                    final item = order.items[idx];
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            flex: 4,
+                            child: Text(item.productName, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textLightPrimary)),
+                          ),
+                          Expanded(
+                            flex: 1,
+                            child: Center(child: Text('${item.quantity}x', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary))),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: Align(
+                              alignment: Alignment.centerRight,
+                              child: Text('LKR ${item.price.toStringAsFixed(2)}', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textLightSecondary)),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: Align(
+                              alignment: Alignment.centerRight,
+                              child: Text('LKR ${(item.price * item.quantity).toStringAsFixed(2)}', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textLightPrimary)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 14),
+
+              Row(
+                children: [
+                  Expanded(
+                    child: SizedBox(
+                      height: 46,
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          _print3DeliveryBillsDirect(context, controller, order);
+                        },
+                        icon: const Icon(Icons.print_rounded, size: 18),
+                        label: Text('Print 3 Bills', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold)),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppTheme.primary,
+                          side: BorderSide(color: AppTheme.primary),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: SizedBox(
+                      height: 46,
+                      child: ElevatedButton.icon(
+                        onPressed: isPaid
+                            ? null
+                            : () {
+                                Navigator.pop(dialogCtx);
+                                _showOrderPaymentDialog(controller, order);
+                              },
+                        icon: Icon(isPaid ? Icons.check_circle_rounded : Icons.payments_rounded, size: 18),
+                        label: Text(
+                          isPaid ? 'Payment Complete' : 'Collect Payment',
+                          style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: isPaid ? const Color(0xFF10B981) : const Color(0xFFF97316),
+                          foregroundColor: Colors.white,
+                          elevation: 2,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _print3DeliveryBillsDirect(BuildContext context, POSController controller, OrderModel order) async {
+    try {
+      final appSettings = Provider.of<AppSettingsController>(context, listen: false);
+
+      final customerBytes = await _generateDeliverySingleBillPdfBytes(order, controller, 'CUSTOMER COPY');
+      final riderBytes = await _generateDeliverySingleBillPdfBytes(order, controller, 'DELIVERY PERSON COPY');
+      final shopBytes = await _generateDeliverySingleBillPdfBytes(order, controller, 'SHOP COPY');
+
+      // Print all 3 bills sequentially to cashier printer
+      await _printReceiptPdf(
+        bytes: customerBytes,
+        name: 'Delivery_Customer_${order.orderNumber}',
+        printerName: appSettings.selectedInvoicePrinter,
+      );
+
+      await _printReceiptPdf(
+        bytes: riderBytes,
+        name: 'Delivery_Rider_${order.orderNumber}',
+        printerName: appSettings.selectedInvoicePrinter,
+      );
+
+      await _printReceiptPdf(
+        bytes: shopBytes,
+        name: 'Delivery_Shop_${order.orderNumber}',
+        printerName: appSettings.selectedInvoicePrinter,
+      );
+    } catch (e) {
+      if (context.mounted) {
+        _showErrorSnackBar('Failed to print 3 delivery bills: $e');
+      }
+    }
+  }
+
+  Future<Uint8List> _generateDeliverySingleBillPdfBytes(
+    OrderModel order,
+    POSController controller,
+    String copyTitle,
+  ) async {
+    final fontBold = await PdfGoogleFonts.interBold();
+    final fontRegular = await PdfGoogleFonts.interRegular();
+
+    // Load Sinhala Font
+    final fontData = await rootBundle.load('assets/fonts/NotoSansSinhala-Regular.ttf');
+    final sinhalaFont = pw.Font.ttf(fontData);
+
+    // Load Isiagini Font
+    final isiaginiFontData = await rootBundle.load('assets/fonts/Isiagni.ttf');
+    final isiaginiFont = pw.Font.ttf(isiaginiFontData);
+
+    final pdf = pw.Document(
+      theme: pw.ThemeData.withFont(
+        base: sinhalaFont,
+        fontFallback: [fontRegular, fontBold, pw.Font.helvetica()],
+      ),
+    );
+
+    // Load Logo Image
+    pw.MemoryImage? logoImage;
+    try {
+      final logoData = await rootBundle.load('assets/images/mhb_logo.png');
+      logoImage = pw.MemoryImage(logoData.buffer.asUint8List());
+    } catch (_) {}
+
+    final now = DateTime.now();
+    final String platformLabel = _getDeliveryPlatformLabel(order.deliveryPlatform);
+    final String cashierName = APIService.instance.currentUser?.username ?? 'admin';
+    final String riderName = order.stewardName ?? 'Assigned Rider';
+    final String barcodeData = order.barcode.isNotEmpty ? order.barcode : 'DEL-${order.orderNumber}';
+    final isPaid = order.paymentStatus == 'paid';
+
+    final tokenDigits = order.orderNumber.replaceAll(RegExp(r'[^0-9]'), '');
+    final shortToken = tokenDigits.length >= 3 ? tokenDigits.substring(tokenDigits.length - 3) : (tokenDigits.isNotEmpty ? tokenDigits : '001');
+
+    final int totalQty = order.items.fold(0, (sum, i) => sum + i.quantity);
+
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.roll80,
+        margin: const pw.EdgeInsets.all(6),
+        build: (pw.Context ctx) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              // Logo & Oval Header Row (Identical to official POS invoice header)
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Row(
+                    crossAxisAlignment: pw.CrossAxisAlignment.center,
+                    children: [
+                      if (logoImage != null) ...[
+                        pw.Image(logoImage, width: 34, height: 34),
+                        pw.SizedBox(width: 6),
+                      ],
+                      pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text(
+                            'v£ly »ƒ£Šfzx',
+                            style: pw.TextStyle(font: isiaginiFont, fontSize: 22, fontWeight: pw.FontWeight.bold),
+                          ),
+                          pw.Text(
+                            '04, මහා වීදිය, අකුරැස්ස',
+                            style: pw.TextStyle(font: sinhalaFont, fontSize: 8),
+                          ),
+                          pw.Text(
+                            '041 2283857',
+                            style: pw.TextStyle(font: sinhalaFont, fontSize: 8.5, color: PdfColors.grey800),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  pw.Container(
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: pw.BoxDecoration(
+                      border: pw.Border.all(color: PdfColors.black, width: 1.5),
+                      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(16)),
+                    ),
+                    child: pw.Text(shortToken, style: pw.TextStyle(font: fontBold, fontSize: 16)),
+                  ),
+                ],
+              ),
+              pw.SizedBox(height: 4),
+
+              // Copy Title Banner Box
+              pw.Center(
+                child: pw.Container(
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: pw.BoxDecoration(border: pw.Border.all(width: 1)),
+                  child: pw.Text('*** $copyTitle ***', style: pw.TextStyle(font: fontBold, fontSize: 8.5)),
+                ),
+              ),
+              pw.SizedBox(height: 4),
+              _buildPdfDashedLine(),
+
+              // Receipt metadata
+              _buildPdfInfoRow('Receipt No:', order.orderNumber, fontBold),
+              _buildPdfInfoRow('Date:', '${now.day.toString().padLeft(2, '0')}-${now.month.toString().padLeft(2, '0')}-${now.year}  ${_formatTime(now, includeSpace: true)}  $cashierName', sinhalaFont),
+              _buildPdfInfoRow('Method:', platformLabel, fontBold),
+              _buildPdfInfoRow('Rider/Steward:', riderName, sinhalaFont),
+              _buildPdfInfoRow('Payment:', isPaid ? 'PAID (${(order.paymentMethod ?? 'CASH').toUpperCase()})' : 'UNPAID (CASH ON DELIVERY)', fontBold),
+              _buildPdfDashedLine(),
+
+              // Items Header
+              pw.Row(
+                children: [
+                  pw.Expanded(flex: 4, child: pw.Text('Description', style: pw.TextStyle(font: fontBold, fontSize: 8))),
+                  pw.Expanded(flex: 1, child: pw.Text('Qty', textAlign: pw.TextAlign.center, style: pw.TextStyle(font: fontBold, fontSize: 8))),
+                  pw.Expanded(flex: 2, child: pw.Text('Price', textAlign: pw.TextAlign.right, style: pw.TextStyle(font: fontBold, fontSize: 8))),
+                  pw.Expanded(flex: 2, child: pw.Text('Amount', textAlign: pw.TextAlign.right, style: pw.TextStyle(font: fontBold, fontSize: 8))),
+                ],
+              ),
+              _buildPdfDashedLine(),
+
+              // Items List
+              ...order.items.map((item) {
+                return pw.Padding(
+                  padding: const pw.EdgeInsets.symmetric(vertical: 1),
+                  child: pw.Row(
+                    children: [
+                      pw.Expanded(flex: 4, child: pw.Text(item.productName, style: pw.TextStyle(font: sinhalaFont, fontSize: 8))),
+                      pw.Expanded(flex: 1, child: pw.Text('${item.quantity}', textAlign: pw.TextAlign.center, style: pw.TextStyle(font: fontBold, fontSize: 8))),
+                      pw.Expanded(flex: 2, child: pw.Text(item.price.toStringAsFixed(2), textAlign: pw.TextAlign.right, style: pw.TextStyle(font: fontRegular, fontSize: 8))),
+                      pw.Expanded(flex: 2, child: pw.Text((item.price * item.quantity).toStringAsFixed(2), textAlign: pw.TextAlign.right, style: pw.TextStyle(font: fontBold, fontSize: 8))),
+                    ],
+                  ),
+                );
+              }).toList(),
+              _buildPdfDashedLine(),
+
+              // Totals
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text('Items  $totalQty', style: pw.TextStyle(font: fontBold, fontSize: 8)),
+                  pw.Text('Sub Total : ${order.subtotal.toStringAsFixed(2)}', style: pw.TextStyle(font: fontBold, fontSize: 8)),
+                ],
+              ),
+              if (order.discount > 0)
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text('Discount:', style: pw.TextStyle(font: fontRegular, fontSize: 8)),
+                    pw.Text('-${order.discount.toStringAsFixed(2)}', style: pw.TextStyle(font: fontBold, fontSize: 8)),
+                  ],
+                ),
+              pw.SizedBox(height: 2),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text('Total Amount:', style: pw.TextStyle(font: fontBold, fontSize: 9.5)),
+                  pw.Text('LKR ${order.total.toStringAsFixed(2)}', style: pw.TextStyle(font: fontBold, fontSize: 9.5)),
+                ],
+              ),
+              if (isPaid) ...[
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text('Paid :', style: pw.TextStyle(font: fontRegular, fontSize: 8)),
+                    pw.Text(order.receivedAmount.toStringAsFixed(2), style: pw.TextStyle(font: fontBold, fontSize: 8)),
+                  ],
+                ),
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text('Balance :', style: pw.TextStyle(font: fontRegular, fontSize: 8)),
+                    pw.Text(order.changeAmount.toStringAsFixed(2), style: pw.TextStyle(font: fontBold, fontSize: 8)),
+                  ],
+                ),
+              ],
+              _buildPdfDashedLine(),
+
+              // Code128 Barcode Widget
+              pw.Center(
+                child: pw.Column(
+                  children: [
+                    if (copyTitle.contains('DELIVERY'))
+                      pw.Text('SCAN BARCODE TO PROCESS PAYMENT', style: pw.TextStyle(font: fontBold, fontSize: 7)),
+                    pw.SizedBox(height: 2),
+                    pw.BarcodeWidget(
+                      barcode: pw.Barcode.code128(),
+                      data: barcodeData,
+                      width: 170,
+                      height: 40,
+                      drawText: true,
+                    ),
+                  ],
+                ),
+              ),
+              _buildPdfDashedLine(),
+
+              // Footer
+              pw.Center(
+                child: pw.Text('Thank you & Come Again', style: pw.TextStyle(font: fontBold, fontSize: 8)),
+              ),
+              pw.Center(
+                child: pw.Text('Software by Perpova. 0713555566', style: pw.TextStyle(font: fontRegular, fontSize: 7)),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    return pdf.save();
   }
 
   void _showBarcodeScanDialog(POSController controller) {
@@ -3119,7 +4373,7 @@ class _POSScreenState extends State<POSScreen> {
     );
   }
 
-  void _showOrderPaymentDialog(POSController controller) {
+  void _showOrderPaymentDialog(POSController controller, [OrderModel? existingOrder]) {
     String paymentMethod = 'cash'; // 'cash', 'card', 'qr', 'credit'
     final TextEditingController amountController = TextEditingController();
     final FocusNode amountFocusNode = FocusNode();
@@ -3137,10 +4391,10 @@ class _POSScreenState extends State<POSScreen> {
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) {
-            final cartTotal = controller.cartTotal;
-            final double payableTotal = cartTotal - controller.activePreOrderAdvance < 0
-                ? 0.00
-                : cartTotal - controller.activePreOrderAdvance;
+            final cartTotal = existingOrder?.total ?? controller.cartTotal;
+            final double payableTotal = existingOrder != null
+                ? existingOrder.total
+                : (cartTotal - controller.activePreOrderAdvance < 0 ? 0.00 : cartTotal - controller.activePreOrderAdvance);
             final double receivedVal = double.tryParse(amountController.text) ?? 0.00;
             final double changeVal = receivedVal > payableTotal ? receivedVal - payableTotal : 0.00;
 
@@ -3169,15 +4423,17 @@ class _POSScreenState extends State<POSScreen> {
             }
 
             // Create ReceiptData copy variables and helpers
-            final List<OrderItemModel> itemsCopy = List.from(controller.cart);
-            final double finalSub = controller.cartSubtotal;
-            final double finalDisc = controller.discount;
-            final double finalTot = controller.cartTotal;
-            final String orderTypeLabel = controller.orderType == 'dine_in'
-                ? 'Dining Table'
-                : controller.orderType == 'takeaway'
-                    ? 'Takeaway'
-                    : 'Delivery';
+            final List<OrderItemModel> itemsCopy = List.from(existingOrder?.items ?? controller.cart);
+            final double finalSub = existingOrder?.subtotal ?? controller.cartSubtotal;
+            final double finalDisc = existingOrder?.discount ?? controller.discount;
+            final double finalTot = existingOrder?.total ?? controller.cartTotal;
+            final String orderTypeLabel = existingOrder != null
+                ? (existingOrder.orderType == 'delivery' ? 'Delivery' : existingOrder.orderType)
+                : (controller.orderType == 'dine_in'
+                    ? 'Dining Table'
+                    : controller.orderType == 'takeaway'
+                        ? 'Takeaway'
+                        : 'Delivery');
             final String? tblName = controller.selectedTable?.tableNumber;
             final String? custName = paymentMethod == 'credit' ? selectedCreditCustomer?.name : controller.selectedCustomer?.name;
             final int tknNumber = int.tryParse(_tokenNoController.text) ?? (controller.activeOrders.length + 1);
@@ -3222,6 +4478,42 @@ class _POSScreenState extends State<POSScreen> {
                 // Close payment dialog first
                 if (context.mounted) {
                   Navigator.of(context).pop();
+                }
+
+                if (existingOrder != null) {
+                  await controller.collectDeliveryPayment(
+                    order: existingOrder,
+                    paymentMethod: paymentMethod,
+                    receivedAmount: paymentMethod == 'cash' ? receivedVal : payableTotal,
+                    changeAmount: paymentMethod == 'cash' ? changeVal : 0.00,
+                  );
+                  if (parentContext.mounted) {
+                    parentContext.showSuccessToast('Payment collected for Order #${existingOrder.orderNumber}');
+                    final receiptData = ReceiptData(
+                      orderId: existingOrder.id ?? 0,
+                      orderNumber: existingOrder.orderNumber,
+                      paymentMethod: paymentMethod,
+                      items: itemsCopy,
+                      subtotal: existingOrder.subtotal,
+                      discount: existingOrder.discount,
+                      total: existingOrder.total,
+                      receivedAmount: paymentMethod == 'cash' ? receivedVal : payableTotal,
+                      changeAmount: paymentMethod == 'cash' ? changeVal : 0.00,
+                      orderType: orderTypeLabel,
+                      tableName: tblName,
+                      customerName: custName,
+                      tokenNumber: tknNumber,
+                      cashierName: cashierUsername,
+                    );
+                    final invBytes = await _generateInvoicePdfBytes(receiptData, controller);
+                    final appSettings = Provider.of<AppSettingsController>(parentContext, listen: false);
+                    await _printReceiptPdf(
+                      bytes: invBytes,
+                      name: 'Paid_Invoice_${existingOrder.orderNumber}',
+                      printerName: appSettings.selectedInvoicePrinter,
+                    );
+                  }
+                  return;
                 }
 
                 int orderId = 0;
@@ -3269,6 +4561,33 @@ class _POSScreenState extends State<POSScreen> {
                   );
                   orderId = orderResult['orderId'] ?? 0;
                   orderNum = orderResult['orderNumber'] ?? '';
+
+                  if (controller.orderType == 'delivery') {
+                    final deliveryOrder = OrderModel(
+                      id: orderId,
+                      orderNumber: orderNum,
+                      orderType: 'delivery',
+                      deliveryPlatform: controller.deliveryPlatform,
+                      customerId: selectedCreditCustomer?.id ?? controller.selectedCustomer?.id,
+                      stewardName: controller.stewardName,
+                      status: 'delivered',
+                      paymentStatus: paymentMethod == 'credit' ? 'unpaid' : 'paid',
+                      paymentMethod: paymentMethod,
+                      subtotal: finalSub,
+                      discount: finalDisc,
+                      total: finalTot,
+                      cashierId: APIService.instance.currentUser?.id ?? 1,
+                      shiftId: controller.activeShift?.id ?? 1,
+                      barcode: orderNum,
+                      createdAt: DateTime.now().toIso8601String(),
+                      receivedAmount: paymentMethod == 'cash' ? receivedVal : finalTot,
+                      changeAmount: paymentMethod == 'cash' ? changeVal : 0.00,
+                      items: itemsCopy,
+                    );
+                    if (parentContext.mounted) {
+                      await _print3DeliveryBillsDirect(parentContext, controller, deliveryOrder);
+                    }
+                  }
                 }
 
                 final receiptData = ReceiptData(
@@ -5633,6 +6952,13 @@ class _POSScreenState extends State<POSScreen> {
             ElevatedButton.icon(
               onPressed: () async {
                 Navigator.pop(dialogCtx);
+                if (controller.selectedTable != null) {
+                  controller.setTableStatus(controller.selectedTable!.id, 'billing');
+                  final activeOrderId = controller.tableActiveOrderIds[controller.selectedTable!.id];
+                  if (activeOrderId != null && activeOrderId > 0) {
+                    APIService.instance.updateOrderOnline(activeOrderId, {'ack_printed': 1});
+                  }
+                }
                 await _printAcknowledgeBillDirect(controller, cashierName, orderNum, stewardName, tableName, now);
               },
               icon: const Icon(Icons.print, size: 18),
@@ -5659,6 +6985,13 @@ class _POSScreenState extends State<POSScreen> {
     DateTime now,
   ) async {
     try {
+      if (controller.selectedTable != null) {
+        controller.setTableStatus(controller.selectedTable!.id, 'billing');
+        final activeOrderId = controller.tableActiveOrderIds[controller.selectedTable!.id];
+        if (activeOrderId != null && activeOrderId > 0) {
+          APIService.instance.updateOrderOnline(activeOrderId, {'ack_printed': 1});
+        }
+      }
       final pdf = pw.Document();
       final font = await PdfGoogleFonts.interRegular();
       final fontBold = await PdfGoogleFonts.interBold();
@@ -5764,6 +7097,20 @@ class _POSScreenState extends State<POSScreen> {
           SnackBar(content: Text('Failed to print Acknowledge Bill: $e'), backgroundColor: Colors.red),
         );
       }
+    }
+  }
+
+  String _formatTimeString(String? dateStr) {
+    if (dateStr == null || dateStr.isEmpty) return 'N/A';
+    try {
+      final dt = DateTime.parse(dateStr).toLocal();
+      final month = _getMonthName(dt);
+      final hour = dt.hour == 0 ? 12 : (dt.hour > 12 ? dt.hour - 12 : dt.hour);
+      final period = dt.hour >= 12 ? 'PM' : 'AM';
+      final min = dt.minute.toString().padLeft(2, '0');
+      return '${dt.day.toString().padLeft(2, '0')}-$month-${dt.year} $hour:$min $period';
+    } catch (_) {
+      return dateStr;
     }
   }
 
